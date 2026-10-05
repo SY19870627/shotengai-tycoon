@@ -6,6 +6,7 @@ import { UIScene } from './scenes/UIScene';
 import { W, H } from './theme';
 import { store, bus, Ev } from './store';
 import * as core from './core/game';
+import * as story from './core/story';
 
 async function start() {
   // 等中文字型載入，避免文字先用備用字型畫出來
@@ -40,5 +41,5 @@ start();
 
 // 開發模式下開放除錯入口（瀏覽器 console 可用 __shotengai 查看狀態）
 if (import.meta.env.DEV) {
-  (window as unknown as Record<string, unknown>).__shotengai = { store, bus, Ev, core };
+  (window as unknown as Record<string, unknown>).__shotengai = { store, bus, Ev, core, story };
 }

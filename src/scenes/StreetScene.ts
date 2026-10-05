@@ -61,6 +61,10 @@ interface Actor {
   bubble?: Phaser.GameObjects.Container;
   /** 環境演出用的角色，劇情開始時會被清掉 */
   ambient: boolean;
+  /** 已經從街上移除（背景中還在跑的演出要停下來） */
+  removed?: boolean;
+  /** 走路中的 Promise 結束函式（角色被移除時要呼叫，避免劇情卡住） */
+  walkDone?: () => void;
 }
 
 export class StreetScene extends Phaser.Scene {
@@ -645,17 +649,34 @@ export class StreetScene extends Phaser.Scene {
   private removeActor(ref: ActorRef) {
     const a = this.actors.get(ref);
     if (!a) return;
+    a.removed = true;
+    a.ambient = false;
     this.actors.delete(ref);
     a.bubble?.destroy();
+    this.tweens.killTweensOf(a.sprite);
+    a.walkDone?.();
     this.tweens.add({ targets: a.sprite, alpha: 0, duration: 250, onComplete: () => a.sprite.destroy() });
   }
 
   private clearAmbientActors() {
-    for (const [ref, a] of this.actors) if (a.ambient) this.removeActor(ref);
+    const wanderers = new Set([...this.wanderers.values()].map((w) => w.a));
+    for (const [ref, a] of this.actors) if (a.ambient && !wanderers.has(a)) this.removeActor(ref);
+    // 散步中的角色（街貓、吉祥物、網紅）先收起來，劇情結束後重建
+    for (const w of wanderers) {
+      w.removed = true;
+      w.walkDone?.();
+      if (this.actors.get(w.ref) === w) this.actors.delete(w.ref);
+      this.tweens.killTweensOf(w.sprite);
+      w.sprite.destroy();
+      w.bubble?.destroy();
+    }
+    this.wanderers.clear();
+    this.activitySig = '';
   }
 
   private updateActors(dt: number) {
     for (const a of this.actors.values()) {
+      if (!a.sprite.active) continue;
       if (a.walking) {
         a.animT += dt;
         a.sprite.setTexture(`${a.key}_${Math.floor(a.animT / 160) % 2}`);
@@ -672,21 +693,30 @@ export class StreetScene extends Phaser.Scene {
   private walkActor(a: Actor, toX: number, speed = 170): Promise<void> {
     return new Promise((res) => {
       const d = Math.abs(toX - a.sprite.x);
-      if (d < 4) return res();
+      if (d < 4 || a.removed || !a.sprite.active) return res();
       a.sprite.setFlipX(toX < a.sprite.x);
       a.walking = true;
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        a.walking = false;
+        a.walkDone = undefined;
+        res();
+      };
+      a.walkDone = finish;
       this.tweens.add({
         targets: a.sprite, x: toX, duration: (d / speed) * 1000,
         onComplete: () => {
-          a.walking = false;
-          a.sprite.setTexture(`${a.key}_0`);
-          res();
+          if (a.sprite.active) a.sprite.setTexture(`${a.key}_0`);
+          finish();
         },
       });
     });
   }
 
-  private showBubble(a: Actor, text: string): Phaser.GameObjects.Container {
+  private showBubble(a: Actor, text: string): Phaser.GameObjects.Container | null {
+    if (a.removed || !a.sprite.active) return null;
     a.bubble?.destroy();
     const b = drawBubble(this, this.nameOf(a.ref), text).setDepth(88);
     a.bubble = b;
@@ -697,6 +727,7 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private showEmote(a: Actor, kind: Emote) {
+    if (a.removed || !a.sprite.active) return;
     const e = drawEmote(this, kind).setDepth(89).setPosition(a.sprite.x + 18, a.sprite.y - CHAR_H - 10).setScale(0);
     this.tweens.add({ targets: e, scale: 1, duration: 200, ease: 'Back.easeOut' });
     this.tweens.add({ targets: e, y: e.y - 8, yoyo: true, repeat: 2, duration: 180, delay: 200 });
@@ -840,17 +871,17 @@ export class StreetScene extends Phaser.Scene {
     a.sprite.y = GROUND_Y + 4;
     this.tweens.add({ targets: a.sprite, y: ACTOR_Y, duration: 250 });
     await this.walkActor(a, x + (Math.random() < 0.5 ? -40 : 40), 90);
-    if (!this.actors.has(id) || store.storyRunning) return;
+    if (a.removed || store.storyRunning) return;
     const mood = shop.satisfaction >= 65 ? 'happy' : shop.satisfaction < 35 ? 'unhappy' : 'idle';
     const line = Phaser.Utils.Array.GetRandom(p.lines[mood]);
     this.showBubble(a, line);
     this.showEmote(a, mood === 'happy' ? (Math.random() < 0.5 ? 'star' : 'music') : mood === 'unhappy' ? 'sad' : (p.traits.includes('lazy') ? 'zzz' : 'idea'));
     await this.wait(2600);
-    if (!this.actors.get(id)?.ambient) return;
+    if (a.removed || store.storyRunning) return;
     a.bubble?.destroy();
     a.bubble = undefined;
     await this.walkActor(a, x, 90);
-    if (this.actors.get(id)?.ambient) this.removeActor(id);
+    if (!a.removed && this.actors.get(id) === a) this.removeActor(id);
   }
 
   private async ambientPair(aId: string, bId: string, rel: number) {
@@ -862,25 +893,26 @@ export class StreetScene extends Phaser.Scene {
     if (!A || !B) return;
     const mid = (xa + xb) / 2;
     await Promise.all([this.walkActor(A, mid - 34, 120), this.walkActor(B, mid + 34, 120)]);
-    if (!A.ambient || !B.ambient || store.storyRunning) return;
+    const gone = () => A.removed || B.removed || store.storyRunning;
+    if (gone()) return;
     A.sprite.setFlipX(false);
     B.sprite.setFlipX(true);
     const friendly = rel > 0;
     this.showBubble(A, Phaser.Utils.Array.GetRandom(friendly ? pa.lines.friend : pa.lines.rival));
     this.showEmote(B, friendly ? 'heart' : 'anger');
     await this.wait(2200);
-    if (!A.ambient || !B.ambient) return;
+    if (gone()) return;
     A.bubble?.destroy();
     A.bubble = undefined;
     this.showBubble(B, Phaser.Utils.Array.GetRandom(friendly ? pb.lines.friend : pb.lines.rival));
     this.showEmote(A, friendly ? 'heart' : 'anger');
     await this.wait(2200);
-    if (!A.ambient || !B.ambient) return;
+    if (gone()) return;
     B.bubble?.destroy();
     B.bubble = undefined;
     await Promise.all([this.walkActor(A, xa, 120), this.walkActor(B, xb, 120)]);
-    if (A.ambient) this.removeActor(aId);
-    if (B.ambient) this.removeActor(bId);
+    if (!A.removed && this.actors.get(aId) === A) this.removeActor(aId);
+    if (!B.removed && this.actors.get(bId) === B) this.removeActor(bId);
   }
 
   // =================================================================== 活動演出
@@ -970,7 +1002,8 @@ export class StreetScene extends Phaser.Scene {
     if (sig !== this.activitySig) {
       this.activitySig = sig;
       for (const w of this.wanderers.values()) {
-        this.actors.delete(w.a.ref);
+        w.a.removed = true;
+        if (this.actors.get(w.a.ref) === w.a) this.actors.delete(w.a.ref);
         w.a.sprite.destroy();
         w.a.bubble?.destroy();
       }
@@ -981,6 +1014,7 @@ export class StreetScene extends Phaser.Scene {
     for (const [slot, w] of this.wanderers) {
       if (!running) continue;
       const a = w.a;
+      if (a.removed || !a.sprite.active) continue;
       if (w.pause > 0) {
         w.pause -= dt * store.speed;
         continue;

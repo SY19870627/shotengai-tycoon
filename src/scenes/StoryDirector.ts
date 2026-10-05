@@ -49,6 +49,17 @@ export class StoryDirector {
   private async run(steps: Step[]): Promise<void> {
     for (const st of steps) {
       if (!this.street.scene.isActive()) return;
+      try {
+        await this.runStep(st);
+      } catch (err) {
+        // 單一步驟出錯就跳過，不能讓整段劇情卡住
+        console.error('[story] 步驟失敗，略過', st, err);
+      }
+    }
+  }
+
+  private async runStep(st: Step): Promise<void> {
+    {
       switch (st.t) {
         case 'focus':
           await this.street.stageFocus(st.on);
