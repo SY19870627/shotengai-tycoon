@@ -1,6 +1,5 @@
-import {
-  type GameState, DAY_END_MIN, trafficPerHour, notePasserby, enterChance, tryEnter, completeVisit,
-} from './game';
+import { DAY_END_MIN, trafficPerHour, notePasserby, enterChance, tryEnter, completeVisit } from './game';
+import type { GameState } from './types';
 import { SHOP_BY_ID, type Category } from './shops';
 
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];

@@ -1,11 +1,15 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily';
 
+/** 店面外觀風格（由老街決定） */
+export type FacadeStyle = 'redbrick' | 'jiufen';
+
 export interface ShopDef {
   id: string;
+  /** 店種名稱 */
   name: string;
+  /** 招牌上的短名（兩三個字） */
+  short: string;
   category: Category;
-  /** 建造費用 */
-  buildCost: number;
   /** 每位客人平均消費 */
   spend: number;
   /** 基礎吸引力（0~1，影響路人進店機率） */
@@ -14,82 +18,110 @@ export interface ShopDef {
   capacity: number;
   /** 客人停留時間（遊戲內分鐘） */
   stayMinutes: number;
-  /** 每日固定開銷 */
+  /** 租客每日自付成本（人事、水電） */
   upkeep: number;
+  /** 標準日租金 */
+  baseRent: number;
   /** 營業時間 [開, 關)，24 小時制 */
   hours: [number, number];
-  /** 需要多少聲望才解鎖 */
-  unlockRep: number;
   wallColor: number;
   awningColor: number;
   description: string;
 }
 
+const S = (d: ShopDef) => d;
+
 export const SHOPS: ShopDef[] = [
-  {
-    id: 'grocery', name: '雜貨店', category: 'daily',
-    buildCost: 4000, spend: 45, appeal: 0.12, capacity: 4, stayMinutes: 10, upkeep: 400,
-    hours: [8, 21], unlockRep: 0, wallColor: 0xe8d5b0, awningColor: 0x3f8f4f,
-    description: '什麼都賣一點，客人來得穩。',
-  },
-  {
-    id: 'bakery', name: '麵包店', category: 'food',
-    buildCost: 5500, spend: 70, appeal: 0.14, capacity: 4, stayMinutes: 12, upkeep: 600,
-    hours: [7, 19], unlockRep: 0, wallColor: 0xf5e1c8, awningColor: 0xc8742b,
-    description: '早上生意最好，跟咖啡廳是好鄰居。',
-  },
-  {
-    id: 'ramen', name: '拉麵店', category: 'food',
-    buildCost: 9000, spend: 160, appeal: 0.13, capacity: 6, stayMinutes: 30, upkeep: 1000,
-    hours: [11, 22], unlockRep: 10, wallColor: 0x8b3a2b, awningColor: 0xe2c044,
-    description: '客單價高，中午與晚上人潮多。',
-  },
-  {
-    id: 'cafe', name: '咖啡廳', category: 'leisure',
-    buildCost: 8000, spend: 120, appeal: 0.11, capacity: 6, stayMinutes: 45, upkeep: 800,
-    hours: [9, 20], unlockRep: 15, wallColor: 0x6b4a3a, awningColor: 0xe9e2d0,
-    description: '客人坐比較久，旁邊有書店或麵包店更受歡迎。',
-  },
-  {
-    id: 'bookstore', name: '書店', category: 'retail',
-    buildCost: 7500, spend: 110, appeal: 0.08, capacity: 5, stayMinutes: 25, upkeep: 600,
-    hours: [10, 21], unlockRep: 20, wallColor: 0x2f4b6e, awningColor: 0xb8c4d6,
-    description: '來客較少但穩定，能提升商店街氣質（聲望）。',
-  },
-  {
-    id: 'florist', name: '花店', category: 'retail',
-    buildCost: 6000, spend: 95, appeal: 0.07, capacity: 3, stayMinutes: 10, upkeep: 450,
-    hours: [9, 19], unlockRep: 25, wallColor: 0xf3d6dc, awningColor: 0xd45a7a,
-    description: '讓整條街變漂亮，相鄰店家吸引力小幅提升。',
-  },
-  {
-    id: 'clothing', name: '服飾店', category: 'retail',
-    buildCost: 14000, spend: 380, appeal: 0.06, capacity: 4, stayMinutes: 20, upkeep: 1300,
-    hours: [11, 21], unlockRep: 35, wallColor: 0xe9e9ef, awningColor: 0x2b2b3a,
-    description: '進店率低，但一買就是大單。',
-  },
-  {
-    id: 'izakaya', name: '居酒屋', category: 'food',
-    buildCost: 12000, spend: 260, appeal: 0.14, capacity: 8, stayMinutes: 60, upkeep: 1200,
-    hours: [17, 24], unlockRep: 45, wallColor: 0x3a2a22, awningColor: 0xb3262e,
-    description: '傍晚才開門，夜晚是它的主場。',
-  },
+  // ---- 通用 ----
+  S({
+    id: 'grocery', name: '雜貨店', short: '雜貨', category: 'daily',
+    spend: 60, appeal: 0.072, capacity: 4, stayMinutes: 10, upkeep: 250, baseRent: 600,
+    hours: [8, 21], wallColor: 0xe8d5b0, awningColor: 0x3f8f4f,
+    description: '什麼都賣一點，來客穩定但不會大紅。',
+  }),
+  S({
+    id: 'cafe', name: '咖啡廳', short: '咖啡', category: 'leisure',
+    spend: 150, appeal: 0.06, capacity: 6, stayMinutes: 45, upkeep: 500, baseRent: 1050,
+    hours: [9, 20], wallColor: 0x6b4a3a, awningColor: 0xe9e2d0,
+    description: '客人坐比較久，下雨天特別受歡迎。',
+  }),
+  S({
+    id: 'souvenir', name: '伴手禮店', short: '伴手禮', category: 'retail',
+    spend: 280, appeal: 0.048, capacity: 5, stayMinutes: 15, upkeep: 450, baseRent: 1200,
+    hours: [10, 21], wallColor: 0xf3e3c2, awningColor: 0xb3262e,
+    description: '觀光客多的時候很好賣，平日比較冷清。',
+  }),
+  // ---- 深坑 ----
+  S({
+    id: 'stinkytofu', name: '臭豆腐攤', short: '臭豆腐', category: 'food',
+    spend: 90, appeal: 0.096, capacity: 6, stayMinutes: 15, upkeep: 300, baseRent: 900,
+    hours: [10, 22], wallColor: 0xd9c49a, awningColor: 0xc8742b,
+    description: '深坑的招牌！但開太多家會互搶客人。',
+  }),
+  S({
+    id: 'tofuice', name: '豆腐冰淇淋', short: '豆腐冰', category: 'food',
+    spend: 70, appeal: 0.078, capacity: 4, stayMinutes: 8, upkeep: 220, baseRent: 750,
+    hours: [10, 20], wallColor: 0xf6f0e0, awningColor: 0x7fb7d6,
+    description: '吃完臭豆腐來一支，天氣熱時大受歡迎。',
+  }),
+  S({
+    id: 'douhua', name: '豆花店', short: '豆花', category: 'food',
+    spend: 65, appeal: 0.072, capacity: 6, stayMinutes: 15, upkeep: 200, baseRent: 675,
+    hours: [9, 21], wallColor: 0xf0e2c4, awningColor: 0xe2c044,
+    description: '老少咸宜的古早味甜點。',
+  }),
+  S({
+    id: 'brownsugar', name: '黑糖糕舖', short: '黑糖糕', category: 'retail',
+    spend: 160, appeal: 0.054, capacity: 4, stayMinutes: 8, upkeep: 260, baseRent: 825,
+    hours: [9, 20], wallColor: 0x7a4a2a, awningColor: 0xe9cf9a,
+    description: '遊客回家前一定買一盒，週末最好賣。',
+  }),
+  S({
+    id: 'snack', name: '古早味小吃', short: '小吃', category: 'food',
+    spend: 110, appeal: 0.078, capacity: 8, stayMinutes: 25, upkeep: 350, baseRent: 900,
+    hours: [7, 20], wallColor: 0xe8d8bc, awningColor: 0x4f7dc6,
+    description: '在地人的早午餐據點，平日也有生意。',
+  }),
+  // ---- 九份 ----
+  S({
+    id: 'taro', name: '芋圓店', short: '芋圓', category: 'food',
+    spend: 80, appeal: 0.096, capacity: 10, stayMinutes: 20, upkeep: 350, baseRent: 1200,
+    hours: [9, 21], wallColor: 0xd8c7e4, awningColor: 0x7a4a9a,
+    description: '九份必吃！座位多，冬天熱芋圓更是一位難求。',
+  }),
+  S({
+    id: 'teahouse', name: '茶樓', short: '茶樓', category: 'leisure',
+    spend: 380, appeal: 0.042, capacity: 10, stayMinutes: 70, upkeep: 900, baseRent: 2100,
+    hours: [11, 24], wallColor: 0x5a2a20, awningColor: 0xb3262e,
+    description: '看海喝茶到深夜，客單價最高，燈籠亮起來最美。',
+  }),
+  S({
+    id: 'fishball', name: '魚丸湯', short: '魚丸', category: 'food',
+    spend: 75, appeal: 0.084, capacity: 6, stayMinutes: 15, upkeep: 280, baseRent: 975,
+    hours: [9, 20], wallColor: 0xe6e1d4, awningColor: 0x2f6f8f,
+    description: '山上冷，來碗熱湯剛剛好。',
+  }),
+  S({
+    id: 'caogui', name: '草仔粿', short: '草仔粿', category: 'food',
+    spend: 55, appeal: 0.078, capacity: 4, stayMinutes: 6, upkeep: 180, baseRent: 750,
+    hours: [9, 19], wallColor: 0xdfe8cf, awningColor: 0x3f7f3f,
+    description: '邊走邊吃的古早味，翻桌超快。',
+  }),
+  S({
+    id: 'ocarina', name: '陶笛店', short: '陶笛', category: 'retail',
+    spend: 320, appeal: 0.042, capacity: 4, stayMinutes: 20, upkeep: 380, baseRent: 1350,
+    hours: [10, 21], wallColor: 0xc98a5a, awningColor: 0x3a2a22,
+    description: '店門口有人吹奏時，路人會停下來聽。',
+  }),
 ];
 
 export const SHOP_BY_ID: Record<string, ShopDef> = Object.fromEntries(SHOPS.map((s) => [s.id, s]));
 
 export const MAX_LEVEL = 3;
 
-/** 升級到下一級的費用 */
-export function upgradeCost(def: ShopDef, currentLevel: number): number {
-  return Math.round(def.buildCost * 0.8 * currentLevel);
-}
-
-/** 拆除可退回的金額 */
-export function demolishRefund(def: ShopDef, level: number): number {
-  let invested = def.buildCost;
-  for (let l = 1; l < level; l++) invested += upgradeCost(def, l);
-  return Math.round(invested * 0.4);
+/** 會長補助租客裝修的費用 */
+export function renovateCost(def: ShopDef, currentLevel: number): number {
+  return Math.round(def.baseRent * 8 * currentLevel);
 }
 
 export function capacityAt(def: ShopDef, level: number): number {
@@ -100,18 +132,36 @@ export function isOpen(def: ShopDef, hour: number): boolean {
   return hour >= def.hours[0] && hour < def.hours[1];
 }
 
-/** 相鄰加成：鄰居店種 → 吸引力倍率 */
+/** 互補的店種相鄰：吸引力加成，租客之間也比較容易變朋友 */
 export const SYNERGY: Record<string, Record<string, number>> = {
-  cafe: { bookstore: 1.3, bakery: 1.25, florist: 1.1 },
-  bookstore: { cafe: 1.25 },
-  bakery: { cafe: 1.2, grocery: 1.1 },
-  ramen: { izakaya: 1.15 },
-  izakaya: { ramen: 1.1 },
-  clothing: { florist: 1.2, cafe: 1.1 },
-  grocery: { bakery: 1.1 },
+  stinkytofu: { tofuice: 1.25, douhua: 1.15 },
+  tofuice: { stinkytofu: 1.2 },
+  douhua: { stinkytofu: 1.1, brownsugar: 1.1 },
+  brownsugar: { douhua: 1.1, souvenir: 1.1 },
+  snack: { grocery: 1.1 },
+  taro: { fishball: 1.15, teahouse: 1.1 },
+  fishball: { taro: 1.15, caogui: 1.1 },
+  caogui: { fishball: 1.1, souvenir: 1.1 },
+  teahouse: { ocarina: 1.2, taro: 1.1 },
+  ocarina: { teahouse: 1.2, cafe: 1.1 },
+  cafe: { ocarina: 1.1, souvenir: 1.05 },
+  souvenir: { brownsugar: 1.1, caogui: 1.1 },
 };
 
-/** 每間花店讓相鄰店吸引力 +8% */
-export const FLORIST_AURA = 1.08;
-/** 相同店種相鄰會互搶客人 */
-export const SAME_NEIGHBOR_PENALTY = 0.85;
+/** 同一種店距離兩格以內會互搶客人 */
+export const SAME_TYPE_PENALTY = 0.8;
+
+export const RENT_TIERS = [
+  { id: 0, name: '優惠', mult: 0.7, sat: 3 },
+  { id: 1, name: '標準', mult: 1, sat: 0 },
+  { id: 2, name: '高價', mult: 1.4, sat: -4 },
+] as const;
+
+export function rentFor(def: ShopDef, tier: number, streetRentMult: number): number {
+  return Math.round(def.baseRent * RENT_TIERS[tier].mult * streetRentMult);
+}
+
+/** 會長從營收抽成的比例 */
+export const COMMISSION = 0.1;
+/** 營收中租客能留下的毛利（扣進貨） */
+export const TENANT_MARGIN = 0.45;

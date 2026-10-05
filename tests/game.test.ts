@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createGame, build, upgrade, demolish, unlockLot, nextLotCost, enterChance, neighborMultiplier,
-  tryEnter, completeVisit, endDay, startNextDay, serialize, deserialize, START_MONEY, DAY_START_MIN, MARGIN,
+  createGame, signTenant, unlockLot, nextLotCost, enterChance, neighborEffects, tryEnter, completeVisit, endDay,
+  startNextDay, serialize, deserialize, DAY_START_MIN, startActivity, canStartActivity, applyEffects, getRel, addRel,
+  renovate, evict, setRentTier, postAd, profileOf, presentTenants, combinedMods, generateTenant, weekdayName,
 } from '../src/core/game';
-import { SHOP_BY_ID, upgradeCost, capacityAt } from '../src/core/shops';
+import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
+import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
+import { STREETS } from '../src/content';
+import type { GameState } from '../src/core/types';
 
 function seeded(seed: number) {
   return () => {
@@ -13,130 +17,226 @@ function seeded(seed: number) {
   };
 }
 
-describe('店面操作', () => {
-  it('建店會扣錢，重複建造會被擋', () => {
-    const s = createGame();
-    expect(build(s, 0, 'grocery').ok).toBe(true);
-    expect(s.money).toBe(START_MONEY - SHOP_BY_ID.grocery.buildCost);
-    expect(build(s, 0, 'bakery').ok).toBe(false);
+/** 直接把指定租客放進店面（測試用） */
+function place(s: GameState, lot: number, id: string, tier = 0) {
+  s.lots[lot].unlocked = true;
+  const r = signTenant(s, lot, id, tier);
+  expect(r.ok).toBe(true);
+}
+
+describe('老街資料', () => {
+  it('每條可玩的老街資料都完整', () => {
+    for (const st of Object.values(STREETS).filter((x) => x.playable)) {
+      const lots = st.layout.filter((l) => l.kind === 'lot').length;
+      expect(lots).toBeGreaterThanOrEqual(st.startLots);
+      for (const l of st.layout) if (l.kind === 'landmark') expect(st.landmarks.some((d) => d.id === l.id)).toBe(true);
+      for (const t of st.tenants) {
+        expect(SHOP_BY_ID[t.shopType], `${t.id} 的店種`).toBeTruthy();
+        expect(st.shopTypes).toContain(t.shopType);
+        for (const other of Object.keys(t.relations ?? {})) expect(st.tenants.some((x) => x.id === other)).toBe(true);
+      }
+      expect(st.goals.length).toBeGreaterThan(0);
+      expect(st.activities.mascots.length).toBe(3);
+    }
   });
 
-  it('聲望不足不能蓋高階店', () => {
-    const s = createGame();
-    s.money = 99999;
-    const r = build(s, 0, 'izakaya');
+  it('開局佈告欄就有應徵者，第 1 天是週五', () => {
+    const s = createGame('shenkeng', seeded(1));
+    expect(s.applicants.length).toBeGreaterThan(0);
+    expect(weekdayName(s)).toBe('週五');
+  });
+});
+
+describe('招租', () => {
+  it('租金超過租客能接受的等級會被拒絕', () => {
+    const s = createGame('shenkeng', seeded(1));
+    const r = signTenant(s, 0, 'sk-douhua', 2);
     expect(r.ok).toBe(false);
-    s.reputation = 50;
-    expect(build(s, 0, 'izakaya').ok).toBe(true);
+    expect(signTenant(s, 0, 'sk-douhua', 0).ok).toBe(true);
+    expect(profileOf(s, 'sk-douhua')?.name).toBe('豆花嬤');
   });
 
-  it('未開放的店面不能建造，且只能依序開放', () => {
-    const s = createGame();
+  it('簽約時帶入預設關係', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-chou');
+    place(s, 1, 'sk-mala');
+    expect(getRel(s, 'sk-chou', 'sk-mala')).toBeLessThan(-20);
+  });
+
+  it('整修店面要依序、要花錢', () => {
+    const s = createGame('shenkeng', seeded(1));
     s.money = 99999;
-    expect(build(s, 7, 'grocery').ok).toBe(false);
-    expect(unlockLot(s, 7).ok).toBe(false);
+    const firstLocked = s.lots.findIndex((l) => !l.unlocked);
+    expect(unlockLot(s, firstLocked + 1).ok).toBe(false);
     const cost = nextLotCost(s);
-    const before = s.money;
-    expect(unlockLot(s, 5).ok).toBe(true);
-    expect(s.money).toBe(before - cost);
-    expect(nextLotCost(s)).toBeGreaterThan(cost);
+    expect(unlockLot(s, firstLocked).ok).toBe(true);
+    expect(s.money).toBe(99999 - cost);
   });
 
-  it('升級與拆除', () => {
-    const s = createGame();
+  it('刊登廣告會增加應徵者，隨機租客資料完整', () => {
+    const s = createGame('jiufen', seeded(3));
+    s.applicants = [];
+    expect(postAd(s, seeded(4)).ok).toBe(true);
+    expect(s.applicants.length).toBe(2);
+    const g = generateTenant(s, seeded(9));
+    expect(STREETS.jiufen.shopTypes).toContain(g.shopType);
+    expect(g.lines.happy.length).toBeGreaterThan(0);
+  });
+
+  it('解約會扣聲望、裝修會升級、調租金影響滿意度', () => {
+    const s = createGame('shenkeng', seeded(1));
     s.money = 99999;
-    build(s, 1, 'bakery');
-    const m = s.money;
-    expect(upgrade(s, 1).ok).toBe(true);
-    expect(s.money).toBe(m - upgradeCost(SHOP_BY_ID.bakery, 1));
-    upgrade(s, 1);
-    expect(upgrade(s, 1).ok).toBe(false); // 最高 3 級
-    expect(demolish(s, 1).ok).toBe(true);
-    expect(s.lots[1].shop).toBeNull();
+    s.reputation = 20;
+    place(s, 0, 'sk-chou', 1);
+    const sat = s.lots[0].shop!.satisfaction;
+    expect(setRentTier(s, 0, 0).ok).toBe(true);
+    expect(s.lots[0].shop!.satisfaction).toBeGreaterThan(sat);
+    expect(setRentTier(s, 0, 2).ok).toBe(false); // 臭爸最多接受標準
+    expect(renovate(s, 0).ok).toBe(true);
+    expect(s.lots[0].shop!.level).toBe(2);
+    expect(evict(s, 0).ok).toBe(true);
+    expect(s.lots[0].shop).toBeNull();
+    expect(s.reputation).toBe(18);
+    expect(s.departed).toContain('sk-chou');
   });
 });
 
-describe('吸引力', () => {
-  it('咖啡廳旁邊有書店會加成，同種相鄰會扣分', () => {
-    const s = createGame();
-    s.money = 99999;
-    s.reputation = 50;
-    build(s, 0, 'cafe');
-    expect(neighborMultiplier(s, 0)).toBe(1);
-    build(s, 1, 'bookstore');
-    expect(neighborMultiplier(s, 0)).toBeGreaterThan(1);
-    build(s, 3, 'ramen');
-    build(s, 4, 'ramen');
-    expect(neighborMultiplier(s, 3)).toBeLessThan(1);
+describe('客流與關係', () => {
+  it('同類店相鄰會互搶客人，互補店相鄰有加成', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-chou');
+    place(s, 1, 'sk-yu');
+    expect(neighborEffects(s, 0).some((e) => e.mult < 1)).toBe(true);
+    const s2 = createGame('shenkeng', seeded(1));
+    place(s2, 0, 'sk-chou');
+    place(s2, 1, 'sk-ice');
+    expect(neighborEffects(s2, 0).some((e) => e.mult > 1)).toBe(true);
   });
 
-  it('沒開門的店不會有人進去', () => {
-    const s = createGame();
-    s.money = 99999;
-    s.reputation = 50;
-    build(s, 0, 'izakaya');
-    s.minute = 10 * 60;
-    expect(enterChance(s, 0)).toBe(0);
-    s.minute = 19 * 60;
-    expect(enterChance(s, 0)).toBeGreaterThan(0);
+  it('好麻吉會互相介紹客人', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-sugar');
+    place(s, 1, 'sk-douhua');
+    s.minute = 12 * 60;
+    const before = enterChance(s, 0);
+    addRel(s, 'sk-sugar', 'sk-douhua', 80);
+    expect(enterChance(s, 0)).toBeGreaterThan(before);
   });
-});
 
-describe('客人與結算', () => {
-  it('店滿了客人會被擋在門外', () => {
-    const s = createGame();
-    build(s, 0, 'grocery');
-    const cap = capacityAt(SHOP_BY_ID.grocery, 1);
-    for (let i = 0; i < cap; i++) expect(tryEnter(s, 0)).toBe(true);
+  it('客滿會擋人，消費時會長拿抽成', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-ice');
+    const def = SHOP_BY_ID.tofuice;
+    for (let i = 0; i < capacityAt(def, 1); i++) expect(tryEnter(s, 0)).toBe(true);
     expect(tryEnter(s, 0)).toBe(false);
-    expect(s.today.turnedAway).toBe(1);
-    const profit = completeVisit(s, 0);
-    expect(profit).toBe(Math.round(SHOP_BY_ID.grocery.spend * MARGIN));
-    expect(s.lots[0].shop!.inside).toBe(cap - 1);
+    const m = s.money;
+    const r = completeVisit(s, 0);
+    expect(r.income).toBe(Math.round(def.spend * COMMISSION));
+    expect(s.money).toBe(m + r.income);
   });
 
-  it('打烊結算扣開銷並記錄歷史，隔天重置', () => {
-    const s = createGame();
-    build(s, 0, 'grocery');
-    const before = s.money;
+  it('消費券期間會長要補貼一部分', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-ice');
+    expect(startActivity(s, 'coupon').ok).toBe(true);
+    tryEnter(s, 0);
+    const r = completeVisit(s, 0);
+    expect(r.coupon).toBe(true);
+    expect(r.income).toBeLessThan(Math.round(SHOP_BY_ID.tofuice.spend * COMMISSION));
+  });
+});
+
+describe('活動', () => {
+  it('廟會要劇情解鎖、有冷卻；吉祥物永久', () => {
+    const s = createGame('shenkeng', seeded(1));
+    s.money = 99999;
+    s.reputation = 30;
+    expect(canStartActivity(s, 'templeFair').ok).toBe(false);
+    applyEffects(s, { unlockActivity: ['templeFair'] });
+    expect(startActivity(s, 'templeFair').ok).toBe(true);
+    expect(combinedMods(s).traffic).toBeGreaterThan(2);
+    startNextDay(s, seeded(2));
+    expect(s.activities.length).toBe(0);
+    expect(canStartActivity(s, 'templeFair').ok).toBe(false); // 冷卻中
+    expect(startActivity(s, 'mascot', 'tofu').ok).toBe(true);
+    for (let d = 0; d < 20; d++) startNextDay(s, seeded(d));
+    expect(s.mascot).toBe('tofu');
+    expect(combinedMods(s).traffic).toBeGreaterThan(1);
+  });
+});
+
+describe('劇情', () => {
+  it('第一天早上演開場，只演一次', () => {
+    const s = createGame('shenkeng', seeded(1));
+    const st = pickStory(s, 'morning', seeded(1));
+    expect(st?.event.id).toBe('sk-intro');
+    expect(pickStory(s, 'morning', seeded(1))?.event.id).not.toBe('sk-intro');
+  });
+
+  it('兩家臭豆腐開在附近會引發臭豆腐戰爭', () => {
+    const s = createGame('shenkeng', seeded(1));
+    s.storyLog['sk-intro'] = 1;
+    s.storyLog['sk-temple'] = 1;
+    place(s, 0, 'sk-chou');
+    place(s, 2, 'sk-mala');
+    const st = pickStory(s, 'morning', seeded(1));
+    expect(st?.event.id).toBe('sk-tofu-war');
+    for (const step of flattenEffects(st!.steps)) if (step.t === 'effect') applyEffects(s, step.effects);
+    expect(s.flags).toContain('tofuWarSolved');
+    expect(getRel(s, 'sk-chou', 'sk-mala')).toBeGreaterThan(-35);
+  });
+
+  it('滿意度很低的租客會來談退租', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.storyLog['jf-intro'] = 1;
+    place(s, 0, 'jf-fu');
+    s.lots[0].shop!.satisfaction = 10;
+    const st = pickStory(s, 'morning', seeded(1));
+    expect(st?.event.id).toBe('g-leaving');
+  });
+
+  it('所有劇本都能產生步驟，且參照的角色存在', () => {
+    for (const street of Object.values(STREETS).filter((x) => x.playable)) {
+      const s = createGame(street.id, seeded(1));
+      s.money = 99999;
+      s.reputation = 60;
+      s.day = 10;
+      street.tenants.forEach((t, i) => { if (i < s.lots.length) place(s, i, t.id, 0); });
+      for (const e of street.stories) {
+        const steps = e.script({ a: street.tenants[0].id, b: street.tenants[1].id, g: street.tenants[0].id, t: street.tenants[1].id, v: street.tenants[0].id, o: street.tenants[1].id }, {
+          s, street, present: presentTenants(s), has: () => true, flag: () => false, rel: () => 0, dist: () => 1,
+          sat: () => 50, shopOf: () => s.lots[0].shop!, name: (id) => id, shopName: (id) => id, rand: seeded(1),
+        });
+        expect(steps.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('一天的流程', () => {
+  it('打烊收租金、扣維護費，隔天重置；存檔可讀回', () => {
+    const s = createGame('shenkeng', seeded(1));
+    place(s, 0, 'sk-ice', 1);
+    const m = s.money;
     const sum = endDay(s);
-    expect(sum.upkeep).toBe(SHOP_BY_ID.grocery.upkeep);
-    expect(s.money).toBe(before - sum.upkeep);
-    startNextDay(s, seeded(1));
+    expect(sum.rent).toBeGreaterThan(0);
+    expect(s.money).toBe(m + sum.rent - sum.maintenance);
+    startNextDay(s, seeded(2));
     expect(s.day).toBe(2);
     expect(s.minute).toBe(DAY_START_MIN);
-    expect(s.history).toHaveLength(1);
-  });
-
-  it('存檔可以讀回來', () => {
-    const s = createGame();
-    build(s, 2, 'bakery');
     const loaded = deserialize(serialize(s))!;
-    expect(loaded.lots[2].shop!.defId).toBe('bakery');
-    expect(loaded.money).toBe(s.money);
-    expect(deserialize('垃圾')).toBeNull();
+    expect(loaded.lots[0].shop!.tenantId).toBe('sk-ice');
+    expect(deserialize('壞掉的存檔')).toBeNull();
   });
-});
 
-describe('平衡', () => {
-  it('開局蓋兩間基本店，第一天就能有淨利', () => {
-    const s = createGame();
-    build(s, 0, 'grocery');
-    build(s, 1, 'bakery');
+  it('深坑開局放三家店，第一天就有來客和收入', () => {
+    const s = createGame('shenkeng', seeded(42));
+    place(s, 0, 'sk-chou', 1);
+    place(s, 1, 'sk-ice', 1);
+    place(s, 2, 'sk-douhua', 0);
     simulateDay(s, seeded(42));
     const sum = endDay(s);
-    expect(sum.visitors).toBeGreaterThan(20);
+    expect(sum.visitors).toBeGreaterThan(30);
     expect(sum.net).toBeGreaterThan(0);
-  });
-
-  it('什麼都不蓋會慢慢失去聲望，不會破產', () => {
-    const s = createGame();
-    for (let d = 0; d < 5; d++) {
-      simulateDay(s, seeded(d));
-      endDay(s);
-      startNextDay(s, seeded(d));
-    }
-    expect(s.reputation).toBe(0);
-    expect(s.gameOver).toBe(false);
   });
 });

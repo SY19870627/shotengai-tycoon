@@ -20,9 +20,7 @@ export class BootScene extends Phaser.Scene {
     this.makeLantern();
     this.makeUmbrella();
     this.makeSoftDot();
-    this.scene.launch('street');
-    this.scene.launch('ui');
-    this.scene.stop();
+    this.scene.start('map');
   }
 
   private makePedestrian(v: number, frame: number) {

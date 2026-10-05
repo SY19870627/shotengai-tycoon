@@ -10,7 +10,6 @@ export const GROUND_Y = 490;
 export const SIDEWALK_H = 64;
 export const BUILDING_H = 300;
 
-export const STREET_NAME = '晴空商店街';
 
 export const C = {
   ink: 0x2a2433,
