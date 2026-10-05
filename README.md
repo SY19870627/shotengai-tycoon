@@ -14,6 +14,12 @@ npm test         # 遊戲邏輯單元測試
 npm run sim      # 數值平衡模擬（跑 25 天，可加種子：npm run sim 42）
 ```
 
+## 線上試玩
+
+推到 `main` 後會自動部署到 GitHub Pages：<https://sy19870627.github.io/shotengai-tycoon/>（手機也能玩，用手指拖曳移動街道）。
+
+第一次使用要到 repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
+
 ## 玩法
 
 | 操作 | 方式 |
