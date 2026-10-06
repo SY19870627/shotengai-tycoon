@@ -222,6 +222,8 @@ export interface Festival {
   leafByTenant: Record<string, number>;
   /** 這場被識破的妖怪數（好感每場最多 +3） */
   exposed: number;
+  /** 今晚已經出現過的妖怪（每種一晚只來一隻） */
+  spawned?: YokaiKind[];
   /** 天下第一鼎的結果（還沒煮是 undefined） */
   cauldron?: boolean;
 }

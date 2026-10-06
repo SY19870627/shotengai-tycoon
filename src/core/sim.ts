@@ -63,7 +63,7 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
         fav = 'food';
         spend = HIKER_SPEND;
       }
-      const yk = rand() < yokaiChance(s) ? { kind: rollYokai(rand), leaves: paysLeaves(s, rand) } : undefined;
+      const yk = rand() < yokaiChance(s) ? { kind: rollYokai(s, rand), leaves: paysLeaves(s, rand) } : undefined;
       let visits = 0;
       const route = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
       const start = a.start ?? route.start;
