@@ -208,8 +208,8 @@ export interface FireModeDef {
 
 export const FIRE_MODES: Record<FireMode, FireModeDef> = {
   protect: { id: 'protect', name: '保育', fee: 0, desc: '圍起來只供參觀。聲望每天 +0.3，廟公很開心，火勢不會被扣。' },
-  stall: { id: 'stall', name: '小攤販', fee: 15, desc: '開放爆米花、烤魷魚小攤。停下來的人每人 $15 × 火勢，偶爾出點小狀況。' },
-  full: { id: 'full', name: '全面開發', fee: 40, desc: '改成烤肉區。每人 $40 × 火勢、人潮 ×1.08；但民怨每天 +1、聲望每天 -0.3，火王爺會不高興，火勢太大時還可能失火。' },
+  stall: { id: 'stall', name: '小攤販', fee: 25, desc: '開放爆米花、烤魷魚小攤，停下來的人變多。每人 $25 × 火勢，偶爾出點小狀況。' },
+  full: { id: 'full', name: '全面開發', fee: 60, desc: '改成烤肉區，烤肉客大排長龍。每人 $60 × 火勢、人潮 ×1.08；但民怨每天 +1、聲望每天 -0.3，火王爺會不高興（火勢慢慢變小），火勢太大時還可能失火。' },
 };
 
 const FIRE_RANK: Record<FireMode, number> = { protect: 0, stall: 1, full: 2 };
@@ -237,10 +237,10 @@ export function fireStopChance(s: GameState): number {
   let c = h >= 18.5 || h < 6 ? 0.5 : 0.3;
   if (s.weather === 'rain') c *= 0.6;
   else if (s.weather === 'fog') c *= 0.8;
-  if (s.fireMode === 'stall') c *= 1.2;
-  else if (s.fireMode === 'full') c *= 1.4;
+  if (s.fireMode === 'stall') c *= 1.3;
+  else if (s.fireMode === 'full') c *= 1.7;
   c *= 0.7 + 0.3 * Math.min(2, s.fireLevel);
-  return Math.min(0.85, c);
+  return Math.min(0.9, c);
 }
 
 /** 有人在水火同源停下來：攤販模式會付錢給管理會 */

@@ -2402,7 +2402,9 @@ export class StreetScene extends Phaser.Scene {
     p.fireDone = true;
     const s = S();
     const busy = this.peds.filter((q) => q.state === 'sightsee').length;
-    if (busy >= 8 || p.suitcase || Math.random() >= fireStopChance(s)) return false;
+    // 烤肉區可以擠更多人
+    const cap = s.fireMode === 'full' ? 18 : s.fireMode === 'stall' ? 12 : 8;
+    if (busy >= cap || p.suitcase || Math.random() >= fireStopChance(s)) return false;
     const opts: SightKind[] = ['fireView', 'fireView', 'fireSelfie'];
     if (s.fireMode !== 'protect') opts.push('fireBuy', 'fireBuy', 'fireBuy');
     const seat = this.fireSeats.findIndex((b) => !b);
@@ -2429,7 +2431,11 @@ export class StreetScene extends Phaser.Scene {
   private fireSightStart(p: Ped, sg: Sight) {
     const s = S();
     const fee = registerFireVisitor(s);
-    if (fee > 0) this.floatText(sg.tx, GROUND_Y - 80, `+$${fee}`, hex(C.gold), 14);
+    // 人一多字會疊在一起：收錢、講話都只顯示一部分
+    const crowd = this.peds.filter((q) => q.state === 'sightsee').length;
+    const show = Math.random() < (crowd > 8 ? 0.25 : 0.6);
+    if (fee > 0 && show) this.floatText(sg.tx, GROUND_Y - 80, `+$${fee}`, hex(C.gold), 14);
+    if (!show && sg.kind !== 'fireSit') return;
     const night = hourOf(s) >= 18.5;
     switch (sg.kind) {
       case 'fireView':
