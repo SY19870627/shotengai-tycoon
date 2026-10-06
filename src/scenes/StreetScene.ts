@@ -84,7 +84,7 @@ interface Ped {
   hungry?: boolean;
   yukata?: boolean;
   /** 祭典夜的真妖怪 */
-  yokai?: { kind: YokaiKind; leaves: boolean; revealed: boolean; tellT: number; tellOn: number };
+  yokai?: { kind: YokaiKind; leaves: boolean; revealed: boolean; tellT: number; tellOn: number; trailT?: number };
   floatY?: number;
   /** 祭典夜可以點 */
   tappable?: boolean;
@@ -864,7 +864,8 @@ export class StreetScene extends Phaser.Scene {
       }
       if (p.umbrella) p.umbrella.setPosition(p.sprite.x + p.dir * 4, p.sprite.y - 56).setAlpha(p.sprite.alpha);
       if (p.suitcase) p.suitcase.setPosition(p.sprite.x - p.dir * 16, p.sprite.y).setAlpha(p.sprite.alpha).setVisible(p.state !== 'inside');
-      if (p.yokai && !p.yokai.revealed && mult > 0) this.updateTell(p, dt * mult);
+      // 暫停時破綻照樣會動，玩家可以停下來慢慢找
+      if (p.yokai && !p.yokai.revealed && !store.storyRunning) this.updateTell(p, dt * Math.max(1, mult));
       if (p.extras) this.syncExtras(p);
     }
   }
@@ -2170,6 +2171,7 @@ export class StreetScene extends Phaser.Scene {
       this.parades += 1;
       this.startYokaiParade();
     }
+    store.yokaiOnStreet = festivalNight(s) ? this.peds.filter((p) => p.yokai && !p.yokai.revealed && p.state !== 'leaving').length : 0;
     // 祭典夜：路人可以點
     if (festivalNight(s)) {
       for (const p of this.peds) {
@@ -2212,7 +2214,7 @@ export class StreetScene extends Phaser.Scene {
       e.img.setPosition(p.sprite.x + e.dx * sign, (isShadow ? p.baseY : footY) + e.dy)
         .setFlipX(sign < 0).setVisible(visible && e.img.getData('hidden') !== true)
         .setAlpha(isShadow ? 0.35 * p.sprite.alpha : p.sprite.alpha)
-        .setDepth(isShadow ? p.sprite.depth - 0.0005 : p.sprite.depth + 0.0002);
+        .setDepth(isShadow ? p.sprite.depth - 0.0005 : e.key === 'yokai-aura' ? p.sprite.depth - 0.0004 : p.sprite.depth + 0.0002);
     }
   }
 
@@ -2222,7 +2224,7 @@ export class StreetScene extends Phaser.Scene {
     const h = hourOf(s);
     if (h >= 17) this.attach(p, 'shadow', 0, 0);
     if (h >= 19 && Math.random() < yokaiChance(s)) {
-      p.yokai = { kind: rollYokai(Math.random), leaves: paysLeaves(s, Math.random), revealed: false, tellT: 1500 + Math.random() * 3000, tellOn: 0 };
+      p.yokai = { kind: rollYokai(Math.random), leaves: paysLeaves(s, Math.random), revealed: false, tellT: 800 + Math.random() * 2500, tellOn: 0 };
     }
     if (h < 17 || (!p.yokai && Math.random() > 0.6)) return;
     // 造型：真妖怪也穿得跟人類 cosplay 一樣
@@ -2235,53 +2237,112 @@ export class StreetScene extends Phaser.Scene {
     if (look === 'lantern' || Math.random() < 0.3) this.attach(p, 'cos-lantern', 12, -26);
   }
 
-  /** 真妖怪的破綻：每 4～6 秒露出來 1.2 秒 */
+  /** 真妖怪的破綻：每 2.5～4 秒露出來 2 秒，身邊冒妖氣、留下痕跡（暫停時也會動，方便慢慢找） */
   private updateTell(p: Ped, dt: number) {
     const y = p.yokai!;
     if (y.tellOn > 0) {
       y.tellOn -= dt;
+      y.trailT = (y.trailT ?? 0) - dt;
+      if (y.trailT <= 0) {
+        y.trailT = 280;
+        this.yokaiTrail(p);
+      }
       if (y.tellOn <= 0) {
         this.endTell(p);
-        y.tellT = 4000 + Math.random() * 2000;
+        y.tellT = 2500 + Math.random() * 1500;
       }
       return;
     }
     y.tellT -= dt;
     if (y.tellT > 0 || p.state === 'inside' || p.state === 'entering') return;
-    y.tellOn = 1200;
+    y.tellOn = 2000;
+    y.trailT = 0;
+    // 紫色妖氣
+    this.ensureAuraTexture();
+    const aura = this.attach(p, 'yokai-aura', 0, -30);
+    if (aura) this.tweens.add({ targets: aura, scale: { from: 0.85, to: 1.1 }, yoyo: true, repeat: 3, duration: 250 });
     switch (y.kind) {
-      case 'kappa': {
-        this.attach(p, 'tell-plate', 0, -58);
-        for (let k = 0; k < 2; k++) {
-          this.time.delayedCall(k * 400, () => {
-            if (!p.sprite.active) return;
-            const d = this.add.image(p.sprite.x + Phaser.Math.Between(-6, 6), p.sprite.y - 56, this.textures.exists('tell-drop') ? 'tell-drop' : 'glow').setDepth(p.sprite.depth + 0.001).setScale(this.textures.exists('tell-drop') ? 1 : 0.2);
-            this.tweens.add({ targets: d, y: p.baseY, alpha: 0.2, duration: 500, onComplete: () => d.destroy() });
-          });
-        }
+      case 'kappa':
+        this.attach(p, 'tell-plate', 0, -58)?.setScale(1.5);
         break;
-      }
       case 'tanuki': {
-        const tail = this.attach(p, 'tell-tail', -14, -17);
-        if (tail) this.tweens.add({ targets: tail, angle: { from: -15, to: 15 }, yoyo: true, repeat: 2, duration: 180 });
+        const tail = this.attach(p, 'tell-tail', -15, -17);
+        if (tail) {
+          tail.setScale(1.5);
+          this.tweens.add({ targets: tail, angle: { from: -18, to: 18 }, yoyo: true, repeat: 4, duration: 200 });
+        }
         break;
       }
       case 'kitsune':
         for (const e of p.extras ?? []) if (e.key === 'shadow') e.img.setData('hidden', true);
         break;
       case 'yukionna':
-        p.floatY = 8;
-        for (let k = 0; k < 3; k++) {
-          const fx = this.add.image(p.sprite.x + Phaser.Math.Between(-12, 12), p.baseY - 2, this.textures.exists('tell-frost') ? 'tell-frost' : 'glow').setDepth(p.sprite.depth - 0.001).setAlpha(0.9);
-          this.tweens.add({ targets: fx, alpha: 0, delay: 600 + k * 200, duration: 900, onComplete: () => fx.destroy() });
-        }
+        p.floatY = 10;
         break;
+    }
+  }
+
+  /** 妖氣圈：紫色的橢圓光暈（第一次用到時畫） */
+  private ensureAuraTexture() {
+    if (this.textures.exists('yokai-aura')) return;
+    const g = this.make.graphics({}, false);
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle(0xa860ff, 0.1 + k * 0.03);
+      g.fillEllipse(30, 42, 60 - k * 7, 84 - k * 10);
+    }
+    g.lineStyle(2, 0xd8a8ff, 0.9);
+    g.strokeEllipse(30, 42, 56, 80);
+    g.generateTexture('yokai-aura', 60, 84);
+    g.destroy();
+  }
+
+  /** 妖怪留下的痕跡：停留幾秒，在人群裡也追得到 */
+  private yokaiTrail(p: Ped) {
+    if (!p.sprite.active || !p.yokai) return;
+    const x = p.sprite.x, foot = p.baseY;
+    // 往上飄的紫色妖氣
+    const w = this.add.circle(x + Phaser.Math.Between(-10, 10), p.sprite.y - 60, 4, 0xc890ff, 0.9).setDepth(p.sprite.depth + 0.003);
+    this.tweens.add({ targets: w, y: w.y - 34, scale: 2, alpha: 0, duration: 1100, onComplete: () => w.destroy() });
+    const fade = (o: Phaser.GameObjects.GameObject & { alpha: number }, ms: number) =>
+      this.tweens.add({ targets: o, alpha: 0, delay: ms * 0.6, duration: ms * 0.4, onComplete: () => o.destroy() });
+    switch (p.yokai.kind) {
+      case 'kappa': {
+        // 濕腳印＋滴水
+        const fp = this.add.ellipse(x + Phaser.Math.Between(-4, 4), foot - 1, 8, 4, 0x4fa8e0, 0.8).setDepth(30);
+        fade(fp, 3000);
+        const d = this.add.image(x + Phaser.Math.Between(-6, 6), p.sprite.y - 58, this.textures.exists('tell-drop') ? 'tell-drop' : 'glow').setDepth(p.sprite.depth + 0.001).setScale(1.4);
+        this.tweens.add({ targets: d, y: foot, alpha: 0.3, duration: 500, onComplete: () => d.destroy() });
+        break;
+      }
+      case 'tanuki': {
+        // 掉葉子
+        if (!this.textures.exists('leaf')) break;
+        const lf = this.add.image(x + Phaser.Math.Between(-10, 10), p.sprite.y - 30, 'leaf').setDepth(30).setScale(1.3);
+        this.tweens.add({ targets: lf, y: foot - 2, angle: Phaser.Math.Between(-200, 200), duration: 600 });
+        fade(lf, 3200);
+        break;
+      }
+      case 'kitsune': {
+        // 狐火
+        const f = this.add.circle(x + Phaser.Math.Between(-22, 22), p.sprite.y - Phaser.Math.Between(50, 80), 4, 0x7ab8ff, 1)
+          .setDepth(62).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: f, y: f.y - 30, scale: 1.6, duration: 2600 });
+        fade(f, 2600);
+        break;
+      }
+      case 'yukionna': {
+        // 一路結霜
+        const fr = this.add.image(x + Phaser.Math.Between(-10, 10), foot - 2, this.textures.exists('tell-frost') ? 'tell-frost' : 'glow').setDepth(30).setScale(1.3);
+        fade(fr, 3200);
+        break;
+      }
     }
   }
 
   private endTell(p: Ped) {
     this.detach(p, 'tell-plate');
     this.detach(p, 'tell-tail');
+    this.detach(p, 'yokai-aura');
     for (const e of p.extras ?? []) if (e.key === 'shadow') e.img.setData('hidden', false);
     p.floatY = 0;
   }
@@ -2613,7 +2674,8 @@ export class StreetScene extends Phaser.Scene {
   /** 百鬼夜行：大型妖怪操偶＋扮妖怪的人 */
   private startYokaiParade() {
     const x0 = this.L.startX - 360;
-    const c = this.add.container(x0, ACTOR_Y).setDepth(47);
+    // 走在人群後面，不擋住要找的妖怪
+    const c = this.add.container(x0, GROUND_Y + 4).setDepth(29.9);
     const flag = drawFlag(this, '百鬼夜行', 0x5a2a7a);
     flag.setPosition(220, 0);
     c.add(flag);

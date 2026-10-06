@@ -280,6 +280,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     for (const b of s.buffs) items.push(`${b.name}・剩 ${b.daysLeft} 天`);
     if (hasSpring(s)) {
       if (festivalActive(s)) { items.push('妖怪祭・今天營業到凌晨 2 點'); colors[items.length - 1] = '#f0a0d0'; }
+      if (store.yokaiOnStreet > 0) { items.push(`街上還有 ${store.yokaiOnStreet} 隻妖怪沒被識破・可以暫停慢慢找`); colors[items.length - 1] = '#d0b0ff'; }
       else if (s.festival && s.festival.day > s.day) { items.push('明天：妖怪祭'); colors[items.length - 1] = '#f0a0d0'; }
       const stage = protestStage(s.grievance);
       if (stage) { items.push(`抗議：${PROTEST_STAGES[stage - 1].name}`); colors[items.length - 1] = stage >= 3 ? '#ff9a8a' : '#ffc890'; }
