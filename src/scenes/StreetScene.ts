@@ -42,6 +42,14 @@ const YUKATA_LOOKS: Look[] = [
   { skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'long', shirt: 0x7a4a9a, pants: 0x7a4a9a, accessory: 'yukata', age: 'young' },
 ];
 
+/** 敷泥漿面膜的客人（穿浴袍） */
+const MUD_LOOKS: Look[] = [
+  { skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2eee4, pants: 0xf2eee4, accessory: 'mudmask', age: 'young' },
+  { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xe8d8c8, pants: 0xe8d8c8, accessory: 'mudmask', age: 'mid' },
+  { skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'short', shirt: 0xf6e0e6, pants: 0xf6e0e6, accessory: 'mudmask', age: 'young' },
+  { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0xdde8f0, pants: 0xdde8f0, accessory: 'mudmask', age: 'old' },
+];
+
 /** 角色站的位置（比路人前面一點） */
 const ACTOR_Y = GROUND_Y + SIDEWALK_H - 6;
 
@@ -82,6 +90,8 @@ interface Ped {
   tappable?: boolean;
   /** 換了造型的路人（例如穿浴衣）用的貼圖 key 前綴 */
   tex?: string;
+  /** 敷著泥漿面膜 */
+  mud?: boolean;
 }
 
 type SightKind = 'view' | 'selfie' | 'telescope' | 'bench' | 'fireView' | 'fireSelfie' | 'fireSit' | 'fireBuy';
@@ -187,6 +197,7 @@ export class StreetScene extends Phaser.Scene {
   private exposePrompt?: Phaser.GameObjects.Container;
   private paradeObjs: { c: Phaser.GameObjects.Container; ev: Phaser.Time.TimerEvent }[] = [];
   private planTimer = 0;
+  private mudTimer = 0;
   private fireflies: Phaser.GameObjects.Arc[] = [];
 
   constructor() {
@@ -1811,7 +1822,7 @@ export class StreetScene extends Phaser.Scene {
     const ped = this.createPed(g.lot, route.dir, route.span, g.origin, Math.random() < fallChance(s), Math.random() < vanishChance(s), true, door);
     ped.suitcase = this.add.image(door, ped.baseY, 'suitcase').setOrigin(0.5, 1).setDepth(ped.sprite.depth + 0.0001).setAlpha(0);
     // 泥漿 SPA 套裝的住客：頂著灰臉退房
-    if (hasPlan(s.lots[g.lot]?.shop, 'spa')) this.attach(ped, 'mudface', 2, -47);
+    if (hasPlan(s.lots[g.lot]?.shop, 'spa')) this.wearMudMask(ped);
     // 睡眼惺忪
     this.time.delayedCall(200, () => ped.sprite.active && this.floatText(door - 10, GROUND_Y - 70, 'zzz…', '#9ec3e6', 14));
     const ri = this.reviewQueue.findIndex((r) => r.lot === g.lot);
@@ -2143,6 +2154,7 @@ export class StreetScene extends Phaser.Scene {
     if (!running) return;
     const h = hourOf(s);
     this.updatePlans(dt * store.speed, h);
+    this.updateMudPeople(dt * store.speed);
     this.updateFireflies(h);
     // 晨鐘暮鼓
     if (!this.bells.morning && h >= 8) {
@@ -2462,7 +2474,7 @@ export class StreetScene extends Phaser.Scene {
       case 'fireBuy':
         this.sightSay(p, s.fireMode === 'full'
           ? Phaser.Utils.Array.GetRandom(['老闆！五花肉一盤！', '用天然氣烤的肉特別香！', '再來一串香腸！'])
-          : Phaser.Utils.Array.GetRandom(['爆米花一包！', '烤魷魚好香～', '用三百年的火烤的耶！']), '#ffe08a');
+          : Phaser.Utils.Array.GetRandom(['買一個火王爺平安符', '導覽解說好有趣！', '原來天然氣是從這裡冒出來的', '伴手禮帶一盒']), '#ffe08a');
         break;
     }
   }
@@ -2471,7 +2483,7 @@ export class StreetScene extends Phaser.Scene {
     const s = S();
     if (sg.kind === 'fireSelfie') {
       playFx(this, 'flash', p.sprite.x + p.dir * 10, p.sprite.y - 50);
-    } else if (sg.kind === 'fireBuy' && s.fireMode === 'stall' && this.textures.exists('popcorn')) {
+    } else if (sg.kind === 'fireBuy' && s.fireMode === 'full' && this.textures.exists('popcorn') && Math.random() < 0.3) {
       for (let k = 0; k < 6; k++) {
         const pc = this.add.image(p.sprite.x, p.sprite.y - 40, 'popcorn').setDepth(p.sprite.depth + 0.001);
         this.tweens.add({ targets: pc, x: pc.x + Phaser.Math.Between(-30, 30), y: pc.y - Phaser.Math.Between(20, 50), alpha: 0, duration: 700, delay: k * 60, onComplete: () => pc.destroy() });
@@ -2500,11 +2512,47 @@ export class StreetScene extends Phaser.Scene {
     if (p.extras) p.extras = p.extras.filter((e) => e.key !== 'mudface');
   }
 
+  /** 敷上泥漿面膜：灰臉、毛巾包頭、小黃瓜片、浴袍，怕裂開只敢小碎步 */
+  private wearMudMask(p: Ped) {
+    const k = p.variant % MUD_LOOKS.length;
+    p.tex = ensureCharTexture(this, `mudGuest${k}`, MUD_LOOKS[k]);
+    p.mud = true;
+    p.yukata = false;
+    p.speed *= 0.6;
+    p.sprite.setTexture(`${p.tex}_0`).setScale(61 / CHAR_H);
+  }
+
+  /** 泥漿人的小演出：自言自語、嚇到路人、笑到面膜裂開 */
+  private updateMudPeople(dt: number) {
+    this.mudTimer -= dt;
+    if (this.mudTimer > 0) return;
+    this.mudTimer = 2500 + Math.random() * 2500;
+    const cam = this.cameras.main;
+    const muds = this.peds.filter((p) => p.mud && p.state === 'walk' && p.sprite.x > cam.scrollX && p.sprite.x < cam.scrollX + W);
+    if (!muds.length) return;
+    const m = Phaser.Utils.Array.GetRandom(muds) as Ped;
+    const near = this.peds.find((q) => !q.mud && q.state === 'walk' && Math.abs(q.sprite.x - m.sprite.x) < 90);
+    if (near && Math.random() < 0.5) {
+      // 路人被嚇到，泥漿人一笑，面膜就裂了
+      this.floatText(near.sprite.x, near.sprite.y - 72, Phaser.Utils.Array.GetRandom(['哇啊！殭屍！', '媽媽，那個人的臉是灰的！', '石像會走路！', '……兵馬俑？']), '#ffffff', 14);
+      this.time.delayedCall(900, () => {
+        if (!m.sprite.active) return;
+        this.floatText(m.sprite.x, m.sprite.y - 76, Phaser.Utils.Array.GetRandom(['噗——不要逗我笑！', '裂了啦！！', '我是人啦……（裂）']), '#d8d2d0', 15);
+        for (let k = 0; k < 6; k++) {
+          const c = this.add.rectangle(m.sprite.x + Phaser.Math.Between(-6, 8), m.sprite.y - 50, 3, 3, 0x7d7873).setDepth(m.sprite.depth + 0.001);
+          this.tweens.add({ targets: c, y: m.baseY, x: c.x + Phaser.Math.Between(-12, 12), angle: 180, alpha: 0.3, duration: 600, onComplete: () => c.destroy() });
+        }
+      });
+    } else {
+      this.floatText(m.sprite.x, m.sprite.y - 76, Phaser.Utils.Array.GetRandom(['（面無表情）', '不能笑……會裂……', '我看不到路……小黃瓜擋住了', '泥漿人走路要慢', '皮膚在呼吸～']), '#d8d2d0', 14);
+    }
+  }
+
   /** 逛完溫泉類的店：灰臉、穿浴衣、泡湯泡得臉紅紅 */
   private afterOnsenVisit(p: Ped, defId: string, lot: number) {
-    if (defId === 'mudspa' && !p.extras?.some((e) => e.key === 'mudface') && !p.tex) {
-      this.attach(p, 'mudface', 2, -47);
-      this.floatText(this.L.doorX(lot), GROUND_Y - 80, '敷臉中～', '#d8d2d0', 14);
+    if (defId === 'mudspa' && !p.mud) {
+      this.wearMudMask(p);
+      this.floatText(this.L.doorX(lot), GROUND_Y - 80, Phaser.Utils.Array.GetRandom(['敷臉中，請勿逗我笑', '泥漿人出爐！', '十五分鐘後變美']), '#d8d2d0', 14);
     } else if (defId === 'yukata' && !p.yukata) {
       p.yukata = true;
       this.wearYukata(p);

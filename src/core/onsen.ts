@@ -207,9 +207,9 @@ export interface FireModeDef {
 }
 
 export const FIRE_MODES: Record<FireMode, FireModeDef> = {
-  protect: { id: 'protect', name: '保育', fee: 0, desc: '圍起來只供參觀。聲望每天 +0.3，廟公很開心，火勢不會被扣。' },
-  stall: { id: 'stall', name: '小攤販', fee: 25, desc: '開放爆米花、烤魷魚小攤，停下來的人變多。每人 $25 × 火勢，偶爾出點小狀況。' },
-  full: { id: 'full', name: '全面開發', fee: 60, desc: '改成烤肉區，烤肉客大排長龍。每人 $60 × 火勢、人潮 ×1.08；但民怨每天 +1、聲望每天 -0.3，火王爺會不高興（火勢慢慢變小），火勢太大時還可能失火。' },
+  protect: { id: 'protect', name: '保育', fee: 0, desc: '圍起來只供參觀，這是唯一完全照規定的做法。聲望每天 +0.3，廟公很開心，火勢不會被扣。' },
+  stall: { id: 'stall', name: '周邊擺攤', fee: 25, desc: '合法：攤位擺在步道旁，不碰火。賣火王爺平安符、伴手禮、收費導覽解說。停下來的人變多，每人 $25 × 火勢。' },
+  full: { id: 'full', name: '違規烤肉區', fee: 60, desc: '違法！直接用天然氣的火烤肉，烤肉客大排長龍。每人 $60 × 火勢、人潮 ×1.08；但民怨每天 +1、聲望每天 -0.3、火王爺不高興（火勢慢慢變小）。每天都可能被公所稽查：罰款、扣聲望、強制拆除。' },
 };
 
 const FIRE_RANK: Record<FireMode, number> = { protect: 0, stall: 1, full: 2 };
@@ -265,6 +265,18 @@ export function dailyFireUpdate(s: GameState): void {
   if (s.fireMode === 'full') f = Math.max(0.6, f - 0.05);
   else if (f < floor) f = Math.min(floor, f + 0.05);
   s.fireLevel = Math.round(f * 100) / 100;
+}
+
+/** 公所稽查罰款 */
+export const INSPECTION_FINE = 15000;
+
+/** 違規烤肉區每天被公所稽查到的機率（地震後記者常來、民怨高時里民會檢舉，更容易被查） */
+export function inspectionChance(s: GameState): number {
+  if (s.fireMode !== 'full') return 0;
+  let c = 0.12;
+  if (s.quake) c += 0.08;
+  if (s.grievance >= 55) c += 0.05;
+  return c;
 }
 
 /** 全面開發又火勢太大：每天可能失火 */
@@ -416,7 +428,7 @@ export const DINNER_SHARE = 80;
 
 /** 環境夠乾淨：泉井不超過 1 口、水火同源保育、民怨很低 */
 export function cleanMountain(s: GameState): boolean {
-  return hasSpring(s) && s.wells <= 1 && s.fireMode === 'protect' && s.grievance < 30;
+  return hasSpring(s) && s.wells <= 1 && s.fireMode !== 'full' && s.grievance < 30;
 }
 
 /** 有沒有旅館推了星空露天風呂 */

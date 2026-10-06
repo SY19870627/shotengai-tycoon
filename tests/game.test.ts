@@ -11,7 +11,7 @@ import {
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
   resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered,
-  addPlan, canAddPlan, removePlan, planPriceMult, poolNoise, firefliesOut, cleanMountain,
+  addPlan, canAddPlan, removePlan, planPriceMult, poolNoise, firefliesOut, cleanMountain, inspectionChance, INSPECTION_FINE,
 } from '../src/core/onsen';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
@@ -503,6 +503,28 @@ describe('關子嶺', () => {
     expect(fireDowngradeCost('protect', 'full')).toBe(0);
   });
 
+  it('違規烤肉區會被稽查：罰款、扣聲望、拆成合法的周邊擺攤', () => {
+    const s = gz();
+    expect(inspectionChance(s)).toBe(0);
+    setFireMode(s, 'stall');
+    expect(inspectionChance(s)).toBe(0);
+    setFireMode(s, 'full');
+    expect(inspectionChance(s)).toBeCloseTo(0.12);
+    s.quake = { day: 1, before: 6, loss: 2, recovered: 0 };
+    expect(inspectionChance(s)).toBeCloseTo(0.2);
+    for (const e of STREETS.guanziling.stories) s.storyLog[e.id] = s.day;
+    delete s.storyLog['gz-inspection'];
+    s.flags.push('inspection');
+    const m = s.money, rep = s.reputation;
+    const st = pickStory(s, 'morning', seeded(1));
+    expect(st?.event.id).toBe('gz-inspection');
+    for (const step of flattenEffects(st!.steps)) if (step.t === 'effect') applyEffects(s, step.effects, seeded(1));
+    expect(s.money).toBe(m - INSPECTION_FINE);
+    expect(s.reputation).toBeLessThan(rep);
+    expect(s.fireMode).toBe('stall');
+    expect(s.flags).not.toContain('inspection');
+  });
+
   it('妖怪祭：前一晚預約、隔天營業到凌晨 2 點', () => {
     const s = gz();
     place(s, 0, 'gz-chicken');
@@ -635,6 +657,8 @@ describe('關子嶺', () => {
     expect(firefliesOut(s)).toBe(false);
     sealWell(s);
     s.grievance = 0;
+    expect(firefliesOut(s)).toBe(true);
+    setFireMode(s, 'stall');
     expect(firefliesOut(s)).toBe(true);
     setFireMode(s, 'full');
     expect(firefliesOut(s)).toBe(false);

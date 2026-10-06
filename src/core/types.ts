@@ -8,7 +8,9 @@ export type HairStyle = 'short' | 'long' | 'bald' | 'bun' | 'spiky' | 'ponytail'
 export type Accessory =
   | 'none' | 'glasses' | 'hat' | 'apron' | 'headband' | 'beard' | 'cap' | 'scarf' | 'camera'
   // 關子嶺：浴衣、妖怪
-  | 'yukata' | 'kappa' | 'tanuki' | 'kitsune' | 'yukionna';
+  | 'yukata' | 'kappa' | 'tanuki' | 'kitsune' | 'yukionna'
+  // 敷泥漿面膜的客人：灰臉、毛巾包頭、小黃瓜片、浴袍
+  | 'mudmask';
 
 export interface Look {
   skin: number;

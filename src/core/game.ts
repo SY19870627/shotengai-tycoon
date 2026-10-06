@@ -12,7 +12,7 @@ import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type
 import { STREETS } from '../content';
 import {
   hasSpring, springRatio, isSpringShop, protestStage, dailyGrievanceDelta, addGrievance, rollClosures, bathLot, BATH,
-  dailyFireUpdate, fireAccidentChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
+  dailyFireUpdate, fireAccidentChance, inspectionChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
   resolveLeaves, applyQuake, dailyQuakeRecovery, springSupply, springDemand, sealWell,
   planOccupancy, planPriceMult, planReview, poolNoise, poolSwimmers, POOL_TICKET, hasPlan, DINNER_SHARE, firefliesOut,
 } from './onsen';
@@ -1316,6 +1316,7 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
   // 關子嶺：靜坐抗議、失火、祭典收尾
   s.closedToday = rollClosures(s, rand);
   if (hasSpring(s) && rand() < fireAccidentChance(s) && !s.flags.includes('fireAccident')) s.flags.push('fireAccident');
+  else if (hasSpring(s) && rand() < inspectionChance(s) && !s.flags.includes('inspection')) s.flags.push('inspection');
   if (s.festival && s.festival.day < s.day && s.festival.leafCommission <= 0 && !Object.keys(s.festival.leafByTenant).length) s.festival = null;
   if (rand() < 0.7) addApplicant(s, rand);
   if (s.applicants.length === 0) addApplicant(s, rand);

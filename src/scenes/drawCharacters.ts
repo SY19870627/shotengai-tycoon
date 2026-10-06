@@ -62,7 +62,7 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
   const legTop = bodyTop + bodyH - 2;
   const legH = CHAR_H - 3 - legTop;
   const acc = look.accessory;
-  const robe = acc === 'yukata' || acc === 'yukionna';
+  const robe = acc === 'yukata' || acc === 'yukionna' || acc === 'mudmask';
   const skin = acc === 'yukionna' ? toHex(paleSkin(look.skin)) : look.skin;
   const shirt = acc === 'yukionna' ? YUKI_ROBE : look.shirt;
 
@@ -320,6 +320,36 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
       g.lineStyle(1.2, 0x7aa8d0);
       g.lineBetween(cx + 6, headY + 8, cx + 9, headY + 8);
       break;
+    case 'mudmask': {
+      // 整張臉糊滿灰色泥漿
+      g.fillStyle(0x5e5954);
+      g.fillCircle(cx + 1, headY + 1, headR - 0.5);
+      g.fillStyle(0x4a4642);
+      for (const [dx, dy, r] of [[-4, 4, 1.6], [3, -3, 1.3], [7, 6, 1.2], [-1, 7, 1]]) g.fillCircle(cx + dx, headY + dy, r);
+      // 往下滴的泥
+      g.fillStyle(0x5e5954);
+      g.fillRoundedRect(cx + 2, headY + headR - 2, 2.5, 5 + frame, 1.2);
+      g.fillCircle(cx + 3.2, headY + headR + 3 + frame, 1.8);
+      g.fillRoundedRect(cx + 8, headY + headR - 4, 2, 4, 1);
+      // 白毛巾包頭
+      g.fillStyle(0xf8f6f0);
+      g.slice(cx, headY - 2, headR + 2, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
+      g.fillPath();
+      g.fillEllipse(cx - 6, headY - headR - 1, 12, 9);
+      g.lineStyle(1, 0xd8d2c4);
+      g.lineBetween(cx - headR, headY - 4, cx + headR, headY - 4);
+      // 眼睛上的小黃瓜片
+      g.fillStyle(0x4f9a3a);
+      g.fillCircle(cx + 5.5, headY + 1, 3.6);
+      g.fillStyle(0xcfe8a8);
+      g.fillCircle(cx + 5.5, headY + 1, 2.6);
+      g.fillStyle(0x8fc06a);
+      for (let k = 0; k < 4; k++) g.fillCircle(cx + 5.5 + Math.cos(k * 1.57) * 1.2, headY + 1 + Math.sin(k * 1.57) * 1.2, 0.5);
+      // 一條線的嘴（怕面膜裂開，不敢笑）
+      g.lineStyle(1.2, 0x4a4540);
+      g.lineBetween(cx + 6, headY + 8, cx + 10, headY + 8);
+      break;
+    }
   }
   // 老人家拐杖
   if (old) {

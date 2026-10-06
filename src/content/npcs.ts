@@ -107,6 +107,10 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'bbqBoss', name: '外地烤肉業者 黃董',
     look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xd9a03b, pants: 0x2b2b2b, accessory: 'glasses', age: 'mid' }),
   },
+  inspector: {
+    id: 'inspector', name: '公所稽查員 吳先生',
+    look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x2f3550, accessory: 'cap', age: 'mid' }),
+  },
   festGuest: {
     id: 'festGuest', name: '祭典遊客',
     look: L({ skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0x4f7dc6, pants: 0x4f7dc6, accessory: 'yukata', age: 'young' }),

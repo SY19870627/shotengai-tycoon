@@ -12,7 +12,7 @@ import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
   canHavePlans, RYOKAN_PLANS, PLAN_IDS, planSlots, canAddPlan, addPlan, removePlan, hasPlan, POOL_TICKET, DINNER_SHARE, type PlanId,
   drillWell, sealWell, canHoldTownhall, holdTownhall, TOWNHALL, SEAL_CUT, MAX_WELLS, buildBath, demolishBath, bathLot, BATH,
-  FIRE_MODES, fireDowngradeCost, setFireMode, fireAccidentChance, festivalActive, quakeLossPct, dailyGrievanceDelta,
+  FIRE_MODES, fireDowngradeCost, setFireMode, fireAccidentChance, inspectionChance, INSPECTION_FINE, festivalActive, quakeLossPct, dailyGrievanceDelta,
 } from '../core/onsen';
 import {
   SHOP_BY_ID, MAX_LEVEL, RENT_TIERS, renovateCost, capacityAt, rentFor,
@@ -581,7 +581,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     m.add(this.text(x + 30, y + 24, '水火同源・要怎麼經營？', 26, hex(C.ink), '900'));
     m.add(this.text(x + 30, y + 64, `火勢 ${s.fireLevel.toFixed(2)}${s.quake ? '（地震後地底多了裂縫，火變大了）' : ''}　・　今天停下來看火 ${s.today.fireVisitors} 人，攤販收入 ${money(s.today.fireIncome)}`, 15, '#4a4356'));
     const acc = fireAccidentChance(s);
-    if (acc > 0) m.add(this.text(x + 30, y + 88, `⚠ 火勢太大，烤肉區每天有 ${Math.round(acc * 100)}% 機率失火`, 14, '#b33a3a', '700'));
+    const insp = inspectionChance(s);
+    const warn: string[] = [];
+    if (insp > 0) warn.push(`違規中：每天有 ${Math.round(insp * 100)}% 機率被公所稽查（罰 $${INSPECTION_FINE.toLocaleString('en-US')}）`);
+    if (acc > 0) warn.push(`火勢太大，每天有 ${Math.round(acc * 100)}% 機率失火`);
+    if (warn.length) m.add(this.text(x + 30, y + 88, `⚠ ${warn.join('；')}`, 14, '#b33a3a', '700'));
     (['protect', 'stall', 'full'] as FireMode[]).forEach((mode, k) => {
       const d = FIRE_MODES[mode];
       const cx = x + 30 + k * 318, cy = y + 120;
@@ -597,7 +601,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         if (!r.ok) return toast(r.reason);
         save();
         bus.emit(Ev.Changed);
-        toast(mode === 'protect' ? '圍欄架好了。廟公點頭微笑。' : mode === 'stall' ? '爆米花機推上來了！' : '烤肉區開張！煙好大……');
+        toast(mode === 'protect' ? '圍欄架好了。廟公點頭微笑。' : mode === 'stall' ? '步道旁的攤位擺好了：平安符、伴手禮、導覽解說。' : '違規烤肉區開張了……煙好大，希望公所的人不要上山。');
         this.closeModal();
       }, cur ? 0x9a94ac : mode === 'full' ? 0xb3262e : 0x3f6f8f, 14);
       b.setEnabled(!cur && s.money >= cost);
