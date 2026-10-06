@@ -417,6 +417,10 @@ export class StreetScene extends Phaser.Scene {
     view.shutter.removeAll(true);
     for (const e of view.extras) e.destroy();
     view.extras = [];
+    // 上一間店（例如民宿）的窗戶、房況牌已經銷毀，不能再拿來畫
+    view.windows = undefined;
+    view.shopWindow = undefined;
+    view.roomTag = undefined;
     view.wasOpen = null;
     const lot = s.lots[i];
     const firstLocked = s.lots.findIndex((l) => !l.unlocked);
@@ -1301,7 +1305,12 @@ export class StreetScene extends Phaser.Scene {
     a.bubble?.destroy();
     a.bubble = undefined;
     const lot = lotOfTenant(S(), ref);
-    if (lot >= 0) await this.walkActor(a, this.L.doorX(lot), 260);
+    if (lot >= 0) {
+      // 店離得近才走回去；太遠就走幾步後淡出，不讓玩家乾等
+      const door = this.L.doorX(lot);
+      const far = Math.abs(door - a.sprite.x) > 320;
+      await this.walkActor(a, far ? a.sprite.x + Math.sign(door - a.sprite.x) * 100 : door, 300);
+    }
     this.removeActor(ref);
   }
 
