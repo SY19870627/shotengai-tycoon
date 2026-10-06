@@ -6,7 +6,7 @@ import {
   buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
-  sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive,
+  sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive, eligibleProfiles,
 } from '../src/core/game';
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
@@ -638,6 +638,24 @@ describe('關子嶺', () => {
     expect(firefliesOut(s)).toBe(true);
     setFireMode(s, 'full');
     expect(firefliesOut(s)).toBe(false);
+  });
+
+  it('Jason 收購嶺泉館：同一間店面變成泥月 Villa，保留等級和方案', () => {
+    const s = gz();
+    place(s, 0, 'gz-ceo');
+    place(s, 1, 'gz-ryokan');
+    s.lots[1].shop!.level = 2;
+    addPlan(s, 1, 'stars');
+    applyEffects(s, { takeOver: ['gz-ryokan', 'gz-villa', 2] });
+    const shop = s.lots[1].shop!;
+    expect(shop.tenantId).toBe('gz-villa');
+    expect(shop.defId).toBe('ryokan');
+    expect(shop.level).toBe(2);
+    expect(shop.plans).toEqual(['stars']);
+    expect(shop.rentTier).toBe(2);
+    expect(s.departed).toContain('gz-ryokan');
+    expect(s.lots[0].shop!.tenantId).toBe('gz-ceo');
+    expect(eligibleProfiles(s).some((p) => p.id === 'gz-villa')).toBe(false);
   });
 
   it('舊存檔讀進來會補上關子嶺的欄位', () => {

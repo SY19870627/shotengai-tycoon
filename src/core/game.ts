@@ -625,6 +625,23 @@ export function giveGift(s: GameState, lotIndex: number): Result {
   return { ok: true };
 }
 
+/** 新租客接手舊租客的店面：保留裝修等級與旅館方案，換成新租客的店 */
+export function takeOverShop(s: GameState, oldId: string, newId: string, tier: number): Result {
+  const lot = lotOfTenant(s, oldId);
+  const p = profileOf(s, newId);
+  if (lot < 0 || !p) return { ok: false, reason: '無效的操作' };
+  const old = s.lots[lot].shop!;
+  removeTenant(s, oldId);
+  s.applicants = s.applicants.filter((a) => a.tenantId !== newId);
+  s.lots[lot].shop = {
+    tenantId: newId, defId: p.shopType, level: old.level, rentTier: Math.min(tier, p.maxRentTier),
+    satisfaction: 75, days: 0, losingDays: 0,
+    inside: 0, todayVisitors: 0, todayRevenue: 0, todayTurnedAway: 0, totalRevenue: 0, lastProfit: 0,
+    plans: p.shopType === old.defId ? old.plans : undefined,
+  };
+  return { ok: true };
+}
+
 export function evict(s: GameState, lotIndex: number): Result {
   const shop = s.lots[lotIndex]?.shop;
   if (!shop) return { ok: false, reason: '這裡沒有租客' };
@@ -1024,6 +1041,7 @@ export function applyEffects(s: GameState, e: Effects, rand: () => number = Math
     if (shop && shop.level < MAX_LEVEL) shop.level += 1;
   }
   for (const id of e.leave ?? []) removeTenant(s, id);
+  if (e.takeOver) takeOverShop(s, ...e.takeOver);
   if (e.ritual) s.ritualDay = s.kami ? s.day : s.day + 1;
   if (e.grievance) addGrievance(s, e.grievance);
   if (e.fireMode) {

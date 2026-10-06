@@ -44,6 +44,23 @@ const tenants: TenantProfile[] = [
     },
   }),
   T({
+    // 只會透過劇情出現：Jason 收購嶺泉館後開的精品溫泉旅館
+    id: 'gz-villa', name: 'Jason（泥月 Villa）', shopName: '泥月 Villa', shopType: 'ryokan',
+    traits: ['online', 'dramatic'], skill: 5, maxRentTier: 2,
+    intro: '嶺泉館的木頭、屋瓦我全部留著，只是換上設計師家具和香氛。這叫 heritage luxury。',
+    look: look({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x2b2b2b, pants: 0x54627a, accessory: 'glasses', age: 'young' }),
+    arrive: { flag: 'never' },
+    lines: {
+      hello: '泥月 Villa，soft opening！',
+      happy: ['今天的房間全部 sold out！', '有部落客說這是全台南最美的溫泉旅館！'],
+      unhappy: ['這個入住率……我要跟投資人怎麼交代……', '是不是不該拆掉嶺泉館的招牌……'],
+      idle: ['房間的泥湯是 private 的喔。', '早餐是秀子姨教我的古早味。'],
+      rival: ['我們的 target 客群不一樣。', '你應該來我們這裡 benchmark 一下。'],
+      friend: ['一起做套裝行程吧！', '你就是我的 strategic partner。'],
+      refuse: '這個租金 ROI 不行啦。',
+    },
+  }),
+  T({
     id: 'gz-chicken', name: '甕伯', shopName: '甕仔雞', shopType: 'claypot',
     traits: ['veteran', 'hothead'], skill: 5, maxRentTier: 1,
     intro: '甕缸雞？我烤四十年了！關子嶺第一甕就是我起的火！……什麼？你問誰是元祖？當然是我！',
@@ -310,8 +327,10 @@ const stories: StoryEvent[] = [
           say('gz-ceo', '……好，我會用我的方式證明。'),
           emote('gz-ceo', 'sad'),
         ]),
-        opt('支持收購：讓老旅館轉型', { leave: ['gz-ryokan'], sat: [['gz-ceo', 15]], rep: -3 }, [
-          narrate('秀子姨默默收拾了阿祖的老照片。嶺泉館的燈，熄了。'),
+        opt('支持收購：讓老旅館轉型', { takeOver: ['gz-ryokan', 'gz-villa', 2], sat: [['gz-ceo', 15]], rep: -3 }, [
+          narrate('秀子姨默默收拾了阿祖的老照片。「嶺泉館」的木招牌被拆了下來，換上「泥月 Villa」。'),
+          say('gz-ceo', '秀子姨，房子我會好好保留。等你想回來泡湯，永遠有一間房留給你。'),
+          narrate('嶺泉館變成 Jason 經營的精品溫泉旅館「泥月 Villa」。原本的裝修和方案都留著，租金也改成高價。'),
         ]),
       ),
       leave('gz-ryokan'), leave('gz-ceo'), leave('me'),
@@ -390,11 +409,16 @@ const stories: StoryEvent[] = [
           appear('gz-yukata', 'gz-ryokan', 140),
           say('gz-yukata', '真的可以嗎！我會好好照顧它的！浴衣客人也可以直接入住！'),
         ])] : []),
+        ...(c.has('gz-ceo') ? [opt('讓 Jason 接手經營', { takeOver: ['gz-ryokan', 'gz-villa', 2] as [string, string, number], sat: [['gz-ceo', 10]], rep: -1 }, [
+          appear('gz-ceo', 'gz-mountain', 140),
+          say('gz-ceo', '交給我吧。房子、泥湯的泡法，我都照秀子姨的規矩來。'),
+          narrate('嶺泉館由 Jason 接手，改名「泥月 Villa」。'),
+        ])] : []),
         opt('沒辦法了……', { leave: ['gz-ryokan'], rep: -3 }, [
           narrate('嶺泉館，熄燈了。'),
         ]),
       ),
-      leave('gz-mountain'), leave('gz-yukata'), leave('me'),
+      leave('gz-mountain'), leave('gz-yukata'), leave('gz-ceo'), leave('me'),
     ],
   },
   {
