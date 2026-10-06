@@ -9,7 +9,8 @@ import {
   MAX_APPLICANTS, goalsDone,
 } from '../core/game';
 import {
-  hasSpring, springSupply, springDemand, springRatio, springUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
+  hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
+  canHavePlans, RYOKAN_PLANS, PLAN_IDS, planSlots, canAddPlan, addPlan, removePlan, hasPlan, POOL_TICKET, DINNER_SHARE, type PlanId,
   drillWell, sealWell, canHoldTownhall, holdTownhall, TOWNHALL, SEAL_CUT, MAX_WELLS, buildBath, demolishBath, bathLot, BATH,
   FIRE_MODES, fireDowngradeCost, setFireMode, fireAccidentChance, festivalActive, quakeLossPct, dailyGrievanceDelta,
 } from '../core/onsen';
@@ -79,6 +80,12 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   create() {
     this.speedButtons = [];
     this.modal = undefined;
+    // 場景重新開始時，上一條街的介面物件都已經被銷毀了
+    this.liveRefresh = undefined;
+    this.chipSig = '';
+    this.springText = undefined;
+    this.grievanceBar = undefined;
+    this.grievanceText = undefined;
     this.buildTopBar();
     this.buildSideButtons();
     this.panel = this.add.container(0, PANEL_Y).setVisible(false);
@@ -495,7 +502,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (l.bath) users.push(`共同浴場 ${BATH.spring}`);
       if (!l.shop) return;
       const def = SHOP_BY_ID[l.shop.defId];
-      const u = springUse(def, l.shop.level);
+      const u = shopSpringUse(l.shop);
       if (!u) return;
       const name = profileOf(s, l.shop.tenantId)?.shopName ?? def.name;
       users.push(`${name} ${u}${s.closedToday.includes(i) ? '（靜坐暫停）' : ''}`);
@@ -595,6 +602,55 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       }, cur ? 0x9a94ac : mode === 'full' ? 0xb3262e : 0x3f6f8f, 14);
       b.setEnabled(!cur && s.money >= cost);
       m.add(b.root);
+    });
+  }
+
+  /** 溫泉旅館的方案 */
+  private showPlans(lot: number) {
+    const s = S();
+    const shop = s.lots[lot].shop!;
+    const prof = profileOf(s, shop.tenantId)!;
+    const MW = 1100, MH = 560;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, `${prof.shopName}・旅館方案`, 26, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 64, `可以同時推 ${planSlots(shop)} 個方案（補助裝修升級可以多推）。費用由管理會出，撤掉不退錢。方案大多要用泉水，泉水不夠時效果會打折。`, 14, '#4a4356').setWordWrapWidth(MW - 60, true));
+    if (prof.traits.includes('stubborn')) m.add(this.text(x + 30, y + 88, `${prof.name}很傳統：泳池、星空風呂她不太喜歡，晚餐套餐、泥漿 SPA 她很樂意。`, 14, '#b33a3a', '700'));
+    const cardW = (MW - 60 - 3 * 14) / 4;
+    PLAN_IDS.forEach((id: PlanId, k) => {
+      const d = RYOKAN_PLANS[id];
+      const on = hasPlan(shop, id);
+      const cx = x + 30 + k * (cardW + 14), cy = y + 120;
+      m.add(this.add.rectangle(cx, cy, cardW, 410, on ? 0xeef8ee : 0xffffff).setOrigin(0).setStrokeStyle(on ? 4 : 2, on ? 0x5bb36a : 0xd8cfe0));
+      m.add(this.text(cx + 16, cy + 16, d.name, 19, hex(C.ink), '900'));
+      m.add(this.text(cx + 16, cy + 48, d.spring ? `每天多用泉量 ${d.spring}` : '不用泉水', 14, d.spring ? '#2f6f8f' : '#2f7d3f', '700'));
+      m.add(this.text(cx + 16, cy + 76, d.desc, 14, '#4a4356').setWordWrapWidth(cardW - 32, true).setLineSpacing(4));
+      const extra = id === 'pool' ? `泳客門票每人 ${money(POOL_TICKET)}` : id === 'dinner' ? `甕缸雞店每位住客分到 ${money(DINNER_SHARE)}` : '';
+      if (extra) m.add(this.text(cx + 16, cy + 300, extra, 13, '#c8902a', '700'));
+      if (on) {
+        const b = this.button(cx + 16, cy + 340, cardW - 32, 50, '撤掉這個方案', () => {
+          removePlan(s, lot, id);
+          save();
+          bus.emit(Ev.LotRedraw, lot);
+          this.rebuildPanel();
+          this.showPlans(lot);
+        }, 0x8a3b3b, 15);
+        m.add(b.root);
+      } else {
+        const can = canAddPlan(s, lot, id);
+        const label = can.ok || can.reason.startsWith('資金') ? `推出　${money(d.cost)}` : can.reason;
+        const b = this.button(cx + 16, cy + 340, cardW - 32, 50, label, () => {
+          const r = addPlan(s, lot, id);
+          if (!r.ok) return toast(r.reason);
+          save();
+          bus.emit(Ev.LotRedraw, lot);
+          toast(`${prof.shopName}推出「${d.name}」！`);
+          this.rebuildPanel();
+          this.showPlans(lot);
+        }, C.red, can.ok ? 15 : 12);
+        b.setEnabled(can.ok);
+        m.add(b.root);
+      }
     });
   }
 
@@ -832,6 +888,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.select(i);
     }, 0x8a3b3b, 14);
     p.add([bR.root, bG.root, bE.root]);
+    if (canHavePlans(s, i)) {
+      const n = shop.plans?.length ?? 0;
+      const bP = this.button(430, 126, 190, 38, `旅館方案（${n}/${planSlots(shop)}）`, () => this.showPlans(i), 0x3f6f8f, 14);
+      p.add(bP.root);
+    }
     p.add(this.text(1100, 20, '店面變大\n吸引力、客單、\n容量都提升', 12, '#a49dbb'));
     p.add(this.text(1100, 72, '滿意度 +15', 12, '#a49dbb'));
     p.add(this.text(1100, 124, '聲望 -2\n其他租客會不安', 12, '#a49dbb'));
@@ -850,7 +911,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       satText.setText(`${sat}　${sat >= 65 ? '開心' : sat >= 35 ? '普通' : sat >= 20 ? '不滿' : '想退租！'}`);
       const open = shopOpen(s, i);
       const closed = s.closedToday.includes(i);
-      const use = springUse(def, shop.level);
+      const use = shopSpringUse(shop);
       const water = use ? `・用泉 ${use}${springRatio(s) < 1 ? '（水溫不夠）' : ''}` : '';
       if (closed) {
         status.setText('● 抗議靜坐中，今天暫停營業').setColor('#f0a0a0');
@@ -1244,6 +1305,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (sum.fireVisitors) notes.push(`水火同源看火 ${sum.fireVisitors} 人${sum.fireIncome ? `・攤販收入 ${money(sum.fireIncome)}` : ''}`);
     if (sum.hikers) notes.push(`爬好漢坡 ${sum.hikers} 人（下來又累又餓，吃的店生意變好）`);
     if (sum.festival) notes.push('妖怪祭辦完了！明天早上……收銀機裡會不會有樹葉？');
+    if (sum.swimmers) notes.push(`溫泉泳池泳客 ${sum.swimmers} 人`);
+    if (sum.dinners) notes.push(`甕缸雞晚餐套餐 ${sum.dinners} 份`);
+    if (sum.fireflies) notes.push('今晚山上有螢火蟲，星空風呂的客人好開心。');
     if (s.gameOver) notes.unshift('負債太多……老街撐不下去了。');
     m.add(this.text(W / 2, y + 382, notes.slice(0, 9).join('\n'), 14, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4).setWordWrapWidth(540, true));
     const label = s.gameOver ? '重新挑戰' : `開始第 ${s.day + 1} 天`;

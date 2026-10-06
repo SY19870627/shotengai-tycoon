@@ -14,6 +14,7 @@ import {
   hasSpring, springRatio, isSpringShop, protestStage, dailyGrievanceDelta, addGrievance, rollClosures, bathLot, BATH,
   dailyFireUpdate, fireAccidentChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
   resolveLeaves, applyQuake, dailyQuakeRecovery, springSupply, springDemand, sealWell,
+  planOccupancy, planPriceMult, planReview, poolNoise, poolSwimmers, POOL_TICKET, hasPlan, DINNER_SHARE, firefliesOut,
 } from './onsen';
 
 export const DAY_START_MIN = 7 * 60;
@@ -331,6 +332,9 @@ export function occupancyRate(s: GameState, lot: number): number {
   if (isWeekend(s) || weekdayIndex(s) === 4) r += 0.25;
   if (s.weather === 'fog' || s.weather === 'heavyFog') r += 0.1; // 想看夜霧
   r -= noisyNeighbors(s, lot).length * 0.12;
+  // 關子嶺：旅館方案、隔壁的泳池
+  r += planOccupancy(s, shop, isWeekend(s) || weekdayIndex(s) === 4);
+  if (poolNoise(s, lot)) r -= 0.12;
   if (shop.satisfaction < 25) r -= 0.1;
   r *= combinedMods(s).appealAll;
   return Math.max(0.05, Math.min(1, r));
@@ -353,7 +357,29 @@ export function checkInGuest(s: GameState, g: Guest, rand: () => number = Math.r
   if (!isMinshuku(s, g.lot)) return { revenue: 0, income: 0, coupon: false };
   s.tonight.push(g);
   s.today.overnight += 1;
-  return completeVisit(s, g.lot, 0.9 + rand() * 0.2, g.origin);
+  const shop = s.lots[g.lot].shop!;
+  // 晚餐套餐：甕缸雞店分到一份晚餐錢
+  if (hasPlan(shop, 'dinner')) {
+    const i = s.lots.findIndex((l) => l.shop?.defId === 'claypot');
+    if (i >= 0) {
+      addShopRevenue(s, i, DINNER_SHARE);
+      s.today.dinners = (s.today.dinners ?? 0) + 1;
+    }
+  }
+  return completeVisit(s, g.lot, (0.9 + rand() * 0.2) * planPriceMult(s, shop), g.origin);
+}
+
+/** 不經過客人進出、直接算給某家店的營收（會長照樣抽成） */
+function addShopRevenue(s: GameState, lot: number, revenue: number): void {
+  const shop = s.lots[lot]?.shop;
+  if (!shop || revenue <= 0) return;
+  shop.todayRevenue += revenue;
+  shop.totalRevenue += revenue;
+  s.today.revenue += revenue;
+  s.totalRevenue += revenue;
+  const c = Math.round(revenue * COMMISSION);
+  s.today.commission += c;
+  s.money += c;
 }
 
 const REVIEW_TEXT: Record<Origin, { good: string[]; noise: string[]; mid: string[] }> = {
@@ -367,13 +393,14 @@ export function makeReviews(s: GameState, rand: () => number): Review[] {
   return s.tonight.map((g) => {
     const shop = s.lots[g.lot]?.shop;
     const p = shop ? profileOf(s, shop.tenantId) : undefined;
-    const noise = noisyNeighbors(s, g.lot).length;
+    const noise = noisyNeighbors(s, g.lot).length + (poolNoise(s, g.lot) ? 1 : 0);
     let x = 2.6 + (p?.skill ?? 3) * 0.25 + ((shop?.level ?? 1) - 1) * 0.4 + rand() * 1.2;
     if (s.weather === 'fog' || s.weather === 'heavyFog') x += 0.3;
     // 祭典夜大家都很吵，但住客玩得很開心，不扣分
     if (!festivalActive(s)) x -= noise * 1.1;
     // 泉水不夠：溫泉變溫
     if (isSpringShop(s, g.lot)) x -= 1.5 * (1 - springRatio(s));
+    if (shop) x += planReview(s, shop);
     const stars = Math.max(1, Math.min(5, Math.round(x)));
     const t = REVIEW_TEXT[g.origin];
     const pool = noise && stars <= 3 ? t.noise : stars >= 4 ? t.good : t.mid;
@@ -1140,6 +1167,22 @@ export function eventRepDelta(s: GameState): number {
 /** 打烊結算 */
 export function endDay(s: GameState, rand: () => number = Math.random): DaySummary {
   const street = streetOf(s);
+  // 關子嶺：大眾泳池的泳客門票；合作方案讓兩家店變熟
+  if (hasSpring(s)) {
+    const weekend = isWeekend(s);
+    s.lots.forEach((l, i) => {
+      if (!l.shop) return;
+      const n = poolSwimmers(s, l.shop, weekend);
+      if (n) {
+        addShopRevenue(s, i, n * POOL_TICKET);
+        s.today.swimmers = (s.today.swimmers ?? 0) + n;
+      }
+      for (const [plan, partner] of [['spa', 'mudspa'], ['dinner', 'claypot']] as const) {
+        if (!hasPlan(l.shop, plan)) continue;
+        for (const o of s.lots) if (o.shop?.defId === partner) addRel(s, l.shop.tenantId, o.shop.tenantId, 2);
+      }
+    });
+  }
   // 今晚住客的評價：影響聲望、民宿老闆心情，噪音會讓民宿和吵鬧的鄰居交惡
   s.reviews = makeReviews(s, rand);
   s.reviewsFresh = true;
@@ -1216,6 +1259,9 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     grievanceAfter: hasSpring(s) ? s.grievance : undefined,
     closed,
     festival: fest,
+    swimmers: s.today.swimmers,
+    dinners: s.today.dinners,
+    fireflies: firefliesOut(s),
     avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,

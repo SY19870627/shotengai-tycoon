@@ -11,6 +11,7 @@ import {
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
   resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered,
+  addPlan, canAddPlan, removePlan, planPriceMult, poolNoise, firefliesOut, cleanMountain,
 } from '../src/core/onsen';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
@@ -580,6 +581,63 @@ describe('關子嶺', () => {
     expect(st?.event.id).toBe('gz-quake');
     for (const step of flattenEffects(st!.steps)) if (step.t === 'effect') applyEffects(s, step.effects, seeded(1));
     expect(s.quake).not.toBeNull();
+  });
+
+  it('旅館方案：格數看等級、合作方案要有對應的店、會多用泉水', () => {
+    const s = gz();
+    place(s, 0, 'gz-ryokan');
+    expect(canAddPlan(s, 0, 'spa').ok).toBe(false);
+    const sat = s.lots[0].shop!.satisfaction;
+    expect(addPlan(s, 0, 'pool').ok).toBe(true);
+    expect(s.lots[0].shop!.satisfaction).toBeLessThan(sat);
+    expect(springDemand(s)).toBe(3 + 4);
+    expect(canAddPlan(s, 0, 'stars').ok).toBe(false);
+    s.lots[0].shop!.level = 2;
+    place(s, 1, 'gz-chicken');
+    const m = s.money;
+    expect(addPlan(s, 0, 'dinner').ok).toBe(true);
+    expect(s.money).toBe(m - 6000);
+    expect(planPriceMult(s, s.lots[0].shop!)).toBeCloseTo(1.15);
+    expect(poolNoise(s, 1)).toBe(true);
+    expect(removePlan(s, 0, 'pool').ok).toBe(true);
+    expect(springDemand(s)).toBe(4);
+  });
+
+  it('晚餐套餐：住客入住時甕缸雞店分到晚餐錢；泳池白天賣門票', () => {
+    const s = gz();
+    place(s, 0, 'gz-ryokan');
+    place(s, 1, 'gz-chicken');
+    s.lots[0].shop!.level = 2;
+    addPlan(s, 0, 'dinner');
+    addPlan(s, 0, 'pool');
+    checkInGuest(s, { lot: 0, origin: 'local' }, seeded(1));
+    expect(s.lots[1].shop!.todayRevenue).toBe(80);
+    s.today.passersby = 1000;
+    const before = s.lots[0].shop!.todayRevenue;
+    const sum = endDay(s, seeded(1));
+    expect(sum.swimmers).toBeGreaterThan(0);
+    expect(s.lots[0].shop!.totalRevenue).toBeGreaterThan(before);
+  });
+
+  it('螢火蟲：好好守護這座山才會出現', () => {
+    const s = gz();
+    place(s, 0, 'gz-egg');
+    s.lots[0].unlocked = true;
+    place(s, 1, 'gz-ryokan');
+    addPlan(s, 1, 'stars');
+    s.weather = 'sunny';
+    expect(cleanMountain(s)).toBe(true);
+    expect(firefliesOut(s)).toBe(false);
+    s.flags.push('fireflies');
+    expect(firefliesOut(s)).toBe(true);
+    drillWell(s);
+    drillWell(s);
+    expect(firefliesOut(s)).toBe(false);
+    sealWell(s);
+    s.grievance = 0;
+    expect(firefliesOut(s)).toBe(true);
+    setFireMode(s, 'full');
+    expect(firefliesOut(s)).toBe(false);
   });
 
   it('舊存檔讀進來會補上關子嶺的欄位', () => {

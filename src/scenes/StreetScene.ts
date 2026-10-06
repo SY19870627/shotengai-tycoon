@@ -9,6 +9,7 @@ import {
 import {
   hasSpring, springSupply, springRatio, protestStage, festivalActive, festivalNight, yokaiChance, rollYokai, paysLeaves,
   exposeYokai, wrongExpose, YOKAI, fireStopChance, registerFireVisitor, hikeChance, HIKER_SPEND,
+  hasPlan, RYOKAN_PLANS, firefliesOut, type PlanId,
 } from '../core/onsen';
 import { MODULES, FACILITY, facilityOf, moduleEff, staffRatio } from '../core/facilities';
 import { pickStory } from '../core/story';
@@ -174,6 +175,8 @@ export class StreetScene extends Phaser.Scene {
   private exposeCooldown = 0;
   private exposePrompt?: Phaser.GameObjects.Container;
   private paradeObjs: { c: Phaser.GameObjects.Container; ev: Phaser.Time.TimerEvent }[] = [];
+  private planTimer = 0;
+  private fireflies: Phaser.GameObjects.Arc[] = [];
 
   constructor() {
     super('street');
@@ -479,6 +482,14 @@ export class StreetScene extends Phaser.Scene {
         fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: '#ffffff', backgroundColor: '#5a5266', padding: { x: 8, y: 3 },
       }).setOrigin(0.5);
       view.shutter.add([sg, label]);
+      // 關子嶺：旅館方案的小招牌
+      (lot.shop.plans ?? []).forEach((id, k) => {
+        const tag = this.add.text(x0 + 14, GROUND_Y - 210 - k * 24, RYOKAN_PLANS[id as PlanId]?.name ?? id, {
+          fontFamily: FONT, fontSize: '12px', fontStyle: '900', color: '#ffffff', padding: { x: 5, y: 2 },
+          backgroundColor: id === 'pool' ? '#2f6f8f' : id === 'spa' ? '#6a6a72' : id === 'dinner' ? '#b3262e' : '#3a3a7a',
+        }).setDepth(13);
+        view.extras.push(tag);
+      });
       // 關子嶺：被靜坐抗議的店
       if (s.closedToday.includes(i)) {
         const objs = drawProtest(this);
@@ -1774,6 +1785,8 @@ export class StreetScene extends Phaser.Scene {
     const door = this.L.doorX(g.lot);
     const ped = this.createPed(g.lot, route.dir, route.span, g.origin, Math.random() < fallChance(s), Math.random() < vanishChance(s), true, door);
     ped.suitcase = this.add.image(door, ped.baseY, 'suitcase').setOrigin(0.5, 1).setDepth(ped.sprite.depth + 0.0001).setAlpha(0);
+    // 泥漿 SPA 套裝的住客：頂著灰臉退房
+    if (hasPlan(s.lots[g.lot]?.shop, 'spa')) this.attach(ped, 'mudface', 2, -47);
     // 睡眼惺忪
     this.time.delayedCall(200, () => ped.sprite.active && this.floatText(door - 10, GROUND_Y - 70, 'zzz…', '#9ec3e6', 14));
     const ri = this.reviewQueue.findIndex((r) => r.lot === g.lot);
@@ -2104,6 +2117,8 @@ export class StreetScene extends Phaser.Scene {
     if (this.exposeCooldown > 0) this.exposeCooldown -= dt;
     if (!running) return;
     const h = hourOf(s);
+    this.updatePlans(dt * store.speed, h);
+    this.updateFireflies(h);
     // 晨鐘暮鼓
     if (!this.bells.morning && h >= 8) {
       this.bells.morning = true;
@@ -2449,6 +2464,51 @@ export class StreetScene extends Phaser.Scene {
     } else if (defId === 'claypot' && Math.random() < 0.3) {
       this.floatText(this.L.doorX(lot), GROUND_Y - 80, '雞皮好脆！', '#ffe08a', 14);
     }
+  }
+
+  /** 旅館方案的小演出：泳池水花、露天風呂的熱氣 */
+  private updatePlans(dt: number, h: number) {
+    this.planTimer -= dt;
+    if (this.planTimer > 0) return;
+    this.planTimer = 2200 + Math.random() * 1800;
+    const s = S();
+    const cam = this.cameras.main;
+    s.lots.forEach((l, i) => {
+      if (!l.shop?.plans?.length) return;
+      const x = this.L.lotX(i) + LOT_W / 2;
+      if (x < cam.scrollX - 100 || x > cam.scrollX + W + 100) return;
+      if (hasPlan(l.shop, 'pool') && h >= 10 && h < 18 && Math.random() < 0.7) {
+        this.floatText(x + Phaser.Math.Between(-60, 60), GROUND_Y - 150, Phaser.Utils.Array.GetRandom(['噗通！', '好好玩～', '媽媽看我！', '嘩啦——']), '#a8e0ff', 14);
+        for (let k = 0; k < 5; k++) {
+          const d = this.add.circle(x + Phaser.Math.Between(-50, 50), GROUND_Y - 120, 4, 0x8fd0f0, 0.9).setDepth(40);
+          this.tweens.add({ targets: d, y: d.y - Phaser.Math.Between(20, 50), alpha: 0, duration: 600, delay: k * 50, onComplete: () => d.destroy() });
+        }
+      }
+      if (hasPlan(l.shop, 'stars') && (h >= 19 || h < 6) && Math.random() < 0.5) {
+        const puff = this.add.circle(x + Phaser.Math.Between(-40, 40), GROUND_Y - 260, 12, 0xffffff, 0.3).setDepth(9);
+        this.tweens.add({ targets: puff, y: puff.y - 70, scale: 2, alpha: 0, duration: 2400, onComplete: () => puff.destroy() });
+        if (Math.random() < 0.3) this.floatText(x, GROUND_Y - 280, s.weather === 'rain' ? '下雨泡不了……' : '♨ 星星好多～', s.weather === 'rain' ? '#c8c0d8' : '#fff3b0', 13);
+      }
+    });
+  }
+
+  /** 螢火蟲：好好守護這座山，晴天晚上才會出來 */
+  private updateFireflies(h: number) {
+    const s = S();
+    this.fireflies = this.fireflies.filter((f) => f.active);
+    if (!firefliesOut(s) || h < 19 || h >= 23.5 || this.fireflies.length >= 32) return;
+    const spots = ['haohan', 'spring'].map((id) => this.landmarkBox.get(id)).filter(Boolean) as { x: number; w: number }[];
+    s.lots.forEach((l, i) => { if (hasPlan(l.shop, 'stars')) spots.push({ x: this.L.lotX(i), w: LOT_W }); });
+    if (!spots.length) return;
+    const b = Phaser.Utils.Array.GetRandom(spots);
+    const f = this.add.circle(b.x + Math.random() * b.w, GROUND_Y - 60 - Math.random() * 220, 3.5, 0xd8ff7a, 1)
+      .setDepth(62).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+    this.fireflies.push(f);
+    this.tweens.add({ targets: f, alpha: { from: 0, to: 1 }, yoyo: true, repeat: 2, duration: 700 + Math.random() * 500 });
+    this.tweens.add({
+      targets: f, x: f.x + Phaser.Math.Between(-80, 80), y: f.y + Phaser.Math.Between(-60, 40),
+      duration: 4200 + Math.random() * 1800, ease: 'Sine.easeInOut', onComplete: () => f.destroy(),
+    });
   }
 
   /** 百鬼夜行：大型妖怪操偶＋扮妖怪的人 */
