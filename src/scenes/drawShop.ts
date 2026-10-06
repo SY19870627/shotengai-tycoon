@@ -67,6 +67,9 @@ export function drawShopFacade(
         g.fillRect(r.x + r.width / 2 - 1, r.y - 14, 2, r.height + 14);
       }
     }
+  } else if (style === 'onsen') {
+    drawOnsenUpper(g, level, top, upperWindows);
+    lanterns.push({ x: left + 20, y: FACADE.floorTop - 6 }, { x: right - 20, y: FACADE.floorTop - 6 });
   } else {
     // 九份：深色木造、黑瓦屋簷
     const wood = 0x4a3426;
@@ -105,13 +108,31 @@ export function drawShopFacade(
 
   // 招牌
   const signY = style === 'jiufen' ? FACADE.signTop - 4 : FACADE.signTop;
-  g.fillStyle(style === 'jiufen' ? 0x1e1410 : 0x3b2a20);
-  g.fillRoundedRect(left + 10, signY, right - left - 20, FACADE.signBottom - FACADE.signTop, 4);
-  g.lineStyle(2, C.gold, 0.85);
-  g.strokeRoundedRect(left + 13, signY + 3, right - left - 26, FACADE.signBottom - FACADE.signTop - 6, 3);
+  const signH = FACADE.signBottom - FACADE.signTop;
+  if (style === 'onsen') {
+    // 深色木匾：木紋 + 淺色木框
+    g.fillStyle(0x24170f);
+    g.fillRect(left + 8, signY - 2, right - left - 16, signH + 4);
+    g.fillStyle(0x3a2618);
+    g.fillRect(left + 12, signY + 2, right - left - 24, signH - 4);
+    g.lineStyle(1, 0x4e3422, 0.9);
+    for (let y = signY + 7; y < signY + signH - 4; y += 6) g.lineBetween(left + 14, y, right - 14, y + ((y / 6) % 2 ? 1 : -1));
+    g.lineStyle(2, 0xb08a5a, 0.9);
+    g.strokeRect(left + 15, signY + 5, right - left - 30, signH - 10);
+    // 吊匾的繩子
+    g.lineStyle(1.5, 0xd8c8a0);
+    g.lineBetween(left + 30, signY - 2, left + 40, signY - 12);
+    g.lineBetween(right - 30, signY - 2, right - 40, signY - 12);
+  } else {
+    g.fillStyle(style === 'jiufen' ? 0x1e1410 : 0x3b2a20);
+    g.fillRoundedRect(left + 10, signY, right - left - 20, signH, 4);
+    g.lineStyle(2, C.gold, 0.85);
+    g.strokeRoundedRect(left + 13, signY + 3, right - left - 26, signH - 6, 3);
+  }
   const fontSize = shopName.length > 8 ? 14 : shopName.length > 6 ? 16 : 18;
+  const signColor = style === 'jiufen' ? hex(C.gold) : style === 'onsen' ? '#f3e6c8' : hex(C.paper);
   objs.push(scene.add.text(LOT_W / 2, signY + 17, shopName, {
-    fontFamily: FONT, fontSize: `${fontSize}px`, fontStyle: '900', color: style === 'jiufen' ? hex(C.gold) : hex(C.paper),
+    fontFamily: FONT, fontSize: `${fontSize}px`, fontStyle: '900', color: signColor,
   }).setOrigin(0.5));
   for (let i = 0; i < level; i++) objs.push(scene.add.star(right - 24 - i * 12, signY + 8, 5, 2.4, 5, C.gold));
 
@@ -121,13 +142,23 @@ export function drawShopFacade(
   g.fillRect(left + 6, FACADE.floorTop - 10, right - left - 12, -FACADE.floorTop + 10);
   // 店種顏色的布簾
   const aw = def.awningColor;
-  for (let x = left + 6, k = 0; x < right - 6; x += 16, k++) {
-    g.fillStyle(k % 2 === 0 ? aw : shade(aw, 0.7));
-    g.fillRect(x, FACADE.floorTop - 10, Math.min(16, right - 6 - x), 14);
-    g.fillCircle(x + 8, FACADE.floorTop + 4, 8);
+  if (style === 'onsen') {
+    // 一樓上方的黑瓦庇（小屋簷）
+    tiledEave(g, left - 10, right + 10, FACADE.floorTop - 12, 14);
+    // 腰壁木板
+    g.fillStyle(0x8a6a4a);
+    g.fillRect(left + 6, -22, right - left - 12, 22);
+    g.lineStyle(1, 0x5a3e2a, 0.8);
+    for (let x = left + 18; x < right - 6; x += 12) g.lineBetween(x, -22, x, 0);
+  } else {
+    for (let x = left + 6, k = 0; x < right - 6; x += 16, k++) {
+      g.fillStyle(k % 2 === 0 ? aw : shade(aw, 0.7));
+      g.fillRect(x, FACADE.floorTop - 10, Math.min(16, right - 6 - x), 14);
+      g.fillCircle(x + 8, FACADE.floorTop + 4, 8);
+    }
   }
   const shopWindow = new Phaser.Geom.Rectangle(left + 16, FACADE.floorTop + 18, 126, 64);
-  g.fillStyle(0x6e5442);
+  g.fillStyle(style === 'onsen' ? 0x3e2c20 : 0x6e5442);
   g.fillRect(shopWindow.x - 4, shopWindow.y - 4, shopWindow.width + 8, shopWindow.height + 8);
   g.fillStyle(0xe3ecee);
   g.fillRect(shopWindow.x, shopWindow.y, shopWindow.width, shopWindow.height);
@@ -142,6 +173,19 @@ export function drawShopFacade(
   g.fillRect(FACADE.doorLeft, FACADE.floorTop + 14, FACADE.doorRight - FACADE.doorLeft, -FACADE.floorTop - 14);
   g.fillStyle(0xbfd8e2);
   g.fillRect(FACADE.doorLeft + 8, FACADE.floorTop + 22, FACADE.doorRight - FACADE.doorLeft - 16, 30);
+  if (style === 'onsen') {
+    // 格子拉門 + 暖簾
+    const dl = FACADE.doorLeft, dr = FACADE.doorRight, dt = FACADE.floorTop + 14;
+    g.fillStyle(0xf3ead2);
+    g.fillRect(dl, dt, dr - dl, -dt);
+    g.lineStyle(1.5, 0x3e2c20);
+    for (let x = dl + 5; x < dr; x += 5) g.lineBetween(x, dt, x, -16);
+    g.fillStyle(0x3e2c20);
+    g.fillRect(dl, -16, dr - dl, 16);
+    g.fillRect((dl + dr) / 2 - 1.5, dt, 3, -dt);
+    g.fillRect(dl, dt + 34, dr - dl, 2.5);
+    noren(g, dl - 6, dr + 6, FACADE.floorTop + 6, 34, aw);
+  }
   // 門口小攤（小吃類）
   if (def.category === 'food') {
     g.fillStyle(0x8a6a4a);
@@ -183,6 +227,103 @@ export function drawShopFacade(
     objs.push(ag);
   }
   return { objects: objs, upperWindows, shopWindow, lanterns };
+}
+
+/** 黑瓦屋簷（一排瓦當） */
+function tiledEave(g: Phaser.GameObjects.Graphics, x0: number, x1: number, y: number, h: number): void {
+  const tile = 0x3a3c42;
+  g.fillStyle(shade(tile, 0.1));
+  g.fillPoints([{ x: x0 + 8, y: y - h }, { x: x1 - 8, y: y - h }, { x: x1, y }, { x: x0, y }], true);
+  g.lineStyle(1, shade(tile, -0.3), 0.8);
+  for (let x = x0 + 6; x < x1; x += 7) g.lineBetween(x, y - 1, x + (x < (x0 + x1) / 2 ? 3 : -3), y - h + 1);
+  g.fillStyle(tile);
+  g.fillRect(x0, y - 3, x1 - x0, 4);
+  g.fillStyle(0x2a2c30);
+  for (let x = x0 + 4; x < x1; x += 8) g.fillCircle(x, y + 1, 3.2);
+}
+
+/** 暖簾：從 y 往下垂、中間切開幾道 */
+function noren(g: Phaser.GameObjects.Graphics, x0: number, x1: number, y: number, h: number, color: number): void {
+  g.fillStyle(0x5a3e2a);
+  g.fillRect(x0 - 3, y - 3, x1 - x0 + 6, 4);
+  const panels = 3;
+  const pw = (x1 - x0) / panels;
+  for (let k = 0; k < panels; k++) {
+    g.fillStyle(color);
+    g.fillRect(x0 + k * pw + 1, y, pw - 2, h);
+    g.fillStyle(shade(color, -0.2));
+    g.fillRect(x0 + k * pw + 1, y + h - 3, pw - 2, 3);
+  }
+  // 白色紋章（溫泉記號）
+  const cx = (x0 + x1) / 2, cy = y + h * 0.55;
+  g.fillStyle(0xfbf6ec);
+  g.fillCircle(cx, cy, 8);
+  g.fillStyle(color);
+  g.fillCircle(cx, cy + 2, 3);
+  g.lineStyle(1.5, color);
+  for (const dx of [-3, 0, 3]) g.lineBetween(cx + dx, cy - 1, cx + dx + 1, cy - 6);
+}
+
+/** 關子嶺：日治時期木造溫泉街的上半部（白灰泥 + 深色木框 + 黑瓦） */
+function drawOnsenUpper(g: Phaser.GameObjects.Graphics, level: number, top: number, upperWindows: Phaser.Geom.Rectangle[]): void {
+  const { left, right } = FACADE;
+  const plaster = 0xf0e8d6, wood = 0x3e2c20;
+  g.fillStyle(plaster);
+  g.fillRect(left, top, right - left, -top);
+  // 二樓以下：淺色雨淋板（橫向木板）
+  g.fillStyle(0xc9a87a);
+  g.fillRect(left, FACADE.signTop - 26, right - left, FACADE.floorTop - FACADE.signTop + 16);
+  g.lineStyle(1, 0x9a7a52, 0.8);
+  for (let y = FACADE.signTop - 22; y < FACADE.floorTop - 10; y += 6) g.lineBetween(left, y, right, y);
+  // 柱子
+  g.fillStyle(wood);
+  for (const px of [left, LOT_W / 2 - 3, right - 6]) g.fillRect(px, top, 6, -top);
+  // 每層樓：格子窗 + 窗下小瓦庇
+  for (let f = 0; f < level; f++) {
+    const wy = FACADE.signTop - 74 - f * 46;
+    if (wy < top + 12) break;
+    g.fillStyle(wood);
+    g.fillRect(left, wy - 8, right - left, 4);
+    for (const wx of [30, 100, 170]) {
+      const r = new Phaser.Geom.Rectangle(wx, wy, 40, 30);
+      upperWindows.push(r);
+      g.fillStyle(wood);
+      g.fillRect(r.x - 3, r.y - 3, r.width + 6, r.height + 6);
+      g.fillStyle(0xf3ead2);
+      g.fillRect(r.x, r.y, r.width, r.height);
+      // 細格子（千本格子）
+      g.lineStyle(1.5, wood);
+      for (let x = r.x + 4; x < r.x + r.width; x += 4) g.lineBetween(x, r.y, x, r.y + r.height);
+      g.lineStyle(2, wood);
+      g.lineBetween(r.x, r.y + r.height / 2, r.x + r.width, r.y + r.height / 2);
+    }
+    tiledEave(g, left - 8, right + 8, wy + 42, 8);
+  }
+  // 屋頂：黑瓦切妻，兩端鬼瓦
+  const tile = 0x3a3c42;
+  g.fillStyle(tile);
+  g.fillPoints([
+    { x: left - 18, y: top + 8 }, { x: right + 18, y: top + 8 }, { x: right - 24, y: top - 30 }, { x: left + 24, y: top - 30 },
+  ], true);
+  g.lineStyle(1.5, shade(tile, -0.35), 0.9);
+  for (let k = 1; k < 22; k++) {
+    const t = k / 22;
+    g.lineBetween(left - 12 + (right - left + 24) * t, top + 6, left + 24 + (right - left - 48) * t, top - 28);
+  }
+  g.lineStyle(1, shade(tile, 0.2), 0.6);
+  g.lineBetween(left - 6, top - 4, right + 6, top - 4);
+  g.lineBetween(left + 8, top - 16, right - 8, top - 16);
+  g.fillStyle(0x2a2c30);
+  for (let x = left - 14; x < right + 16; x += 9) g.fillCircle(x, top + 9, 3.5);
+  // 屋脊 + 鬼瓦
+  g.fillStyle(0x2a2c30);
+  g.fillRect(left + 18, top - 36, right - left - 36, 7);
+  for (const ex of [left + 16, right - 16]) {
+    g.fillRoundedRect(ex - 7, top - 44, 14, 16, { tl: 6, tr: 6, bl: 0, br: 0 });
+    g.fillStyle(0x55585e);
+    g.fillCircle(ex, top - 37, 2.5);
+    g.fillStyle(0x2a2c30);
+  }
 }
 
 function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Rectangle) {
@@ -317,6 +458,225 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
       g.fillStyle(0x6b4a30);
       g.fillRect(bx + 74, by + 10, 50, 2);
       break;
+    case 'claypot': {
+      // 甕缸雞：大陶甕烤爐 + 金黃烤雞
+      for (const jx of [bx + 22, bx + 58]) {
+        g.fillStyle(0x8a4a2a);
+        g.fillEllipse(jx, by + bh - 34, 30, 34);
+        g.fillStyle(0xa85e36);
+        g.fillEllipse(jx - 5, by + bh - 38, 12, 22);
+        g.fillStyle(0x5a2e1a);
+        g.fillRect(jx - 10, by + bh - 52, 20, 5);
+        g.fillStyle(0xff7a30);
+        g.fillRect(jx - 5, by + bh - 24, 10, 4);
+        g.fillStyle(0xffffff, 0.5);
+        g.fillCircle(jx, by + bh - 58, 3);
+        g.fillCircle(jx + 2, by + bh - 63, 2.5);
+      }
+      // 吊起來的烤雞
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 80, by + 6, 42, 2);
+      for (const cx of [bx + 90, bx + 112]) {
+        g.lineStyle(1, 0x6b4a30);
+        g.lineBetween(cx, by + 8, cx, by + 14);
+        g.fillStyle(0xc8822a);
+        g.fillEllipse(cx, by + 24, 18, 20);
+        g.fillStyle(0xe8a840);
+        g.fillEllipse(cx - 3, by + 21, 8, 10);
+        g.fillStyle(0xb06a20);
+        g.fillCircle(cx - 6, by + 33, 3);
+        g.fillCircle(cx + 6, by + 33, 3);
+      }
+      // 盤上一整隻雞
+      g.fillStyle(0xffffff);
+      g.fillEllipse(bx + 100, by + bh - 20, 36, 7);
+      g.fillStyle(0xd08a30);
+      g.fillEllipse(bx + 100, by + bh - 27, 26, 14);
+      g.fillStyle(0xf0b850);
+      g.fillEllipse(bx + 96, by + bh - 30, 10, 5);
+      break;
+    }
+    case 'ryokan':
+      // 溫泉旅館：榻榻米 + 摺好的被褥、鑰匙板、♨ 牌
+      g.fillStyle(0xc8c48a);
+      g.fillRect(bx + 6, by + bh - 26, 66, 8);
+      g.lineStyle(1, 0x8a8a5a);
+      g.lineBetween(bx + 39, by + bh - 26, bx + 39, by + bh - 18);
+      g.fillStyle(0x3f6f8f);
+      g.fillRect(bx + 12, by + bh - 34, 30, 8);
+      g.fillStyle(0xf6f0e0);
+      g.fillRect(bx + 12, by + bh - 40, 30, 6);
+      g.fillStyle(0xd88a9a);
+      g.fillRect(bx + 14, by + bh - 45, 26, 5);
+      g.fillStyle(0xffffff);
+      g.fillRoundedRect(bx + 48, by + bh - 34, 18, 8, 3);
+      // 鑰匙板
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 76, by + 8, 44, 28);
+      g.fillStyle(0xc8902a);
+      for (let k = 0; k < 4; k++) {
+        g.fillCircle(bx + 83 + k * 10, by + 14, 2);
+        g.fillRect(bx + 82 + k * 10, by + 16, 2, 8);
+        g.fillStyle(k % 2 ? 0xd64545 : 0x4f86c6);
+        g.fillRect(bx + 81 + k * 10, by + 24, 4, 7);
+        g.fillStyle(0xc8902a);
+      }
+      // ♨ 小牌
+      g.fillStyle(0xfbf6ec);
+      g.fillCircle(bx + 22, by + 16, 11);
+      g.fillStyle(0xd64545);
+      g.fillCircle(bx + 22, by + 20, 4);
+      g.lineStyle(2, 0xd64545);
+      for (const dx of [-4, 0, 4]) g.lineBetween(bx + 22 + dx, by + 15, bx + 23 + dx, by + 8);
+      break;
+    case 'bathhouse':
+      // 湯屋：木桶、毛巾、♨、蒸氣
+      g.fillStyle(0xb88a5a);
+      g.fillRect(bx + 16, by + bh - 36, 26, 18);
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 15, by + bh - 32, 28, 2);
+      g.fillRect(bx + 15, by + bh - 24, 28, 2);
+      g.fillStyle(0x9ec3d6);
+      g.fillEllipse(bx + 29, by + bh - 36, 24, 5);
+      // 疊好的毛巾
+      for (let k = 0; k < 3; k++) {
+        g.fillStyle([0xffffff, 0x9ec3d6, 0xf3d6dc][k]);
+        g.fillRoundedRect(bx + 54, by + bh - 24 - k * 6, 26, 6, 2);
+      }
+      // 掛著的毛巾
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 88, by + 10, 30, 2);
+      g.fillStyle(0xffffff);
+      g.fillRect(bx + 92, by + 12, 10, 22);
+      g.fillStyle(0x3f6f8f);
+      g.fillRect(bx + 106, by + 12, 10, 18);
+      g.fillStyle(0xffffff);
+      g.fillRect(bx + 106, by + 16, 10, 2);
+      // ♨
+      g.fillStyle(0xd64545);
+      g.fillCircle(bx + 30, by + 22, 6);
+      g.lineStyle(2, 0xd64545);
+      for (const dx of [-5, 0, 5]) {
+        g.beginPath();
+        g.moveTo(bx + 30 + dx, by + 16);
+        g.lineTo(bx + 28 + dx, by + 11);
+        g.lineTo(bx + 31 + dx, by + 6);
+        g.strokePath();
+      }
+      // 蒸氣
+      g.lineStyle(2, 0xffffff, 0.8);
+      for (const sx of [bx + 22, bx + 34]) {
+        g.beginPath();
+        g.moveTo(sx, by + bh - 40);
+        g.lineTo(sx - 3, by + bh - 46);
+        g.lineTo(sx + 1, by + bh - 52);
+        g.strokePath();
+      }
+      break;
+    case 'mudspa': {
+      // 泥漿美容：一罐罐灰泥 + 敷臉的頭像展示
+      row(4, (x, i) => {
+        if (i > 2) return;
+        g.fillStyle(0xe8e4dc);
+        g.fillRoundedRect(x - 9, by + bh - 36, 18, 18, 3);
+        g.fillStyle(0x6e6c68);
+        g.fillRect(x - 9, by + bh - 30, 18, 12);
+        g.fillStyle(0x5a8a9a);
+        g.fillRect(x - 10, by + bh - 40, 20, 5);
+      });
+      // 敷面膜的模特兒頭像
+      const mx = bx + bw - 22;
+      g.fillStyle(0xd8d0c4);
+      g.fillRect(mx - 6, by + bh - 26, 12, 8);
+      g.fillStyle(0xf5d0b0);
+      g.fillCircle(mx, by + bh - 38, 13);
+      g.fillStyle(0x8a8884);
+      g.fillCircle(mx, by + bh - 37, 10);
+      g.fillStyle(0xf5d0b0);
+      g.fillCircle(mx - 4, by + bh - 39, 2.5);
+      g.fillCircle(mx + 4, by + bh - 39, 2.5);
+      g.fillStyle(0xffffff);
+      g.fillRect(mx - 13, by + bh - 51, 26, 5);
+      // 泥漿滴
+      g.fillStyle(0x6e6c68);
+      g.fillCircle(bx + 20, by + 14, 4);
+      g.fillTriangle(bx + 16, by + 13, bx + 24, by + 13, bx + 20, by + 6);
+      break;
+    }
+    case 'onsenegg':
+      // 溫泉蛋：網袋泡在鍋裡 + 一籃蛋
+      g.fillStyle(0x7a7a82);
+      g.fillRoundedRect(bx + 10, by + bh - 40, 50, 22, 4);
+      g.fillStyle(0x9aa4a8);
+      g.fillEllipse(bx + 35, by + bh - 40, 50, 8);
+      g.lineStyle(1, 0xc8a070);
+      g.lineBetween(bx + 28, by + bh - 40, bx + 24, by + 10);
+      g.lineBetween(bx + 42, by + bh - 40, bx + 46, by + 10);
+      g.fillStyle(0xf6ead0);
+      for (const [ex, ey] of [[28, -44], [36, -46], [44, -44], [32, -50], [40, -51]]) g.fillEllipse(bx + ex, by + bh + ey, 7, 9);
+      g.lineStyle(1, 0xd64545, 0.8);
+      for (let k = 0; k < 4; k++) g.lineBetween(bx + 26 + k * 6, by + bh - 54, bx + 28 + k * 6, by + bh - 40);
+      g.lineBetween(bx + 25, by + bh - 48, bx + 47, by + bh - 48);
+      g.fillStyle(0xffffff, 0.6);
+      g.fillCircle(bx + 18, by + 12, 5);
+      g.fillCircle(bx + 22, by + 4, 4);
+      // 竹籃裡的蛋
+      g.fillStyle(0xb88a4a);
+      g.fillEllipse(bx + 96, by + bh - 24, 44, 14);
+      g.fillStyle(0xf6ead0);
+      for (let k = 0; k < 6; k++) g.fillEllipse(bx + 80 + k * 6.5, by + bh - 30 - (k % 2) * 3, 8, 10);
+      g.lineStyle(1, 0x8a6a3a);
+      for (let x = bx + 78; x < bx + 116; x += 5) g.lineBetween(x, by + bh - 30, x + 2, by + bh - 18);
+      break;
+    case 'yukata':
+      // 浴衣出租：衣架上掛滿彩色浴衣
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 4, by + 6, bw - 8, 3);
+      row(5, (x, i) => {
+        const col = [0x3f5f9f, 0xef8fb1, 0x3fa66a, 0xf2b84b, 0x9b6bc9][i];
+        g.lineStyle(1, 0x6b4a30);
+        g.lineBetween(x, by + 8, x, by + 12);
+        g.fillStyle(col);
+        g.fillPoints([{ x: x - 11, y: by + 14 }, { x: x + 11, y: by + 14 }, { x: x + 8, y: by + bh - 22 }, { x: x - 8, y: by + bh - 22 }], true);
+        g.fillTriangle(x - 11, by + 14, x - 15, by + 26, x - 9, by + 26);
+        g.fillTriangle(x + 11, by + 14, x + 15, by + 26, x + 9, by + 26);
+        g.fillStyle(0xfbf6ec, 0.8);
+        for (let k = 0; k < 3; k++) g.fillCircle(x - 4 + (k % 2) * 7, by + 20 + k * 9, 1.6);
+        g.fillStyle(i % 2 ? 0xf2c14e : 0xd64545);
+        g.fillRect(x - 9, by + 28, 18, 5);
+        g.lineStyle(1, 0xfbf6ec, 0.9);
+        g.lineBetween(x - 2, by + 14, x + 3, by + 26);
+      });
+      break;
+    case 'sanchan':
+      // 山產野菜：一把把青菜、香菇、雞湯鍋
+      row(3, (x, i) => {
+        g.fillStyle(0xc8a070);
+        g.fillRect(x - 3, by + bh - 24, 6, 4);
+        g.fillStyle([0x4a8a3a, 0x5f9a44, 0x3f7a3a][i]);
+        g.fillTriangle(x - 10, by + bh - 24, x + 10, by + bh - 24, x, by + bh - 48);
+        g.fillEllipse(x - 5, by + bh - 40, 10, 16);
+        g.fillEllipse(x + 5, by + bh - 42, 10, 16);
+      });
+      g.fillStyle(0x8a5a3a);
+      for (const mx of [bx + 30, bx + 52]) {
+        g.slice(mx, by + 16, 7, Math.PI, 0, false);
+        g.fillPath();
+        g.fillStyle(0xe8dcc0);
+        g.fillRect(mx - 2, by + 16, 4, 6);
+        g.fillStyle(0x8a5a3a);
+      }
+      // 湯鍋
+      g.fillStyle(0x3a3a40);
+      g.fillRoundedRect(bx + 86, by + 20, 30, 16, 4);
+      g.fillRect(bx + 82, by + 22, 4, 3);
+      g.fillRect(bx + 116, by + 22, 4, 3);
+      g.fillStyle(0xe8c070);
+      g.fillEllipse(bx + 101, by + 20, 28, 6);
+      g.fillStyle(0xffffff, 0.6);
+      g.fillCircle(bx + 96, by + 12, 4);
+      g.fillCircle(bx + 104, by + 6, 3);
+      break;
     default:
       row(6, (x, i) => {
         g.fillStyle([0xe0473b, 0xf2a93b, 0x7cc35a, 0x4f86c6][i % 4]);
@@ -330,24 +690,62 @@ export function drawEmptyLot(scene: Phaser.Scene, style: FacadeStyle, applicants
   const g = scene.add.graphics();
   const { left, right } = FACADE;
   const top = -240;
-  const wall = style === 'redbrick' ? 0xa86a58 : 0x5a4a3e;
+  const wall = style === 'redbrick' ? 0xa86a58 : style === 'onsen' ? 0x8a7258 : 0x5a4a3e;
   g.fillStyle(wall);
   g.fillRect(left, top, right - left, -top);
-  g.fillStyle(shade(wall, -0.2));
-  g.fillRect(left - 4, top - 8, right - left + 8, 10);
-  for (const wx of [36, 104, 172]) {
-    g.fillStyle(shade(wall, -0.3));
-    g.fillRect(wx - 3, top + 30, 38, 36);
-    g.fillStyle(0x7d8a92);
-    g.fillRect(wx, top + 33, 32, 30);
+  if (style === 'onsen') {
+    // 褪色的木板牆 + 黑瓦屋頂 + 關起來的木雨戶
+    g.lineStyle(1, shade(wall, -0.25), 0.7);
+    for (let y = top + 6; y < 0; y += 7) g.lineBetween(left, y, right, y);
+    g.fillStyle(0x3e2c20);
+    for (const px of [left, LOT_W / 2 - 3, right - 6]) g.fillRect(px, top, 6, -top);
+    g.fillStyle(0x45474c);
+    g.fillPoints([{ x: left - 14, y: top + 6 }, { x: right + 14, y: top + 6 }, { x: right - 22, y: top - 24 }, { x: left + 22, y: top - 24 }], true);
+    g.fillStyle(0x2e3034);
+    g.fillRect(left + 16, top - 30, right - left - 32, 6);
+    for (let x = left - 10; x < right + 12; x += 9) g.fillCircle(x, top + 7, 3.2);
+    // 缺了一片瓦
+    g.fillStyle(0x6a5a48);
+    g.fillRect(left + 70, top - 10, 10, 6);
+    for (const wx of [36, 104, 172]) {
+      g.fillStyle(0x3e2c20);
+      g.fillRect(wx - 3, top + 30, 38, 36);
+      g.fillStyle(0x7a6248);
+      g.fillRect(wx, top + 33, 32, 30);
+      g.lineStyle(1, 0x4e3a28);
+      for (let x = wx + 6; x < wx + 32; x += 6) g.lineBetween(x, top + 33, x, top + 63);
+    }
+    g.fillStyle(0x2a1d14);
+    g.fillRect(left + 8, FACADE.signTop - 2, right - left - 16, 38);
+  } else {
+    g.fillStyle(shade(wall, -0.2));
+    g.fillRect(left - 4, top - 8, right - left + 8, 10);
+    for (const wx of [36, 104, 172]) {
+      g.fillStyle(shade(wall, -0.3));
+      g.fillRect(wx - 3, top + 30, 38, 36);
+      g.fillStyle(0x7d8a92);
+      g.fillRect(wx, top + 33, 32, 30);
+    }
+    g.fillStyle(shade(wall, -0.35));
+    g.fillRoundedRect(left + 10, FACADE.signTop, right - left - 20, 34, 4);
   }
-  g.fillStyle(shade(wall, -0.35));
-  g.fillRoundedRect(left + 10, FACADE.signTop, right - left - 20, 34, 4);
-  // 鐵捲門
-  g.fillStyle(0x9ea3a8);
-  g.fillRect(left + 8, FACADE.floorTop - 10, right - left - 16, -FACADE.floorTop + 10);
-  g.lineStyle(1, 0x7e8388);
-  for (let y = FACADE.floorTop - 4; y < 0; y += 7) g.lineBetween(left + 8, y, right - 8, y);
+  if (style === 'onsen') {
+    // 木板拉門（雨戶）
+    g.fillStyle(0x8a6a4a);
+    g.fillRect(left + 8, FACADE.floorTop - 10, right - left - 16, -FACADE.floorTop + 10);
+    g.lineStyle(1.5, 0x5a3e2a);
+    for (let x = left + 8; x < right - 8; x += 14) g.lineBetween(x, FACADE.floorTop - 10, x, 0);
+    g.fillStyle(0x5a3e2a);
+    for (let x = left + 8; x < right - 8; x += 56) g.fillRect(x, FACADE.floorTop - 10, 3, -FACADE.floorTop + 10);
+    g.fillRect(left + 8, FACADE.floorTop - 10, right - left - 16, 4);
+    g.fillRect(left + 8, -6, right - left - 16, 6);
+  } else {
+    // 鐵捲門
+    g.fillStyle(0x9ea3a8);
+    g.fillRect(left + 8, FACADE.floorTop - 10, right - left - 16, -FACADE.floorTop + 10);
+    g.lineStyle(1, 0x7e8388);
+    for (let y = FACADE.floorTop - 4; y < 0; y += 7) g.lineBetween(left + 8, y, right - 8, y);
+  }
   // 招租紙
   g.fillStyle(0xfffaf0);
   g.fillRect(LOT_W / 2 - 40, -82, 80, 54);
@@ -467,6 +865,206 @@ export function drawFacilityBuilding(
     g.fillRect(FACADE.doorRight + 5, FACADE.floorTop - 30, 10, 20);
     g.fillRect(FACADE.doorRight, FACADE.floorTop - 25, 20, 10);
   }
+  return objs;
+}
+
+/** 畫溫泉記號 ♨（三道蒸氣 + 底下的湯） */
+function onsenMark(g: Phaser.GameObjects.Graphics, cx: number, cy: number, s: number, color: number): void {
+  g.fillStyle(color);
+  g.slice(cx, cy + s * 0.15, s * 0.55, Phaser.Math.DegToRad(-10), Phaser.Math.DegToRad(190), false);
+  g.fillPath();
+  g.lineStyle(Math.max(2, s * 0.14), color);
+  for (const dx of [-0.32, 0, 0.32]) {
+    g.beginPath();
+    g.moveTo(cx + dx * s, cy - s * 0.05);
+    g.lineTo(cx + dx * s - s * 0.12, cy - s * 0.35);
+    g.lineTo(cx + dx * s + s * 0.06, cy - s * 0.62);
+    g.lineTo(cx + dx * s - s * 0.04, cy - s * 0.85);
+    g.strokePath();
+  }
+}
+
+/** 共同浴場（佔一個店面，給居民免費泡的老木造公共浴場） */
+export function drawBathhouse(scene: Phaser.Scene): Phaser.GameObjects.GameObject[] {
+  const g = scene.add.graphics();
+  const objs: Phaser.GameObjects.GameObject[] = [g];
+  const { left, right } = FACADE;
+  const cx = LOT_W / 2;
+  const top = -200;
+  const wood = 0x7a5a40, dark = 0x3e2c20, plaster = 0xece4d0;
+  // 牆：上半白灰泥、下半木板
+  g.fillStyle(plaster);
+  g.fillRect(left, top, right - left, -top);
+  g.fillStyle(wood);
+  g.fillRect(left, FACADE.signTop + 40, right - left, -(FACADE.signTop + 40));
+  g.lineStyle(1, shade(wood, -0.3), 0.8);
+  for (let x = left + 10; x < right; x += 10) g.lineBetween(x, FACADE.signTop + 40, x, 0);
+  g.fillStyle(dark);
+  for (const px of [left, cx - 3, right - 6]) g.fillRect(px, top, 6, -top);
+  g.fillRect(left, FACADE.signTop + 38, right - left, 5);
+  // 高窗（通風用的格子窗）
+  for (const wx of [left + 18, right - 70]) {
+    g.fillStyle(dark);
+    g.fillRect(wx - 3, top + 22, 58, 26);
+    g.fillStyle(0xf3ead2);
+    g.fillRect(wx, top + 25, 52, 20);
+    g.lineStyle(1.5, dark);
+    for (let x = wx + 5; x < wx + 52; x += 5) g.lineBetween(x, top + 25, x, top + 45);
+  }
+  // 大切妻屋頂 + 山牆上的大 ♨
+  const tile = 0x3a3c42;
+  g.fillStyle(tile);
+  g.fillPoints([{ x: left - 20, y: top + 10 }, { x: cx, y: top - 92 }, { x: right + 20, y: top + 10 }, { x: right + 20, y: top + 18 }, { x: left - 20, y: top + 18 }], true);
+  g.fillStyle(plaster);
+  g.fillPoints([{ x: left + 14, y: top + 6 }, { x: cx, y: top - 74 }, { x: right - 14, y: top + 6 }], true);
+  g.lineStyle(3, dark);
+  g.lineBetween(left + 14, top + 6, cx, top - 74);
+  g.lineBetween(right - 14, top + 6, cx, top - 74);
+  g.lineBetween(left + 14, top + 6, right - 14, top + 6);
+  g.fillStyle(0x2a2c30);
+  for (let x = left - 16; x < right + 20; x += 9) g.fillCircle(x, top + 18, 3.2);
+  // 懸魚
+  g.fillStyle(dark);
+  g.fillTriangle(cx - 6, top - 72, cx + 6, top - 72, cx, top - 58);
+  g.fillStyle(0xfbf6ec);
+  g.fillCircle(cx, top - 26, 26);
+  g.lineStyle(3, dark);
+  g.strokeCircle(cx, top - 26, 26);
+  onsenMark(g, cx, top - 20, 34, 0xd64545);
+  // 招牌「共同浴場」
+  g.fillStyle(0x24170f);
+  g.fillRect(left + 40, FACADE.signTop - 2, right - left - 80, 36);
+  g.lineStyle(2, 0xb08a5a, 0.9);
+  g.strokeRect(left + 44, FACADE.signTop + 2, right - left - 88, 28);
+  objs.push(scene.add.text(cx, FACADE.signTop + 16, '共同浴場', {
+    fontFamily: FONT, fontSize: '19px', fontStyle: '900', color: '#f3e6c8',
+  }).setOrigin(0.5));
+  // 入口小屋簷
+  tiledEave(g, left + 30, right - 30, FACADE.floorTop - 6, 12);
+  // 入口：左男湯、右女湯
+  const dl = cx - 62, dr = cx + 62, dt = FACADE.floorTop + 2;
+  g.fillStyle(0x2a1d14);
+  g.fillRect(dl - 4, dt - 4, dr - dl + 8, -dt + 4);
+  g.fillStyle(0x5a4030);
+  g.fillRect(dl, dt, dr - dl, -dt);
+  g.fillStyle(0x7a5a40);
+  g.fillRect(cx - 3, dt, 6, -dt);
+  g.fillStyle(0x6a6a6a);
+  g.fillRect(dl, -8, dr - dl, 8);
+  const half = (dr - dl) / 2 - 4;
+  for (const [x0, col, name] of [[dl, 0x2f4f8f, '男湯'], [cx + 4, 0xc0392b, '女湯']] as [number, number, string][]) {
+    g.fillStyle(0x5a3e2a);
+    g.fillRect(x0 - 2, dt - 2, half + 4, 4);
+    for (let k = 0; k < 2; k++) {
+      g.fillStyle(col);
+      g.fillRect(x0 + k * (half / 2) + 1, dt, half / 2 - 2, 46);
+      g.fillStyle(shade(col, -0.25));
+      g.fillRect(x0 + k * (half / 2) + 1, dt + 43, half / 2 - 2, 3);
+    }
+    objs.push(scene.add.text(x0 + half / 2, dt + 22, name, {
+      fontFamily: FONT, fontSize: '16px', fontStyle: '900', color: '#fbf6ec',
+    }).setOrigin(0.5));
+  }
+  // 疊起來的黃色臉盆
+  const bx = right - 20;
+  for (let k = 0; k < 5; k++) {
+    g.fillStyle(k % 2 ? 0xe8c040 : 0xf2cc4a);
+    g.fillPoints([{ x: bx - 13, y: -4 - k * 5 }, { x: bx + 13, y: -4 - k * 5 }, { x: bx + 10, y: -k * 5 }, { x: bx - 10, y: -k * 5 }], true);
+  }
+  g.fillStyle(0xd8a820);
+  g.fillEllipse(bx, -28, 26, 5);
+  // 木桶 + 毛巾
+  const wx = left + 22;
+  g.fillStyle(0xb88a5a);
+  g.fillRect(wx - 11, -20, 22, 20);
+  g.fillStyle(0x6b4a30);
+  g.fillRect(wx - 12, -16, 24, 2);
+  g.fillRect(wx - 12, -6, 24, 2);
+  g.fillStyle(0xffffff);
+  g.fillRoundedRect(wx - 8, -26, 16, 7, 2);
+  // 長木凳
+  g.fillStyle(0x8a5e38);
+  g.fillRect(left + 38, -20, 18, 5);
+  g.fillRect(left + 40, -15, 3, 15);
+  g.fillRect(left + 51, -15, 3, 15);
+  return objs;
+}
+
+/** 靜坐抗議（畫在暫停營業的店門口；lot 本地座標） */
+export function drawProtest(scene: Phaser.Scene): Phaser.GameObjects.GameObject[] {
+  const g = scene.add.graphics();
+  const objs: Phaser.GameObjects.GameObject[] = [g];
+  const { left, right } = FACADE;
+  // 綁在兩側柱子上的白布條
+  const by = FACADE.floorTop - 4;
+  const bl = left + 2, br = right - 2;
+  g.lineStyle(1.5, 0x6a5a4a);
+  g.lineBetween(bl - 2, by - 4, bl + 8, by + 4);
+  g.lineBetween(br + 2, by - 4, br - 8, by + 4);
+  g.fillStyle(0x000000, 0.15);
+  g.fillPoints([{ x: bl + 4, y: by + 4 }, { x: br - 4, y: by + 2 }, { x: br - 6, y: by + 38 }, { x: (bl + br) / 2, y: by + 44 }, { x: bl + 6, y: by + 40 }], true);
+  g.fillStyle(0xf8f6f0);
+  g.fillPoints([{ x: bl + 2, y: by }, { x: br - 2, y: by - 2 }, { x: br - 4, y: by + 34 }, { x: (bl + br) / 2, y: by + 40 }, { x: bl + 4, y: by + 36 }], true);
+  g.lineStyle(1, 0xd8d4c8);
+  g.lineBetween(bl + 40, by, bl + 46, by + 37);
+  g.lineBetween(br - 50, by - 1, br - 54, by + 37);
+  // 綁繩結
+  g.fillStyle(0x6a5a4a);
+  g.fillCircle(bl + 3, by + 1, 3);
+  g.fillCircle(br - 3, by - 1, 3);
+  // 手寫字（紅字，黑色滴墨）
+  const t = scene.add.text(LOT_W / 2, by + 18, '還我溫泉', {
+    fontFamily: FONT, fontSize: '27px', fontStyle: '900', color: '#c8201a',
+    stroke: '#2a1a14', strokeThickness: 1,
+  }).setOrigin(0.5).setRotation(-0.035);
+  objs.push(t);
+  g.fillStyle(0xc8201a, 0.85);
+  for (const [dx, len] of [[-44, 8], [-10, 6], [18, 10], [46, 5]] as [number, number][]) {
+    g.fillRect(LOT_W / 2 + dx, by + 30, 2, len);
+    g.fillCircle(LOT_W / 2 + dx + 1, by + 30 + len, 1.8);
+  }
+  g.fillStyle(0x1a1a1a);
+  g.fillCircle(bl + 18, by + 8, 3);
+  g.fillCircle(br - 18, by + 8, 3);
+  // 坐在地上的抗議者（剪影）
+  const sit = (x: number, shirt: number, band: boolean, dir: number) => {
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(x, -1, 30, 5);
+    g.fillStyle(0x3a3a48);
+    g.fillRoundedRect(x - 2 * dir - 8, -9, 22, 8, 3);
+    g.fillStyle(shirt);
+    g.fillRoundedRect(x - 8, -32, 16, 24, 5);
+    g.fillStyle(0x2a2420);
+    g.fillCircle(x, -38, 7);
+    if (band) {
+      g.fillStyle(0xffffff);
+      g.fillRect(x - 7, -42, 14, 3);
+      g.fillStyle(0xd64545);
+      g.fillCircle(x, -41, 1.5);
+    }
+  };
+  sit(28, 0x5b5f73, true, 1);
+  sit(62, 0x8a6a4a, true, 1);
+  sit(128, 0x4f86c6, false, -1);
+  sit(196, 0x6abf69, true, -1);
+  // 紙箱板「靜坐抗議」
+  const sx = 94;
+  g.fillStyle(0x6b4a30);
+  g.fillRect(sx - 1, -52, 2, 30);
+  g.fillStyle(0xc8a070);
+  g.fillPoints([{ x: sx - 22, y: -76 }, { x: sx + 22, y: -78 }, { x: sx + 23, y: -48 }, { x: sx - 21, y: -46 }], true);
+  g.lineStyle(1, 0x9a7a4a);
+  g.lineBetween(sx - 20, -60, sx + 22, -61);
+  objs.push(scene.add.text(sx, -62, '靜坐\n抗議', {
+    fontFamily: FONT, fontSize: '11px', fontStyle: '900', color: '#1a1a1a', align: 'center',
+  }).setOrigin(0.5).setLineSpacing(-3).setRotation(0.04));
+  // 地上的水瓶和便當
+  g.fillStyle(0x9ec3d6);
+  g.fillRect(150, -12, 5, 12);
+  g.fillStyle(0xd64545);
+  g.fillRect(150, -14, 5, 2);
+  g.fillStyle(0xf6f0e0);
+  g.fillRect(160, -6, 14, 6);
   return objs;
 }
 

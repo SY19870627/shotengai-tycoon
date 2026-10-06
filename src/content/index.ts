@@ -1,6 +1,7 @@
 import type { StreetDef } from '../core/types';
 import { SHENKENG } from './shenkeng';
 import { JIUFEN } from './jiufen';
+import { GUANZILING } from './guanziling';
 
 /** 尚未開放的老街（地圖上先顯示） */
 function comingSoon(id: string, name: string, region: string, difficulty: number, tagline: string, map: { x: number; y: number }): StreetDef {
@@ -16,7 +17,7 @@ function comingSoon(id: string, name: string, region: string, difficulty: number
 export const STREETS: Record<string, StreetDef> = {
   shenkeng: SHENKENG,
   jiufen: JIUFEN,
-  guanziling: comingSoon('guanziling', '關子嶺老街', '台南市白河區', 3, '泥漿溫泉・山中老街', { x: 0.45, y: 0.655 }),
+  guanziling: GUANZILING,
   dongyuan: comingSoon('dongyuan', '東原老街', '台南市東山區', 5, '偏僻沒資源・超高難度', { x: 0.465, y: 0.695 }),
 };
 

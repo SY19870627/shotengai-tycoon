@@ -27,6 +27,8 @@ export const Ev = {
   StoryDone: 'story-done',
   /** 狀態變了，介面需要刷新 */
   Changed: 'changed',
+  /** 點了可以操作的地標（帶地標 id） */
+  Landmark: 'landmark',
 } as const;
 
 function readJSON<T>(key: string): T | null {
@@ -54,6 +56,15 @@ export const store = {
   /** 劇情演出中（時間暫停、不能點店面） */
   storyRunning: false,
 };
+
+// 測試用：網址加上 ?unlock=all 可以直接解鎖所有能玩的老街
+try {
+  if (new URLSearchParams(location.search).get('unlock') === 'all') {
+    for (const id of Object.keys(STREETS)) if (STREETS[id].playable && !store.meta.unlocked.includes(id)) store.meta.unlocked.push(id);
+  }
+} catch {
+  /* 非瀏覽器環境 */
+}
 
 /** 目前的遊戲狀態（在老街場景中一定存在） */
 export function S(): GameState {

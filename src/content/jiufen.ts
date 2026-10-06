@@ -479,7 +479,7 @@ const stories: StoryEvent[] = [
       emote('me', 'idea'),
       say('jfChief', '不過那是下一段旅程了。今晚，先好好看看這片夜景吧。'),
       fx('firecracker', 'me'),
-      narrate('第二章完成！關子嶺、東原老街……敬請期待。'),
+      narrate('第二章完成！下一站：台南關子嶺溫泉老街。'),
       effect({ chapterComplete: true }),
     ],
   },

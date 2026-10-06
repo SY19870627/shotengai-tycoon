@@ -6,8 +6,12 @@ import {
   buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
-  sightChance, useTelescope, registerSightseer, TELESCOPE_FEE,
+  sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive,
 } from '../src/core/game';
+import {
+  springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
+  resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered,
+} from '../src/core/onsen';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, flattenEffects } from '../src/core/story';
@@ -420,5 +424,195 @@ describe('九份：觀景台', () => {
     const sum = endDay(s, seeded(2));
     expect(sum.sightseers).toBe(1);
     expect(sum.telescope).toBe(TELESCOPE_FEE);
+  });
+});
+
+describe('關子嶺', () => {
+  const gz = () => {
+    const s = createGame('guanziling', seeded(3));
+    s.money = 200000;
+    return s;
+  };
+
+  it('溫泉類店家要用泉水，不夠時吸引力下降', () => {
+    const s = gz();
+    place(s, 0, 'gz-egg');
+    place(s, 1, 'gz-ryokan');
+    expect(springSupply(s)).toBe(6);
+    expect(springDemand(s)).toBe(4);
+    expect(springRatio(s)).toBe(1);
+    place(s, 2, 'gz-mud');
+    s.minute = 12 * 60;
+    const before = enterChance(s, 2);
+    place(s, 3, 'gz-ceo');
+    expect(springDemand(s)).toBe(9);
+    expect(springRatio(s)).toBeCloseTo(6 / 9);
+    expect(enterChance(s, 2)).toBeLessThan(before);
+  });
+
+  it('開井增加泉量和民怨，三天內連續開挖民怨更多', () => {
+    const s = gz();
+    expect(drillWell(s).ok).toBe(true);
+    expect(springSupply(s)).toBe(9);
+    expect(s.grievance).toBe(22);
+    expect(drillWell(s).ok).toBe(true);
+    expect(s.grievance).toBe(54);
+    expect(sealWell(s).ok).toBe(true);
+    expect(s.grievance).toBe(29);
+    expect(s.wells).toBe(1);
+  });
+
+  it('民怨太高：溫泉類的店被靜坐、暫停營業，人潮減少', () => {
+    const s = gz();
+    place(s, 0, 'gz-chicken');
+    place(s, 1, 'gz-egg');
+    s.minute = 12 * 60;
+    const traffic = trafficPerHour(s);
+    s.grievance = 85;
+    expect(trafficPerHour(s)).toBeCloseTo(traffic * 0.85);
+    endDay(s, seeded(1));
+    s.grievance = 85;
+    startNextDay(s, seeded(1));
+    expect(s.closedToday).toEqual([1]);
+    s.minute = 12 * 60;
+    expect(enterChance(s, 1)).toBe(0);
+    expect(enterChance(s, 0)).toBeGreaterThan(0);
+  });
+
+  it('共同浴場：不收租、每天降民怨', () => {
+    const s = gz();
+    s.grievance = 40;
+    expect(buildBath(s, 0).ok).toBe(true);
+    expect(signTenant(s, 0, 'gz-egg', 0).ok).toBe(false);
+    expect(springDemand(s)).toBe(2);
+    endDay(s, seeded(1));
+    expect(s.grievance).toBeCloseTo(40 - 2.5 - 1.5);
+  });
+
+  it('水火同源：攤販收費、往回改要付復原費', () => {
+    const s = gz();
+    expect(registerFireVisitor(s)).toBe(0);
+    expect(setFireMode(s, 'full').ok).toBe(true);
+    expect(registerFireVisitor(s)).toBe(40);
+    s.fireLevel = 2;
+    expect(registerFireVisitor(s)).toBe(80);
+    const m = s.money;
+    expect(setFireMode(s, 'protect').ok).toBe(true);
+    expect(s.money).toBe(m - fireDowngradeCost('full', 'protect'));
+    expect(fireDowngradeCost('protect', 'full')).toBe(0);
+  });
+
+  it('妖怪祭：前一晚預約、隔天營業到凌晨 2 點', () => {
+    const s = gz();
+    place(s, 0, 'gz-chicken');
+    s.unlockedActivities.push('yokaiFest');
+    expect(startActivity(s, 'yokaiFest').ok).toBe(true);
+    expect(s.festival?.day).toBe(s.day + 1);
+    expect(isActive(s, 'yokaiFest')).toBe(false);
+    expect(canStartActivity(s, 'yokaiFest').ok).toBe(false);
+    endDay(s, seeded(1));
+    startNextDay(s, seeded(1));
+    expect(isActive(s, 'yokaiFest')).toBe(true);
+    expect(dayEndMin(s)).toBe(26 * 60);
+    expect(shopOpen(s, 0, 23.5)).toBe(true);
+  });
+
+  it('妖怪付的樹葉錢：隔天早上現形，三種處理方式', () => {
+    const s = gz();
+    place(s, 0, 'gz-chicken');
+    s.festival = { day: s.day, leafCommission: 0, leafByTenant: {}, exposed: 0 };
+    tryEnter(s, 0);
+    const m0 = s.money;
+    const r = completeVisit(s, 0, 1, 'local', { kind: 'tanuki', leaves: true });
+    expect(r.revenue).toBe(Math.round(220 * 1.6));
+    expect(s.festival.leafCommission).toBe(r.income);
+    expect(s.money).toBe(m0 + r.income);
+    const sat = s.lots[0].shop!.satisfaction;
+    const t = { ...s, festival: { ...s.festival }, lots: s.lots.map((l) => ({ ...l, shop: l.shop && { ...l.shop } })) } as GameState;
+    resolveLeaves(s, 'accept');
+    expect(s.money).toBe(m0);
+    expect(s.lots[0].shop!.satisfaction).toBeLessThan(sat);
+    expect(s.festival).toBeNull();
+    const rep = t.reputation;
+    resolveLeaves(t, 'burn');
+    expect(t.reputation).toBeCloseTo(rep + 3);
+    expect(t.yokaiFavor).toBe(1);
+  });
+
+  it('識破妖怪：好感每場最多 +3，好感越高付真錢越多', () => {
+    const s = gz();
+    s.festival = { day: s.day, leafCommission: 0, leafByTenant: {}, exposed: 0 };
+    for (let k = 0; k < 5; k++) exposeYokai(s, seeded(k));
+    expect(s.yokaiFavor).toBe(3);
+    expect(realPayShare(s)).toBeCloseTo(0.45);
+  });
+
+  it('大地震：開越多井損失越大、加固可以減少，之後慢慢恢復', () => {
+    const s = gz();
+    drillWell(s);
+    drillWell(s);
+    expect(quakeLossPct(s)).toBeCloseTo(0.55);
+    s.reinforced = true;
+    expect(quakeLossPct(s)).toBeCloseTo(0.55 * 0.65);
+    s.reinforced = false;
+    const before = springSupply(s);
+    applyEffects(s, { quake: true }, seeded(1));
+    expect(s.quake?.before).toBe(before);
+    expect(springSupply(s)).toBe(before - Math.round(before * 0.55));
+    expect(s.fireLevel).toBe(2);
+    expect(springRecovered(s)).toBe(false);
+    for (let d = 0; d < 9; d++) {
+      endDay(s, seeded(d));
+      startNextDay(s, seeded(d));
+    }
+    expect(s.quake!.recovered).toBeCloseTo(s.quake!.loss * 0.49, 0);
+    expect(s.fireLevel).toBe(1.3);
+    applyEffects(s, { springBonus: 4 });
+    expect(springRecovered(s)).toBe(true);
+  });
+
+  it('第 18 天中午一定會地震，關子嶺的劇本都能跑', () => {
+    const s = gz();
+    s.day = 18;
+    for (const e of STREETS.guanziling.stories) if (e.id !== 'gz-quake') s.storyLog[e.id] = 18;
+    s.minute = 12 * 60;
+    const st = pickStory(s, 'noon', seeded(1));
+    expect(st?.event.id).toBe('gz-quake');
+    for (const step of flattenEffects(st!.steps)) if (step.t === 'effect') applyEffects(s, step.effects, seeded(1));
+    expect(s.quake).not.toBeNull();
+  });
+
+  it('舊存檔讀進來會補上關子嶺的欄位', () => {
+    const s = createGame('shenkeng', seeded(1));
+    const raw = JSON.parse(serialize(s));
+    for (const k of ['wells', 'grievance', 'closedToday', 'fireMode', 'fireLevel', 'festival', 'quake', 'yokaiFavor']) delete raw[k];
+    const back = deserialize(JSON.stringify(raw))!;
+    expect(back.closedToday).toEqual([]);
+    expect(back.fireMode).toBe('protect');
+    expect(back.fireLevel).toBe(1);
+    expect(back.festival).toBeNull();
+  });
+
+  it('數值模擬：30 天內可以把關子嶺經營起來，不會破產', () => {
+    const s = gz();
+    s.money = 35000;
+    const rand = seeded(5);
+    for (let d = 1; d <= 30; d++) {
+      for (let i = 0; i < s.lots.length; i++) {
+        if (s.lots[i].unlocked && !s.lots[i].shop && !s.lots[i].bath && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 0);
+      }
+      if (s.lots.every((l) => !l.unlocked || l.shop) && s.money > nextLotCost(s) + 8000) unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+      for (const when of ['morning', 'noon'] as const) {
+        const st = pickStory(s, when, rand);
+        if (st) for (const step of flattenEffects(st.steps)) if (step.t === 'effect') applyEffects(s, step.effects, rand);
+      }
+      s.minute = DAY_START_MIN;
+      simulateDay(s, rand);
+      endDay(s, rand);
+      expect(s.gameOver).toBe(false);
+      startNextDay(s, rand);
+    }
+    expect(s.quake).not.toBeNull();
+    expect(s.reputation).toBeGreaterThan(30);
   });
 });

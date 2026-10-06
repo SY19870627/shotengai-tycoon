@@ -154,6 +154,29 @@ export function playFx(scene: Phaser.Scene, kind: FxKind, x: number, y: number, 
         scene.tweens.add({ targets: p, y: y - rnd(70, 110), alpha: 0, duration: 700, delay: k * 50, onComplete: () => p.destroy() });
       }
       return 700;
+    case 'quake': {
+      // 地震：整個畫面劇烈搖晃、揚起灰塵
+      scene.cameras.main.shake(1400, 0.018);
+      for (let k = 0; k < 18; k++) {
+        const p = add(scene.add.circle(x + rnd(-560, 560), y + rnd(10, 90), rnd(10, 22), 0xb8a890, 0.7));
+        scene.tweens.add({ targets: p, y: p.y - rnd(30, 80), scale: 2, alpha: 0, duration: 1400, delay: rnd(0, 600), onComplete: () => p.destroy() });
+      }
+      const t = add(scene.add.text(x, y - 160, '轟隆隆隆——', { fontFamily: FONT, fontSize: '40px', fontStyle: '900', color: '#ffffff', stroke: '#2a2433', strokeThickness: 8 }).setOrigin(0.5));
+      scene.tweens.add({ targets: t, scale: 1.2, alpha: 0, duration: 1500, onComplete: () => t.destroy() });
+      return 1500;
+    }
+    case 'leaves': {
+      // 樹葉錢：葉子從天上飄下來
+      const hasTex = scene.textures.exists('leaf');
+      for (let k = 0; k < 36; k++) {
+        const lx = x + rnd(-620, 620), ly = y - rnd(260, 420);
+        const p = add(hasTex
+          ? scene.add.image(lx, ly, 'leaf').setScale(1.4)
+          : scene.add.ellipse(lx, ly, 14, 8, Phaser.Utils.Array.GetRandom([0x5bb36a, 0x7cc35a, 0x3f8f4f])) as Phaser.GameObjects.Image | Phaser.GameObjects.Ellipse);
+        scene.tweens.add({ targets: p, y: ly + rnd(300, 460), x: lx + rnd(-80, 80), angle: rnd(-540, 540), alpha: 0, duration: rnd(1600, 2600), delay: k * 40, onComplete: () => p.destroy() });
+      }
+      return 1800;
+    }
   }
   return 0;
 }

@@ -57,7 +57,7 @@ export function drawBackdrop(scene: Phaser.Scene, kind: BackdropKind, worldW: nu
   switch (kind) {
     case 'basin-hills': return basinHills(scene, rng, worldW);
     case 'mountain-sea': return mountainSea(scene, rng, worldW);
-    case 'hot-spring': return simpleHills(scene, rng, worldW, [0x9fb3b8, 0x7f9c94, 0x5f8a78], true);
+    case 'hot-spring': return hotSpring(scene, rng, worldW);
     case 'orchard': return simpleHills(scene, rng, worldW, [0xb0bf9a, 0x8fae6e, 0x6f9c4e], false);
     default: return simpleHills(scene, rng, worldW, [0xa8b8b0, 0x88a890, 0x689870], false);
   }
@@ -209,6 +209,331 @@ function mountainSea(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, 
     tree(g2, x, slope(x) + 20, rng.between(14, 22), haze(0x4a7a4a, 0.2));
   }
   return [g1, g2];
+}
+
+// ───────────────────────── 關子嶺：枕頭山、碧雲寺、大仙寺、溫泉旅館 ─────────────────────────
+
+/** 夜間發光層（與所屬層同視差、同深度；場景依 getData('night') 淡入） */
+function nightLayer(scene: Phaser.Scene, factor: number, depth: number): Phaser.GameObjects.Graphics {
+  const n = layer(scene, factor, depth);
+  n.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setData('night', true);
+  return n;
+}
+
+/** 小小的燕尾脊屋頂（遠景用） */
+function miniSwallowRoof(
+  g: Phaser.GameObjects.Graphics, cx: number, eaveY: number, w: number, h: number, tile: number, ridge: number,
+): void {
+  g.fillStyle(tile);
+  g.fillPoints([
+    { x: cx - w / 2 - 3, y: eaveY - 2 }, { x: cx - w / 2 + 2, y: eaveY }, { x: cx + w / 2 - 2, y: eaveY },
+    { x: cx + w / 2 + 3, y: eaveY - 2 }, { x: cx + w * 0.32, y: eaveY - h }, { x: cx - w * 0.32, y: eaveY - h },
+  ], true);
+  g.fillStyle(ridge);
+  g.fillRect(cx - w * 0.32, eaveY - h - 2, w * 0.64, 2.5);
+  // 燕尾
+  for (const d of [-1, 1]) {
+    const ex = cx + d * w * 0.32;
+    g.fillTriangle(ex, eaveY - h, ex - d * 2, eaveY - h - 2, ex + d * Math.max(4, w * 0.12), eaveY - h - Math.max(4, h * 0.6));
+  }
+}
+
+/** 遠山頂上的火山碧雲寺：紅瓦、燕尾、小小的但認得出來 */
+function biyunTemple(g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics, x: number, y: number): void {
+  const tile = haze(0xc8603a, 0.3), wall = haze(0xd8cbb0, 0.3), ridge = haze(0x9a2e22, 0.25);
+  // 台基
+  g.fillStyle(haze(0x9a958a, 0.4));
+  g.fillRect(x - 34, y - 3, 68, 5);
+  // 兩側廂房
+  for (const d of [-1, 1]) {
+    g.fillStyle(wall);
+    g.fillRect(x + d * 22 - 9, y - 12, 18, 10);
+    miniSwallowRoof(g, x + d * 22, y - 12, 22, 5, tile, ridge);
+  }
+  // 正殿
+  g.fillStyle(wall);
+  g.fillRect(x - 14, y - 18, 28, 16);
+  g.fillStyle(haze(0xb8322a, 0.3));
+  g.fillRect(x - 4, y - 12, 8, 10);
+  miniSwallowRoof(g, x, y - 18, 36, 8, tile, ridge);
+  // 屋脊寶珠
+  g.fillStyle(haze(0xf2c14e, 0.3));
+  g.fillCircle(x, y - 29, 1.8);
+  // 夜裡的燈
+  n.fillStyle(0xffb050, 0.9);
+  n.fillRect(x - 4, y - 12, 8, 10);
+  n.fillStyle(0xff9040, 0.35);
+  n.fillCircle(x, y - 8, 12);
+  for (const d of [-1, 1]) {
+    n.fillStyle(0xffc070, 0.7);
+    n.fillRect(x + d * 22 - 3, y - 9, 6, 5);
+  }
+}
+
+/** 山腰上的大仙寺建築群：多層屋頂、層層往上 */
+function daxianTemple(g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics, x: number, base: number): void {
+  const tile = haze(0xd06a3a, 0.18), wall = haze(0xe2d6bc, 0.18), red = haze(0xb8322a, 0.18), ridge = haze(0x8a2a20, 0.15);
+  // 山門前石階與平台
+  g.fillStyle(haze(0xa8a294, 0.2));
+  g.fillRect(x - 110, base - 6, 220, 8);
+  g.fillRect(x - 20, base - 2, 40, 30);
+  g.lineStyle(1, haze(0x7d776c, 0.2));
+  for (let y = base; y < base + 28; y += 4) g.lineBetween(x - 20, y, x + 20, y);
+  // 後殿（最高、在後面）
+  g.fillStyle(wall);
+  g.fillRect(x - 40, base - 66, 80, 26);
+  miniSwallowRoof(g, x, base - 66, 96, 14, tile, ridge);
+  // 鐘樓、鼓樓
+  for (const d of [-1, 1]) {
+    const tx = x + d * 92;
+    g.fillStyle(wall);
+    g.fillRect(tx - 9, base - 50, 18, 44);
+    g.fillStyle(red);
+    g.fillRect(tx - 5, base - 44, 10, 10);
+    miniSwallowRoof(g, tx, base - 50, 26, 8, tile, ridge);
+    g.fillStyle(wall);
+    g.fillRect(tx - 6, base - 64, 12, 8);
+    miniSwallowRoof(g, tx, base - 64, 18, 6, tile, ridge);
+    n.fillStyle(0xffc070, 0.8);
+    n.fillRect(tx - 5, base - 44, 10, 10);
+  }
+  // 兩側廂房
+  for (const d of [-1, 1]) {
+    const hx = x + d * 50;
+    g.fillStyle(wall);
+    g.fillRect(hx - 22, base - 30, 44, 24);
+    g.fillStyle(red);
+    for (let k = -1; k <= 1; k++) g.fillRect(hx + k * 13 - 3, base - 24, 6, 10);
+    miniSwallowRoof(g, hx, base - 30, 54, 9, tile, ridge);
+    n.fillStyle(0xffc070, 0.75);
+    for (let k = -1; k <= 1; k++) n.fillRect(hx + k * 13 - 3, base - 24, 6, 10);
+  }
+  // 正殿（前方，最大）
+  g.fillStyle(red);
+  for (const px of [x - 28, x - 10, x + 10, x + 28]) g.fillRect(px - 2, base - 38, 4, 32);
+  g.fillStyle(wall);
+  g.fillRect(x - 30, base - 38, 60, 32);
+  g.fillStyle(red);
+  g.fillRect(x - 9, base - 30, 18, 24);
+  for (const px of [x - 28, x + 28]) g.fillRect(px - 2, base - 38, 4, 32);
+  miniSwallowRoof(g, x, base - 38, 78, 14, tile, ridge);
+  g.fillStyle(haze(0xf2c14e, 0.2));
+  g.fillCircle(x, base - 57, 2.5);
+  n.fillStyle(0xffb050, 0.85);
+  n.fillRect(x - 9, base - 30, 18, 24);
+  n.fillStyle(0xff9040, 0.3);
+  n.fillCircle(x, base - 20, 30);
+  // 門口一排紅燈籠
+  for (let k = -2; k <= 2; k++) {
+    g.fillStyle(haze(0xd0483a, 0.15));
+    g.fillEllipse(x + k * 12, base - 40, 4, 5);
+    n.fillStyle(0xffa050, 0.9);
+    n.fillCircle(x + k * 12, base - 40, 2.6);
+  }
+}
+
+/** 一叢竹林（遠景用） */
+function bambooGrove(g: Phaser.GameObjects.Graphics, rng: Phaser.Math.RandomDataGenerator, x: number, y: number, n: number, col: number): void {
+  for (let i = 0; i < n; i++) {
+    const bx = x + i * 5 + rng.between(-2, 2);
+    const h = rng.between(36, 64);
+    const lean = rng.between(-6, 6);
+    g.lineStyle(2, shade(col, 0.15), 0.9);
+    g.lineBetween(bx, y, bx + lean, y - h);
+    g.fillStyle(col);
+    g.fillEllipse(bx + lean, y - h + 6, 16, 22);
+    g.fillEllipse(bx + lean * 0.6 + 5, y - h * 0.7, 12, 14);
+  }
+}
+
+/** 日式溫泉旅館（黑瓦入母屋造） */
+function onsenInn(
+  g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics, rng: Phaser.Math.RandomDataGenerator,
+  x: number, base: number, w: number, h: number, floors: number, tone: number,
+): void {
+  const wall = haze(rng.pick([0xefe8d8, 0xe6dcc6, 0xd8c8a8]), tone);
+  const wood = haze(0x5a3e2a, tone);
+  const tile = haze(rng.pick([0x3a3e46, 0x45464c, 0x33363c]), tone);
+  const fh = h / floors;
+  for (let f = 0; f < floors; f++) {
+    const y0 = base - (f + 1) * fh;
+    const inset = f * 6;
+    g.fillStyle(wall);
+    g.fillRect(x + inset, y0, w - inset * 2, fh);
+    // 木柱木樑
+    g.fillStyle(wood);
+    g.fillRect(x + inset, y0, 3, fh);
+    g.fillRect(x + w - inset - 3, y0, 3, fh);
+    g.fillRect(x + inset, y0 + fh - 3, w - inset * 2, 3);
+    // 窗（障子）
+    for (let wx = x + inset + 8; wx + 12 < x + w - inset - 6; wx += 18) {
+      g.fillStyle(haze(0xf6ecd2, tone));
+      g.fillRect(wx, y0 + fh * 0.25, 12, fh * 0.45);
+      g.lineStyle(1, wood, 0.8);
+      g.lineBetween(wx + 6, y0 + fh * 0.25, wx + 6, y0 + fh * 0.7);
+      g.lineBetween(wx, y0 + fh * 0.47, wx + 12, y0 + fh * 0.47);
+      if (rng.frac() < 0.6) {
+        n.fillStyle(0xffc070, 0.75);
+        n.fillRect(wx, y0 + fh * 0.25, 12, fh * 0.45);
+      }
+    }
+    // 每層一圈小瓦簷
+    g.fillStyle(tile);
+    g.fillPoints([
+      { x: x + inset - 8, y: y0 + 2 }, { x: x + w - inset + 8, y: y0 + 2 },
+      { x: x + w - inset - 2, y: y0 - 6 }, { x: x + inset + 2, y: y0 - 6 },
+    ], true);
+  }
+  // 頂層入母屋屋頂
+  const ty = base - h;
+  const inset = (floors - 1) * 6;
+  const l = x + inset - 10, r = x + w - inset + 10;
+  const rh = Math.min(28, (r - l) * 0.3);
+  g.fillStyle(tile);
+  g.fillPoints([
+    { x: l - 4, y: ty - 2 }, { x: l + 4, y: ty + 2 }, { x: r - 4, y: ty + 2 }, { x: r + 4, y: ty - 2 },
+    { x: r - (r - l) * 0.22, y: ty - rh }, { x: l + (r - l) * 0.22, y: ty - rh },
+  ], true);
+  // 破風（山牆的三角）
+  g.fillStyle(shade(tile, 0.12));
+  const mx = (l + r) / 2;
+  g.fillTriangle(mx - rh * 0.6, ty - rh * 0.45, mx + rh * 0.6, ty - rh * 0.45, mx, ty - rh - 4);
+  g.fillStyle(shade(tile, -0.25));
+  g.fillRect(l + (r - l) * 0.2, ty - rh - 2, (r - l) * 0.6, 3);
+  // 瓦溝
+  g.lineStyle(1, shade(tile, -0.25), 0.7);
+  for (let k = 1; k < 8; k++) {
+    const t = k / 8;
+    g.lineBetween(l + (r - l) * t, ty, l + (r - l) * 0.22 + (r - l) * 0.56 * t, ty - rh);
+  }
+}
+
+/** 靜止的白色蒸氣（一縷） */
+function steamWisp(g: Phaser.GameObjects.Graphics, x: number, y: number, n: number, alpha: number): void {
+  for (let k = 0; k < n; k++) {
+    g.fillStyle(0xffffff, alpha * (1 - k / (n + 1)));
+    g.fillCircle(x + Math.sin(k * 0.9) * 6 + k * 2, y - k * 11, 5 + k * 2.4);
+  }
+}
+
+function hotSpring(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, worldW: number): Phaser.GameObjects.GameObject[] {
+  const f1 = 0.1, f2 = 0.25, f3 = 0.45;
+
+  // ── 遠景：枕頭山稜線 + 山頂火山碧雲寺 ──
+  const g1 = layer(scene, f1, 0.5);
+  const n1 = nightLayer(scene, f1, 0.5);
+  const w1 = layerWidth(worldW, f1);
+  const back = ridge(g1, rng, -100, w1, GROUND_Y - 200, 70, haze(0x6a8a7a, 0.6), 3, 18);
+  // 找第一座山頂（在畫面可見範圍內）
+  const peakOf = (a: number, b: number) => {
+    let best = a;
+    for (let x = a; x <= b; x += 6) if (back(x) < back(best)) best = x;
+    return best;
+  };
+  const p1 = peakOf(260, Math.min(w1 - 120, 1000));
+  // 寺廟坐在山頂上（稍微補一塊平台）
+  g1.fillStyle(haze(0x6a8a7a, 0.6));
+  g1.fillEllipse(p1, back(p1) + 4, 90, 14);
+  biyunTemple(g1, n1, p1, back(p1) + 2);
+  if (w1 > 2200) {
+    const p2 = peakOf(w1 - 700, w1 - 200);
+    g1.fillEllipse(p2, back(p2) + 4, 90, 14);
+    biyunTemple(g1, n1, p2, back(p2) + 2);
+  }
+  // 遠山樹影
+  for (let x = 0; x < w1; x += rng.between(18, 34)) {
+    if (Math.abs(x - p1) < 50) continue;
+    g1.fillStyle(haze(0x557a62, 0.6));
+    g1.fillCircle(x, back(x) + 5, rng.between(5, 9));
+  }
+  // 前一道較低的稜線
+  ridge(g1, rng, -100, w1, GROUND_Y - 130, 40, haze(0x5f8a68, 0.48), 3, 20);
+
+  // ── 中景：林木山坡 + 大仙寺 + 竹林 + 幾間旅館 ──
+  const g2 = layer(scene, f2, 1);
+  const n2 = nightLayer(scene, f2, 1);
+  const w2 = layerWidth(worldW, f2);
+  const slope = ridge(g2, rng, -100, w2, GROUND_Y - 110, 46, haze(0x4f8a58, 0.28), 3, 16);
+  // 樹林
+  for (let x = -20; x < w2; x += rng.between(14, 26)) {
+    tree(g2, x, slope(x) + 14, rng.between(16, 26), haze(rng.pick([0x3f7a48, 0x4a8a4a, 0x356e40]), 0.28));
+  }
+  // 大仙寺（山腰上，第一個畫面就看得到）
+  const dx = Math.min(w2 - 200, W * 0.62 + rng.between(-40, 40));
+  const dBase = Math.min(GROUND_Y - 40, slope(dx) + 58);
+  g2.fillStyle(haze(0x4f8a58, 0.28));
+  g2.fillRect(dx - 130, dBase - 4, 260, GROUND_Y - dBase + 40);
+  daxianTemple(g2, n2, dx, dBase);
+  // 竹林
+  for (let x = 60; x < w2; x += rng.between(160, 280)) {
+    if (Math.abs(x - dx) < 160) continue;
+    bambooGrove(g2, rng, x, slope(x) + 40, rng.between(5, 9), haze(0x6a9a48, 0.25));
+  }
+  // 山坡上零星溫泉旅館
+  for (let x = 220; x < w2; x += rng.between(320, 520)) {
+    if (Math.abs(x - dx) < 200) continue;
+    const base = Math.min(GROUND_Y - 30, slope(x) + 60);
+    onsenInn(g2, n2, rng, x, base, rng.between(50, 70), rng.between(30, 42), 2, 0.25);
+    steamWisp(g2, x + rng.between(0, 40), base - 50, 5, 0.3);
+  }
+  // 山坡底部
+  g2.fillStyle(haze(0x4a7a50, 0.26));
+  g2.fillRect(-100, GROUND_Y - 34, w2 + 200, 74);
+
+  // ── 近景：日式溫泉旅館屋頂、煙囪、木造房、樹與白煙 ──
+  const g3 = layer(scene, f3, 1.5);
+  const n3 = nightLayer(scene, f3, 1.5);
+  const w3 = layerWidth(worldW, f3);
+  g3.fillStyle(0x5a7a5a);
+  g3.fillRect(-100, GROUND_Y - 20, w3 + 200, 60);
+  let x = -40;
+  while (x < w3) {
+    const kind = rng.between(0, 9);
+    const base = GROUND_Y - 10;
+    if (kind < 4) {
+      // 溫泉旅館（兩三層、黑瓦）
+      const hw = rng.between(90, 140), hh = rng.between(70, 110);
+      onsenInn(g3, n3, rng, x, base, hw, hh, hh > 90 ? 3 : 2, 0.05);
+      // 煙囪 + 白煙
+      if (rng.frac() < 0.7) {
+        const cx = x + hw * rng.realInRange(0.25, 0.75);
+        const ct = base - hh - 30;
+        g3.fillStyle(rng.pick([0x8a5a44, 0x6a6a70]));
+        g3.fillRect(cx - 5, ct, 10, 34);
+        g3.fillStyle(0x3a3a40);
+        g3.fillRect(cx - 7, ct - 3, 14, 4);
+        steamWisp(g3, cx, ct - 8, 6, 0.45);
+      }
+      x += hw + rng.between(14, 40);
+    } else if (kind < 7) {
+      // 木造小屋
+      const hw = rng.between(60, 90), hh = rng.between(40, 56);
+      const wood = rng.pick([0x7a5a40, 0x8a6a4a, 0x6a4a34]);
+      g3.fillStyle(wood);
+      g3.fillRect(x, base - hh, hw, hh);
+      g3.lineStyle(1, shade(wood, -0.25), 0.7);
+      for (let yy = base - hh + 6; yy < base; yy += 6) g3.lineBetween(x, yy, x + hw, yy);
+      g3.fillStyle(rng.pick([0x3a3e46, 0x4a4a52]));
+      g3.fillPoints([
+        { x: x - 8, y: base - hh + 2 }, { x: x + hw + 8, y: base - hh + 2 },
+        { x: x + hw / 2, y: base - hh - 22 },
+      ], true);
+      const wx = x + hw / 2 - 8;
+      g3.fillStyle(0xe8dcc0);
+      g3.fillRect(wx, base - hh + 12, 16, 12);
+      g3.lineStyle(1, shade(wood, -0.3));
+      g3.lineBetween(wx + 8, base - hh + 12, wx + 8, base - hh + 24);
+      n3.fillStyle(0xffc070, 0.7);
+      n3.fillRect(wx, base - hh + 12, 16, 12);
+      // 地上冒出來的溫泉煙
+      if (rng.frac() < 0.4) steamWisp(g3, x + hw + 8, base - 6, 5, 0.35);
+      x += hw + rng.between(10, 30);
+    } else {
+      tree(g3, x + 20, base + 2, rng.between(44, 64), rng.pick([0x3f7a48, 0x4a8a4a, 0x356e40]));
+      x += rng.between(40, 70);
+    }
+  }
+  return [g1, n1, g2, n2, g3, n3];
 }
 
 // ───────────────────────── 佔位：簡單丘陵 ─────────────────────────

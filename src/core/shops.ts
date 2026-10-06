@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen';
 
 export interface ShopDef {
   id: string;
@@ -24,6 +24,8 @@ export interface ShopDef {
   baseRent: number;
   /** 租客毛利率（不填用預設；住宿沒有食材成本，毛利比較高） */
   margin?: number;
+  /** 每天要用掉的泉量（關子嶺；每升一級 +1） */
+  spring?: number;
   /** 營業時間 [開, 關)，24 小時制 */
   hours: [number, number];
   wallColor: number;
@@ -115,12 +117,55 @@ export const SHOPS: ShopDef[] = [
     hours: [10, 21], wallColor: 0xc98a5a, awningColor: 0x3a2a22,
     description: '店門口有人吹奏時，路人會停下來聽。',
   }),
+  // ---- 關子嶺 ----
+  S({
+    id: 'claypot', name: '甕缸雞', short: '甕缸雞', category: 'food',
+    spend: 220, appeal: 0.09, capacity: 10, stayMinutes: 50, upkeep: 600, baseRent: 1500,
+    hours: [11, 21], wallColor: 0xc98a5a, awningColor: 0xb3262e,
+    description: '關子嶺必吃！一桌一隻雞，客單價高。客滿時排隊人龍會擋到隔壁。',
+  }),
+  S({
+    id: 'bathhouse', name: '湯屋', short: '湯屋', category: 'leisure', spring: 3,
+    spend: 450, appeal: 0.05, capacity: 6, stayMinutes: 60, upkeep: 700, baseRent: 1700,
+    hours: [10, 22], wallColor: 0x6b5a4a, awningColor: 0x3f6f8f,
+    description: '泡泥漿溫泉（不過夜）。要用泉水，泉量不夠時水會變溫。下雨天特別受歡迎。',
+  }),
+  S({
+    id: 'mudspa', name: '泥漿美容', short: '泥漿', category: 'leisure', spring: 2,
+    spend: 300, appeal: 0.045, capacity: 4, stayMinutes: 30, upkeep: 400, baseRent: 1200,
+    hours: [10, 20], wallColor: 0xb8b0a4, awningColor: 0x5a5a62,
+    description: '泥漿面膜敷臉。客人出來臉會變成灰色的。要用泉水。',
+  }),
+  S({
+    id: 'onsenegg', name: '溫泉蛋', short: '溫泉蛋', category: 'food', spring: 1,
+    spend: 50, appeal: 0.085, capacity: 4, stayMinutes: 5, upkeep: 150, baseRent: 600,
+    hours: [9, 20], wallColor: 0xf3e3c2, awningColor: 0xe2c044,
+    description: '用溫泉水泡熟的蛋，便宜、翻桌快。用一點點泉水。',
+  }),
+  S({
+    id: 'yukata', name: '浴衣出租', short: '浴衣', category: 'retail',
+    spend: 350, appeal: 0.04, capacity: 4, stayMinutes: 20, upkeep: 350, baseRent: 1100,
+    hours: [9, 19], wallColor: 0xf0e2d0, awningColor: 0xef8fb1,
+    description: '客人換上浴衣逛街，特別想去好漢坡拍照。跟湯屋是好搭檔。',
+  }),
+  S({
+    id: 'sanchan', name: '山產野菜', short: '山產', category: 'food',
+    spend: 160, appeal: 0.075, capacity: 8, stayMinutes: 35, upkeep: 400, baseRent: 1050,
+    hours: [10, 20], wallColor: 0xdfe8cf, awningColor: 0x4a7a3a,
+    description: '野菜、香菇雞湯。天下第一鼎的主力。',
+  }),
   // ---- 住宿 ----
   S({
     id: 'minshuku', name: '民宿', short: '民宿', category: 'stay',
     spend: 1500, appeal: 0, capacity: 4, stayMinutes: 0, upkeep: 500, baseRent: 1000, margin: 0.75,
     hours: [0, 30], wallColor: 0xe9dcc4, awningColor: 0x6b8f6b,
     description: '傍晚旅客入住、隔天早上退房逛街，住客不用擠公車上山。怕吵，別跟開到半夜的店當鄰居。',
+  }),
+  S({
+    id: 'ryokan', name: '溫泉旅館', short: '旅館', category: 'stay', spring: 3,
+    spend: 2400, appeal: 0, capacity: 4, stayMinutes: 0, upkeep: 800, baseRent: 1600, margin: 0.7,
+    hours: [0, 30], wallColor: 0xe9dcc4, awningColor: 0x6b4a3a,
+    description: '傍晚旅客入住泡湯、隔天早上退房逛街。要用泉水，泉量不夠評價會變差。怕吵。',
   }),
 ];
 
@@ -153,8 +198,14 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   caogui: { fishball: 1.1, souvenir: 1.1 },
   teahouse: { ocarina: 1.2, taro: 1.1 },
   ocarina: { teahouse: 1.2, cafe: 1.1 },
-  cafe: { ocarina: 1.1, souvenir: 1.05 },
+  cafe: { ocarina: 1.1, souvenir: 1.05, yukata: 1.1 },
   souvenir: { brownsugar: 1.1, caogui: 1.1 },
+  bathhouse: { yukata: 1.2, mudspa: 1.15, onsenegg: 1.1 },
+  mudspa: { bathhouse: 1.15 },
+  yukata: { bathhouse: 1.2, cafe: 1.1 },
+  onsenegg: { bathhouse: 1.1, claypot: 1.1 },
+  claypot: { onsenegg: 1.1, cafe: 1.05 },
+  sanchan: { claypot: 1.1, souvenir: 1.05 },
 };
 
 /** 同一種店距離兩格以內會互搶客人 */

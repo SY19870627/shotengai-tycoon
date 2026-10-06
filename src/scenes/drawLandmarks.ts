@@ -25,7 +25,7 @@ interface Ctx {
   w: number;
 }
 
-export function drawLandmark(scene: Phaser.Scene, id: string, width: number): LandmarkArt {
+export function drawLandmark(scene: Phaser.Scene, id: string, width: number, variant?: string): LandmarkArt {
   const g = scene.add.graphics();
   const night = scene.add.graphics();
   const ctx: Ctx = { scene, g, night, objs: [g], w: width };
@@ -39,6 +39,10 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number): La
     case 'stairs': standX = drawStairs(ctx); break;
     case 'theater': standX = drawTheater(ctx); break;
     case 'mine': standX = drawMine(ctx); break;
+    case 'haohan': standX = drawHaohan(ctx); break;
+    case 'spring': standX = drawSpring(ctx); break;
+    case 'fire': standX = drawFire(ctx, variant ?? 'protect'); break;
+    case 'fireshrine': standX = drawFireShrine(ctx); break;
     default: standX = drawGenericSign(ctx, id); break;
   }
   return { objects: ctx.objs, night, standX };
@@ -1071,6 +1075,799 @@ function drawMine(ctx: Ctx): number {
   night.fillStyle(0xfff0a0, 0.7);
   night.fillCircle(hx + 8, -73, 4);
   return ax;
+}
+
+// ───────────────────────── 關子嶺：共用小工具 ─────────────────────────
+
+/** 圓滾滾的樹叢 */
+function bush(g: G, x: number, y: number, s: number, col: number): void {
+  g.fillStyle(shade(col, -0.15));
+  g.fillEllipse(x, y, s * 1.6, s);
+  g.fillStyle(col);
+  g.fillEllipse(x - s * 0.3, y - s * 0.25, s * 1.1, s * 0.8);
+  g.fillEllipse(x + s * 0.35, y - s * 0.2, s, s * 0.75);
+  g.fillStyle(shade(col, 0.2), 0.7);
+  g.fillEllipse(x - s * 0.35, y - s * 0.4, s * 0.5, s * 0.3);
+}
+
+/** 一叢竹子（由地面往上） */
+function bamboo(g: G, x: number, h: number, n: number, seed = 0): void {
+  for (let i = 0; i < n; i++) {
+    const bx = x + i * 7 - n * 3;
+    const bh = h * (0.75 + ((i * 37 + seed) % 10) / 40);
+    const lean = ((i + seed) % 3 - 1) * 6;
+    g.lineStyle(3.5, i % 2 ? 0x5f8f3e : 0x6fa04a);
+    g.lineBetween(bx, 0, bx + lean, -bh);
+    // 竹節
+    g.lineStyle(1, 0x3f6a2a, 0.9);
+    for (let y = -22; y > -bh; y -= 22) {
+      const lx = bx + lean * (y / -bh);
+      g.lineBetween(lx - 2, y, lx + 2, y);
+    }
+    // 竹葉（細長三角形）
+    g.fillStyle(i % 2 ? 0x4f8a3a : 0x5f9a44);
+    for (let k = 0; k < 5; k++) {
+      const ly = -bh * (0.55 + k * 0.1);
+      const lx = bx + lean * (-ly / bh);
+      const d = k % 2 ? 1 : -1;
+      g.fillTriangle(lx, ly, lx + d * 18, ly + 4, lx + d * 4, ly + 6);
+      g.fillTriangle(lx, ly - 4, lx - d * 14, ly - 1, lx - d * 3, ly + 2);
+    }
+  }
+}
+
+/** 日式石燈籠（夜間發光） */
+function stoneLantern(ctx: Ctx, x: number, s = 1): void {
+  const { g, night } = ctx;
+  const stone = 0xa8a398;
+  g.fillStyle(shade(stone, -0.15));
+  g.fillRect(x - 12 * s, -6 * s, 24 * s, 6 * s);
+  g.fillStyle(stone);
+  g.fillRect(x - 4 * s, -36 * s, 8 * s, 30 * s);
+  g.fillRect(x - 10 * s, -42 * s, 20 * s, 6 * s);
+  // 火袋
+  g.fillStyle(shade(stone, 0.08));
+  g.fillRect(x - 8 * s, -60 * s, 16 * s, 18 * s);
+  g.fillStyle(0x3a3430);
+  g.fillRect(x - 4 * s, -56 * s, 8 * s, 10 * s);
+  // 笠
+  g.fillStyle(shade(stone, -0.1));
+  g.fillPoints([
+    { x: x - 16 * s, y: -60 * s }, { x: x + 16 * s, y: -60 * s }, { x: x + 6 * s, y: -70 * s }, { x: x - 6 * s, y: -70 * s },
+  ], true);
+  g.fillStyle(stone);
+  g.fillCircle(x, -73 * s, 3.5 * s);
+  // 青苔
+  g.fillStyle(0x6a8a4a, 0.6);
+  g.fillEllipse(x - 8 * s, -61 * s, 10 * s, 3 * s);
+  g.fillEllipse(x + 6 * s, -7 * s, 8 * s, 3 * s);
+  night.fillStyle(0xffc070, 0.85);
+  night.fillRect(x - 4 * s, -56 * s, 8 * s, 10 * s);
+  night.fillStyle(0xff9a40, 0.22);
+  night.fillCircle(x, -51 * s, 26 * s);
+}
+
+/** 木造路燈（頂上一盞紙燈） */
+function woodLamp(ctx: Ctx, x: number, h: number): void {
+  const { g, night } = ctx;
+  g.fillStyle(0x4a3426);
+  g.fillRect(x - 2.5, -h, 5, h);
+  g.fillRect(x - 7, -4, 14, 4);
+  g.fillStyle(0x2a2220);
+  g.fillRect(x - 9, -h - 3, 18, 3);
+  g.fillStyle(0xf6ead0);
+  g.fillRoundedRect(x - 7, -h - 20, 14, 17, 3);
+  g.lineStyle(1, 0x8a6a4a, 0.7);
+  g.lineBetween(x - 7, -h - 14, x + 7, -h - 14);
+  g.lineBetween(x - 7, -h - 9, x + 7, -h - 9);
+  g.fillStyle(0x2a2220);
+  g.fillTriangle(x - 10, -h - 20, x + 10, -h - 20, x, -h - 28);
+  night.fillStyle(0xffd890, 0.9);
+  night.fillRoundedRect(x - 7, -h - 20, 14, 17, 3);
+  night.fillStyle(0xffb050, 0.22);
+  night.fillCircle(x, -h - 10, 38);
+}
+
+/** 一串小燈泡 */
+function bulbString(ctx: Ctx, x0: number, x1: number, y: number, sag: number, n: number): void {
+  const { g, night } = ctx;
+  const pts: Pt[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const t = i / 16;
+    pts.push({ x: x0 + (x1 - x0) * t, y: y + Math.sin(t * Math.PI) * sag });
+  }
+  g.lineStyle(1, 0x2a2420, 0.8);
+  g.strokePoints(pts, false);
+  const cols = [0xffe070, 0xff7a5a, 0x7ad0ff, 0x9aff8a];
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const bx = x0 + (x1 - x0) * t, by = y + Math.sin(t * Math.PI) * sag + 3;
+    g.fillStyle(cols[i % cols.length]);
+    g.fillCircle(bx, by, 2.2);
+    night.fillStyle(cols[i % cols.length], 0.9);
+    night.fillCircle(bx, by, 2.6);
+    night.fillStyle(0xffc070, 0.18);
+    night.fillCircle(bx, by, 7);
+  }
+}
+
+// ───────────────────────── 關子嶺：好漢坡 ─────────────────────────
+
+/** 好漢坡：階梯底端（地面）與爬上去消失的點（本地座標） */
+export const HAOHAN = { footX: 194, topX: 62, topY: -318 };
+
+function drawHaohan(ctx: Ctx): number {
+  const { g, w } = ctx;
+  const { footX, topX, topY } = HAOHAN;
+  // 山坡底色（越上面越暗，像走進樹林）
+  const hill = 0x4f7f48;
+  g.fillStyle(shade(hill, -0.08));
+  g.fillPoints([
+    { x: 0, y: 0 }, { x: 0, y: -372 }, { x: 178, y: -372 }, { x: 222, y: -320 },
+    { x: 252, y: -236 }, { x: 270, y: -150 }, { x: w, y: -96 }, { x: w, y: 0 },
+  ], true);
+  g.fillStyle(shade(hill, -0.3));
+  g.fillPoints([{ x: 0, y: -260 }, { x: 0, y: -372 }, { x: 178, y: -372 }, { x: 150, y: -300 }, { x: 70, y: -250 }], true);
+  // 遠處的樹幹
+  g.fillStyle(0x3a3226, 0.7);
+  for (const [tx, ty, th] of [[16, -230, 120], [116, -300, 70], [214, -250, 90], [36, -120, 110]] as [number, number, number][]) {
+    g.fillRect(tx, ty - th, 5, th);
+  }
+  // 林下的蕨類
+  for (const [x, y, s] of [[20, -40, 26], [236, -110, 22], [258, -60, 20], [110, -150, 18], [8, -170, 24]] as [number, number, number][]) {
+    bush(g, x, y, s, 0x5f9a50);
+  }
+
+  // 石階：沿斜線往左上爬，越高越窄（遠）
+  const hw = (t: number) => 40 - 24 * t;
+  const cxAt = (t: number) => footX + (topX - footX) * t;
+  const yAt = (t: number) => topY * (1 - Math.pow(1 - t, 1.3));
+  // 擋土石牆（樓梯右側的側面）
+  g.fillStyle(0x7d776c);
+  const side: Pt[] = [];
+  for (let i = 0; i <= 20; i++) { const t = i / 20; side.push({ x: cxAt(t) + hw(t), y: yAt(t) }); }
+  for (let i = 20; i >= 0; i--) { const t = i / 20; side.push({ x: cxAt(t) + hw(t) + 10 * (1 - t) + 3, y: yAt(t) + 12 * (1 - t) + 3 }); }
+  g.fillPoints(side, true);
+  const steps = 27;
+  for (let i = 0; i < steps; i++) {
+    const t0 = i / steps, t1 = (i + 1) / steps;
+    const y0 = yAt(t0), y1 = yAt(t1);
+    const base = i % 2 === 0 ? 0xa39d90 : 0x958f84;
+    g.fillStyle(base);
+    g.fillPoints([
+      { x: cxAt(t0) - hw(t0), y: y0 }, { x: cxAt(t0) + hw(t0), y: y0 },
+      { x: cxAt(t1) + hw(t1), y: y1 }, { x: cxAt(t1) - hw(t1), y: y1 },
+    ], true);
+    // 踏面亮邊
+    g.fillStyle(0xcac3b4);
+    g.fillRect(cxAt(t1) - hw(t1), y1, hw(t1) * 2, Math.max(1.2, (y0 - y1) * 0.28));
+    // 青苔斑
+    if (i % 5 === 2) {
+      g.fillStyle(0x6a8a4a, 0.55);
+      g.fillEllipse(cxAt(t0) - hw(t0) * 0.6, y0 - 2, 10 * (1 - t0 * 0.5), 3);
+    }
+  }
+  // 階梯頂端沒入樹蔭
+  g.fillStyle(0x1f3a22, 0.85);
+  g.fillEllipse(topX, topY - 4, 70, 34);
+
+  // 扶手（鐵管 + 木柱）
+  for (const side2 of [-1, 1]) {
+    const ex = (t: number) => cxAt(t) + side2 * (hw(t) - 3);
+    const rh = (t: number) => 24 * (1 - t * 0.55);
+    g.lineStyle(2, 0x5a4a3a);
+    for (let t = 0; t <= 0.92; t += 0.08) {
+      g.lineBetween(ex(t), yAt(t), ex(t), yAt(t) - rh(t));
+    }
+    g.lineStyle(2.5, 0x8a8a90);
+    g.lineBetween(ex(0), -rh(0), ex(0.92), yAt(0.92) - rh(0.92));
+    g.lineStyle(1, 0xc8c8d0, 0.8);
+    g.lineBetween(ex(0), -rh(0) - 1, ex(0.92), yAt(0.92) - rh(0.92) - 1);
+  }
+
+  // 頂端樹冠蓋住階梯
+  const canopy: [number, number, number, number, number][] = [
+    [topX - 30, topY - 26, 120, 60, 0x2f5a32], [topX + 46, topY - 18, 90, 50, 0x37663a],
+    [topX - 50, topY + 8, 70, 40, 0x3a6a3c], [topX + 80, topY + 16, 60, 34, 0x447a44],
+    [topX, topY - 40, 110, 40, 0x2a5030],
+  ];
+  for (const [x, y, ew, eh, col] of canopy) {
+    g.fillStyle(col);
+    g.fillEllipse(x, y, ew, eh);
+  }
+  g.fillStyle(0x7cc274, 0.35);
+  for (let i = 0; i < 10; i++) g.fillCircle(topX - 50 + i * 14, topY - 30 + Math.sin(i * 2.1) * 12, 2.5 + (i % 3));
+
+  // 右側竹林
+  bamboo(g, 252, 290, 4, 3);
+  // 左下大樹叢
+  bush(g, 40, -18, 46, 0x4f8a48);
+  bush(g, 112, -10, 30, 0x5a9650);
+
+  // 「好漢坡」直立木牌
+  const sx = 258;
+  g.fillStyle(0x4a3426);
+  g.fillRect(sx - 3, -178, 6, 178);
+  g.fillStyle(0x2a1e18);
+  g.fillRoundedRect(sx - 15, -184, 30, 92, 3);
+  g.fillStyle(0x8a5e38);
+  g.fillRoundedRect(sx - 12, -181, 24, 86, 2);
+  g.fillStyle(0x2a1e18);
+  g.fillTriangle(sx - 18, -184, sx + 18, -184, sx, -196);
+  vlabel(ctx, sx, -138, '好漢坡', 16, 0xfbf0d8);
+  // 「270 階」小牌
+  g.fillStyle(0xe8dcc0);
+  g.fillRoundedRect(sx - 22, -76, 44, 18, 3);
+  g.lineStyle(1.5, 0x4a3426);
+  g.strokeRoundedRect(sx - 22, -76, 44, 18, 3);
+  label(ctx, sx, -67, '270 階', 11, 0x4a3426);
+
+  // 石燈籠（夜燈）
+  stoneLantern(ctx, 138, 0.9);
+  return footX - 70;
+}
+
+// ───────────────────────── 關子嶺：寶泉橋露頭 ─────────────────────────
+
+/** 露頭冒煙的位置（本地座標；煙由場景動畫）。露頭左邊 x 0~64 留給鑽井機 */
+export const SPRING = { steamX: 130, steamY: -14 };
+
+function drawSpring(ctx: Ctx): number {
+  const { g, w } = ctx;
+  const px = SPRING.steamX;
+  // 後方長滿蕨類的山坡與一棵老樹（留出天空給蒸氣）
+  g.fillStyle(0x5a8a4e);
+  g.fillPoints([
+    { x: 0, y: 0 }, { x: 0, y: -70 }, { x: 40, y: -96 }, { x: 90, y: -120 }, { x: 170, y: -128 },
+    { x: 230, y: -160 }, { x: 270, y: -200 }, { x: w, y: -214 }, { x: w, y: 0 },
+  ], true);
+  g.fillStyle(0x4a7a44);
+  g.fillPoints([{ x: 200, y: -60 }, { x: 236, y: -150 }, { x: 270, y: -196 }, { x: w, y: -210 }, { x: w, y: -40 }], true);
+  const tk = 246;
+  g.fillStyle(0x5a4030);
+  g.fillPoints([{ x: tk - 8, y: -60 }, { x: tk - 5, y: -230 }, { x: tk + 5, y: -230 }, { x: tk + 9, y: -60 }], true);
+  g.lineStyle(4, 0x5a4030);
+  g.lineBetween(tk, -200, tk - 34, -246);
+  g.lineBetween(tk, -214, tk + 26, -258);
+  for (const [x, y, ew, eh, col] of [
+    [tk - 30, -262, 90, 56, 0x3f7a42], [tk + 22, -272, 80, 52, 0x4a8a4a], [tk - 6, -296, 86, 46, 0x559a52],
+    [tk - 52, -238, 50, 32, 0x4a8a4a], [tk + 30, -240, 44, 28, 0x3f7a42],
+  ] as [number, number, number, number, number][]) {
+    g.fillStyle(col);
+    g.fillEllipse(x, y, ew, eh);
+  }
+  bush(g, 24, -84, 26, 0x6aa25a);
+  bush(g, 226, -150, 22, 0x6aa25a);
+  // 碎石地（左側空地留給鑽井機）
+  g.fillStyle(0x8f887a);
+  g.fillRect(0, -8, 200, 8);
+  g.fillStyle(0x7a7468);
+  for (let x = 6; x < 196; x += 11) g.fillCircle(x, -4 + (x % 3), 2 + (x % 2));
+
+  // 露頭後方的岩壁
+  const rock = 0x7a756c;
+  g.fillStyle(rock);
+  g.fillPoints([
+    { x: 58, y: -6 }, { x: 64, y: -60 }, { x: 84, y: -98 }, { x: 116, y: -118 }, { x: 150, y: -112 },
+    { x: 176, y: -88 }, { x: 196, y: -50 }, { x: 204, y: -6 },
+  ], true);
+  g.fillStyle(shade(rock, -0.2));
+  g.fillPoints([{ x: 150, y: -112 }, { x: 176, y: -88 }, { x: 196, y: -50 }, { x: 204, y: -6 }, { x: 168, y: -6 }, { x: 160, y: -70 }], true);
+  // 泥漿流過的灰色痕跡
+  g.fillStyle(0x9a9a98, 0.8);
+  g.fillPoints([{ x: 112, y: -112 }, { x: 124, y: -110 }, { x: 132, y: -60 }, { x: 140, y: -18 }, { x: 116, y: -18 }, { x: 118, y: -70 }], true);
+  g.fillStyle(0xc8c8c4, 0.5);
+  g.fillRect(118, -100, 3, 70);
+  // 岩塊
+  for (const [x, y, ew, eh] of [[86, -70, 30, 20], [150, -86, 24, 16], [100, -100, 22, 14], [180, -40, 26, 18]] as [number, number, number, number][]) {
+    g.fillStyle(shade(rock, 0.12));
+    g.fillEllipse(x, y, ew, eh);
+    g.fillStyle(shade(rock, -0.08));
+    g.fillEllipse(x + 3, y + 3, ew * 0.6, eh * 0.4);
+  }
+  // 蕨類與小草
+  bush(g, 70, -104, 20, 0x5f9a50);
+  bush(g, 168, -106, 18, 0x6aa25a);
+  bush(g, 196, -20, 16, 0x5a8f4a);
+
+  // 灰黑色泥漿池
+  g.fillStyle(0x5a5650);
+  g.fillEllipse(px, -8, 132, 26);
+  g.fillStyle(0x3e3c3a);
+  g.fillEllipse(px, -8, 118, 20);
+  g.fillStyle(0x5e5c58);
+  g.fillEllipse(px - 14, -10, 70, 8);
+  // 冒泡（灰泥泡泡）
+  for (const [bx, by, r] of [[px - 30, -9, 4], [px + 10, -8, 5], [px + 34, -10, 3], [px - 6, -11, 2.5], [px + 22, -6, 2]] as [number, number, number][]) {
+    g.fillStyle(0x6e6c68);
+    g.fillCircle(bx, by - r * 0.4, r);
+    g.fillStyle(0xd8d8d4, 0.8);
+    g.fillCircle(bx - r * 0.35, by - r * 0.8, r * 0.35);
+    g.lineStyle(1, 0x8a8884, 0.7);
+    g.strokeEllipse(bx, by, r * 3.2, r * 0.9);
+  }
+  // 池邊沾滿泥漿的石頭
+  for (const [sx, sy, sw, sh] of [[px - 66, -10, 22, 16], [px + 62, -10, 24, 16], [px - 48, -4, 16, 10], [px + 50, -3, 18, 10], [px - 10, 2, 26, 8]] as [number, number, number, number][]) {
+    g.fillStyle(0x8a8680);
+    g.fillEllipse(sx, sy, sw, sh);
+    g.fillStyle(0xb4b0a8);
+    g.fillEllipse(sx - sw * 0.15, sy - sh * 0.25, sw * 0.5, sh * 0.35);
+    g.fillStyle(0x55524e, 0.7);
+    g.fillEllipse(sx + sw * 0.1, sy + sh * 0.2, sw * 0.7, sh * 0.3);
+  }
+
+  // 「泥漿溫泉露頭」小木牌（插在池子右邊）
+  const tx = 188;
+  g.fillStyle(0x5a3e28);
+  g.fillRect(tx - 2, -58, 4, 58);
+  g.fillStyle(0xe8dcc0);
+  g.fillRoundedRect(tx - 34, -82, 68, 22, 3);
+  g.lineStyle(1.5, 0x5a3e28);
+  g.strokeRoundedRect(tx - 34, -82, 68, 22, 3);
+  label(ctx, tx, -71, '泥漿溫泉露頭', 10, 0x4a3426);
+
+  // 寶泉橋（小石拱橋，橋下是溪水）
+  const bl = 204, br = w - 2, bcx = (bl + br) / 2;
+  const deckY = -40;
+  const stone = 0xa8a294;
+  // 溪水（拱洞內）
+  g.fillStyle(0x6a8a8a);
+  g.fillRect(bl, -26, br - bl, 26);
+  // 橋身
+  g.fillStyle(stone);
+  const body: Pt[] = [{ x: bl - 6, y: 0 }, { x: bl - 6, y: deckY + 6 }];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    body.push({ x: bl - 6 + (br - bl + 12) * t, y: deckY - Math.sin(t * Math.PI) * 10 });
+  }
+  body.push({ x: br + 6, y: deckY + 6 }, { x: br + 6, y: 0 });
+  g.fillPoints(body, true);
+  bricks(g, bl - 6, deckY, br - bl + 12, -deckY, shade(stone, -0.35), 10, 22);
+  // 拱洞
+  const ar = 34;
+  g.fillStyle(0x3a4446);
+  g.slice(bcx, 0, ar, Math.PI, 0, false);
+  g.fillPath();
+  g.fillStyle(0x6a8a8a);
+  g.fillRect(bcx - ar, -8, ar * 2, 8);
+  g.fillStyle(0xffffff, 0.5);
+  g.fillRect(bcx - 20, -5, 12, 1.5);
+  g.fillRect(bcx + 6, -3, 16, 1.5);
+  // 拱石
+  g.lineStyle(1.5, shade(stone, -0.3), 0.8);
+  for (let a = 0; a <= 12; a++) {
+    const rad = Math.PI + (a / 12) * Math.PI;
+    g.lineBetween(bcx + Math.cos(rad) * ar, Math.sin(rad) * ar, bcx + Math.cos(rad) * (ar + 9), Math.sin(rad) * (ar + 9));
+  }
+  g.beginPath();
+  g.arc(bcx, 0, ar + 9, Math.PI, 0, false);
+  g.strokePath();
+  // 欄杆
+  g.fillStyle(shade(stone, 0.12));
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4;
+    const x = bl + (br - bl) * t;
+    const y = deckY - Math.sin(t * Math.PI) * 10;
+    g.fillRect(x - 4, y - 24, 8, 24);
+    g.fillCircle(x, y - 25, 4.5);
+  }
+  g.lineStyle(4, shade(stone, 0.05));
+  const rail: Pt[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    rail.push({ x: bl + (br - bl) * t, y: deckY - Math.sin(t * Math.PI) * 10 - 16 });
+  }
+  g.strokePoints(rail, false);
+  // 橋名石牌
+  g.fillStyle(0x5a554c);
+  g.fillRoundedRect(bcx - 30, deckY - 2, 60, 20, 3);
+  g.fillStyle(0xd8d2c4);
+  g.fillRoundedRect(bcx - 27, deckY + 1, 54, 14, 2);
+  label(ctx, bcx, deckY + 8, '寶泉橋', 11, 0x3a3430);
+  // 溪邊石燈籠
+  stoneLantern(ctx, br - 14, 0.75);
+  return 40;
+}
+
+// ───────────────────────── 關子嶺：水火同源 ─────────────────────────
+
+/** 水火同源：火苗位置、可坐的平石、圍觀的範圍（本地座標） */
+export const FIRE = { flameX: 160, flameY: -12, sitXs: [52, 250, 296], standMin: 72, standMax: 300 };
+
+function drawFire(ctx: Ctx, variant: string): number {
+  const { g, night, w } = ctx;
+  const fx = FIRE.flameX;
+  // 岩壁
+  const rock = 0x857a6a;
+  g.fillStyle(rock);
+  g.fillPoints([
+    { x: 0, y: 0 }, { x: 0, y: -300 }, { x: 24, y: -330 }, { x: 70, y: -318 }, { x: 110, y: -340 },
+    { x: 160, y: -310 }, { x: 200, y: -290 }, { x: 236, y: -240 }, { x: 262, y: -180 }, { x: 276, y: -100 },
+    { x: 288, y: -40 }, { x: 300, y: 0 },
+  ], true);
+  // 岩層紋理
+  g.lineStyle(2, shade(rock, -0.22), 0.7);
+  for (const [x0, y0, x1, y1] of [[6, -260, 120, -270], [20, -200, 90, -196], [180, -230, 240, -214], [10, -90, 70, -100], [210, -130, 266, -120], [100, -150, 140, -146]]) {
+    g.lineBetween(x0, y0, x1, y1);
+  }
+  g.fillStyle(shade(rock, -0.15));
+  g.fillPoints([{ x: 200, y: -290 }, { x: 236, y: -240 }, { x: 262, y: -180 }, { x: 276, y: -100 }, { x: 288, y: -40 }, { x: 300, y: 0 }, { x: 236, y: 0 }, { x: 226, y: -150 }], true);
+  // 岩縫（黑色、往下變寬）
+  g.fillStyle(0x1e1a18);
+  g.fillPoints([
+    { x: 164, y: -232 }, { x: 170, y: -180 }, { x: 166, y: -130 }, { x: 176, y: -80 }, { x: 178, y: -30 },
+    { x: 182, y: -12 }, { x: 140, y: -12 }, { x: 148, y: -40 }, { x: 156, y: -90 }, { x: 152, y: -150 }, { x: 160, y: -200 },
+  ], true);
+  // 長年燻黑的痕跡
+  for (const [sx, sy, sw, sh, a] of [
+    [fx + 2, -40, 64, 50, 0.22], [fx + 8, -80, 48, 60, 0.2], [fx + 4, -128, 36, 60, 0.16],
+    [fx + 10, -176, 26, 50, 0.12], [fx - 12, -60, 30, 40, 0.14], [fx + 24, -100, 22, 40, 0.12],
+  ] as [number, number, number, number, number][]) {
+    g.fillStyle(0x2a2420, a);
+    g.fillEllipse(sx, sy, sw, sh);
+  }
+  // 青苔、蕨類
+  bush(g, 30, -312, 24, 0x5a8a48);
+  bush(g, 120, -334, 22, 0x4f8040);
+  bush(g, 230, -240, 18, 0x5f9a50);
+  bush(g, 6, -150, 20, 0x5a8a48);
+
+  // 刻在岩壁上的紅字「水火同源」
+  g.fillStyle(0xa09482);
+  g.fillRoundedRect(52, -280, 44, 150, 6);
+  g.lineStyle(1.5, shade(rock, -0.3), 0.7);
+  g.strokeRoundedRect(52, -280, 44, 150, 6);
+  vlabel(ctx, 74, -205, '水火同源', 26, 0xc8322a);
+
+  // 腳下的小水池
+  g.fillStyle(0x6a6458);
+  g.fillEllipse(fx, -6, 150, 24);
+  g.fillStyle(0x4f6e70);
+  g.fillEllipse(fx, -7, 134, 18);
+  g.fillStyle(0x7a9a9a);
+  g.fillEllipse(fx - 18, -9, 70, 6);
+  g.fillStyle(0xffffff, 0.45);
+  g.fillRect(fx - 50, -9, 14, 1.5);
+  g.fillRect(fx + 26, -6, 18, 1.5);
+  // 火苗底下的水泡
+  g.lineStyle(1, 0xcfe0e0, 0.8);
+  g.strokeEllipse(fx, FIRE.flameY + 4, 20, 4);
+  g.strokeEllipse(fx + 6, FIRE.flameY + 6, 10, 2.5);
+  // 池邊石塊
+  for (const [sx, sy, sw, sh] of [[fx - 76, -8, 20, 14], [fx + 74, -8, 22, 14], [fx - 40, 1, 24, 8], [fx + 34, 1, 22, 8]] as [number, number, number, number][]) {
+    g.fillStyle(0x8f887a);
+    g.fillEllipse(sx, sy, sw, sh);
+    g.fillStyle(0xb0a898);
+    g.fillEllipse(sx - 3, sy - 3, sw * 0.5, sh * 0.35);
+  }
+
+  // 攤車/烤肉區（畫在平石之前）
+  if (variant === 'stall') drawFireStalls(ctx);
+  if (variant === 'full') drawFireBBQ(ctx);
+
+  // 可以坐的平石
+  for (const sx of FIRE.sitXs) {
+    g.fillStyle(0x6e685e);
+    g.fillEllipse(sx, -6, 40, 14);
+    g.fillStyle(0x9a9284);
+    g.fillRoundedRect(sx - 18, -18, 36, 12, 5);
+    g.fillStyle(0xb8b0a0);
+    g.fillRect(sx - 14, -18, 28, 3);
+  }
+
+  if (variant === 'protect') {
+    // 低矮木柵欄圍住水池
+    const l = fx - 88, r = fx + 88;
+    g.fillStyle(0x7a5232);
+    for (let x = l; x <= r; x += 22) {
+      g.fillRect(x - 2, -26, 4, 26);
+      g.fillCircle(x, -26, 2.5);
+    }
+    g.fillRect(l, -22, r - l, 3);
+    g.fillRect(l, -12, r - l, 3);
+    g.fillStyle(0x9a6b42);
+    g.fillRect(l, -22, r - l, 1);
+    // 說明告示牌
+    const sx = w - 26;
+    g.fillStyle(0x4a3426);
+    g.fillRect(sx - 18, -50, 4, 50);
+    g.fillRect(sx + 14, -50, 4, 50);
+    g.fillStyle(0x2f5a4a);
+    g.fillRoundedRect(sx - 24, -96, 48, 50, 3);
+    g.lineStyle(1.5, 0xfbf6ec, 0.8);
+    g.strokeRoundedRect(sx - 21, -93, 42, 44, 2);
+    label(ctx, sx, -72, '請勿靠近\n保育區', 9, 0xfbf6ec).setLineSpacing(2);
+    // 一盞夜燈
+    woodLamp(ctx, 16, 120);
+  }
+  if (variant === 'full') {
+    // 隨地垃圾
+    const litter: [number, number, number][] = [[96, -3, 0xd64545], [126, -2, 0xffffff], [214, -3, 0x4f86c6], [236, -2, 0xf2c14e], [60, -2, 0xffffff], [310, -3, 0xd64545]];
+    for (const [lx, ly, col] of litter) {
+      g.fillStyle(col);
+      if (col === 0xffffff) g.fillEllipse(lx, ly, 10, 6);
+      else g.fillRoundedRect(lx - 3, ly - 6, 6, 8, 1);
+    }
+    g.lineStyle(1, 0xc8a070);
+    g.lineBetween(140, -2, 150, -5);
+    g.lineBetween(186, -1, 196, -3);
+    g.lineBetween(270, -2, 278, -1);
+  }
+  night.fillStyle(0xff9040, 0.12);
+  night.fillEllipse(fx, -60, 120, 140);
+  return fx + 40;
+}
+
+/** 水火同源：爆米花車 + 烤魷魚攤 */
+function drawFireStalls(ctx: Ctx): void {
+  const { g, night, w } = ctx;
+  // 爆米花車（左）
+  const px = 8, pw = 50;
+  g.fillStyle(0x3a3a40);
+  g.fillCircle(px + 10, -7, 6);
+  g.fillCircle(px + pw - 10, -7, 6);
+  g.fillStyle(0xd64545);
+  g.fillRect(px, -44, pw, 34);
+  g.fillStyle(0xfbf6ec);
+  for (let x = px + 4; x < px + pw; x += 10) g.fillRect(x, -44, 5, 34);
+  g.fillStyle(0xf2c14e);
+  g.fillRect(px - 2, -48, pw + 4, 5);
+  // 玻璃箱與爆米花
+  g.fillStyle(0xdfeef2, 0.8);
+  g.fillRect(px + 4, -92, pw - 8, 44);
+  g.fillStyle(0xfff4d0);
+  for (let k = 0; k < 16; k++) g.fillCircle(px + 9 + (k * 7) % (pw - 16), -54 - Math.floor(k / 6) * 6 - (k % 2) * 2, 3.2);
+  g.fillStyle(0x8a8a90);
+  g.fillRect(px + 16, -88, 14, 8);
+  g.lineStyle(2, 0xd64545);
+  g.strokeRect(px + 4, -92, pw - 8, 44);
+  g.fillStyle(0xd64545);
+  g.fillRoundedRect(px - 2, -106, pw + 4, 14, { tl: 6, tr: 6, bl: 0, br: 0 });
+  label(ctx, px + pw / 2, -99, '爆米花', 10, 0xfbf6ec);
+  night.fillStyle(0xfff0b0, 0.6);
+  night.fillRect(px + 4, -92, pw - 8, 44);
+  night.fillStyle(0xffc060, 0.2);
+  night.fillCircle(px + pw / 2, -70, 40);
+
+  // 烤魷魚攤（右，小洋傘）
+  const sx = w - 74, sw = 66;
+  g.fillStyle(0x6a6f78);
+  g.fillCircle(sx + 10, -7, 6);
+  g.fillCircle(sx + sw - 10, -7, 6);
+  g.fillStyle(0x8a6a4a);
+  g.fillRect(sx, -46, sw, 36);
+  g.fillStyle(0xfbf6ec);
+  g.fillRect(sx + 4, -38, sw - 8, 16);
+  label(ctx, sx + sw / 2, -30, '烤魷魚', 11, 0xb8322a);
+  // 烤架與魷魚串
+  g.fillStyle(0x2a2a2e);
+  g.fillRect(sx + 4, -52, sw - 8, 6);
+  g.fillStyle(0xff7a30);
+  g.fillRect(sx + 6, -50, sw - 12, 2);
+  for (let k = 0; k < 4; k++) {
+    const qx = sx + 12 + k * 14;
+    g.lineStyle(1, 0xc8a070);
+    g.lineBetween(qx, -52, qx, -76);
+    g.fillStyle(0xe8b070);
+    g.fillEllipse(qx, -66, 9, 16);
+    g.fillStyle(0xc8783a);
+    g.fillTriangle(qx - 4, -58, qx + 4, -58, qx, -52);
+    g.fillRect(qx - 3, -68, 6, 1.5);
+  }
+  smoke(g, sx + sw / 2, -84, 5, 0xe8e4dc, 0.4);
+  // 小洋傘
+  g.fillStyle(0x6a5a4a);
+  g.fillRect(sx + sw - 6, -128, 3, 82);
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle(i % 2 === 0 ? 0x3b8ad8 : 0xfbf6ec);
+    g.slice(sx + sw - 5, -124, 44, Math.PI + (i / 6) * Math.PI, Math.PI + ((i + 1) / 6) * Math.PI, false);
+    g.fillPath();
+  }
+  g.fillStyle(0xfff0b0);
+  g.fillCircle(sx + sw - 5, -118, 3);
+  night.fillStyle(0xffd070, 0.85);
+  night.fillCircle(sx + sw - 5, -118, 4);
+  night.fillStyle(0xff7a30, 0.3);
+  night.fillRect(sx + 4, -54, sw - 8, 8);
+  night.fillStyle(0xffa040, 0.22);
+  night.fillCircle(sx + sw / 2, -80, 40);
+}
+
+/** 水火同源：全面開發的烤肉區 */
+function drawFireBBQ(ctx: Ctx): void {
+  const { g, night, w } = ctx;
+  // 橫幅
+  const bl = 196, br = w - 6, by = -150;
+  g.fillStyle(0x6a6a72);
+  g.fillRect(bl - 2, by - 6, 4, -by + 6);
+  g.fillRect(br - 2, by - 6, 4, -by + 6);
+  g.fillStyle(0xd64545);
+  g.fillPoints([{ x: bl, y: by }, { x: br, y: by }, { x: br, y: by + 26 }, { x: (bl + br) / 2, y: by + 30 }, { x: bl, y: by + 26 }], true);
+  g.fillStyle(0xf2c14e);
+  g.fillRect(bl, by, br - bl, 3);
+  label(ctx, (bl + br) / 2, by + 14, '水火同源烤肉區', 15, 0xfff4c0, '900', 0x8a1a14);
+  // 串燈（從岩壁拉到旗桿）
+  g.fillStyle(0x6a6a72);
+  g.fillRect(8, -170, 4, 170);
+  bulbString(ctx, 10, bl, -166, 30, 14);
+  bulbString(ctx, 10, br, -120, 34, 20);
+
+  // 長桌 + 長凳 + 烤爐
+  const tables: [number, number][] = [[2, 92], [w - 96, 94]];
+  for (const [tx, tw] of tables) {
+    // 後排長凳
+    g.fillStyle(0x7a5232);
+    g.fillRect(tx + 4, -34, tw - 8, 4);
+    // 桌子
+    g.fillStyle(0x6b4a30);
+    g.fillRect(tx + 8, -40, 5, 40);
+    g.fillRect(tx + tw - 13, -40, 5, 40);
+    g.fillStyle(0x9a6b42);
+    g.fillRect(tx, -46, tw, 7);
+    g.fillStyle(0xb88a5a);
+    g.fillRect(tx, -46, tw, 2);
+    // 桌上的烤肉爐
+    const gx = tx + tw / 2;
+    g.fillStyle(0x2a2a2e);
+    g.fillRect(gx - 18, -58, 36, 12);
+    g.fillStyle(0xff6a2a);
+    g.fillRect(gx - 15, -60, 30, 3);
+    g.lineStyle(1, 0x8a8a90);
+    for (let x = gx - 15; x <= gx + 15; x += 5) g.lineBetween(x, -62, x, -58);
+    g.fillStyle(0xc8783a);
+    g.fillEllipse(gx - 7, -63, 10, 4);
+    g.fillStyle(0xd8a050);
+    g.fillEllipse(gx + 6, -63, 9, 4);
+    smoke(g, gx - 2, -72, 7, 0xe8e4dc, 0.45);
+    smoke(g, gx + 8, -80, 5, 0xd8d4cc, 0.35);
+    night.fillStyle(0xff6a2a, 0.7);
+    night.fillRect(gx - 15, -60, 30, 3);
+    night.fillStyle(0xff8a30, 0.22);
+    night.fillEllipse(gx, -60, 70, 30);
+    // 桌上的飲料罐與盤子
+    g.fillStyle(0x4f86c6);
+    g.fillRect(tx + 8, -54, 5, 8);
+    g.fillStyle(0xd64545);
+    g.fillRect(tx + tw - 14, -54, 5, 8);
+    g.fillStyle(0xffffff);
+    g.fillEllipse(tx + 24, -47, 12, 3);
+    // 前排長凳
+    g.fillStyle(0x8a5e38);
+    g.fillRect(tx + 6, -18, tw - 12, 5);
+    g.fillRect(tx + 10, -13, 4, 13);
+    g.fillRect(tx + tw - 14, -13, 4, 13);
+  }
+  // 地上的落地烤爐
+  const ox = 236;
+  g.fillStyle(0x2a2a2e);
+  g.fillRect(ox - 4, -30, 3, 30);
+  g.fillRect(ox + 18, -30, 3, 30);
+  g.fillRoundedRect(ox - 8, -40, 32, 12, 3);
+  g.fillStyle(0xff6a2a);
+  g.fillRect(ox - 5, -42, 26, 2);
+  smoke(g, ox + 8, -50, 6, 0xe0dcd4, 0.4);
+  night.fillStyle(0xff6a2a, 0.6);
+  night.fillRect(ox - 5, -42, 26, 2);
+  // 垃圾桶滿出來
+  const tx2 = 116;
+  g.fillStyle(0x3f8f4f);
+  g.fillRect(tx2 - 9, -26, 18, 26);
+  g.fillStyle(0x2f6f3f);
+  g.fillRect(tx2 - 10, -28, 20, 4);
+  g.fillStyle(0xffffff);
+  g.fillEllipse(tx2 - 3, -31, 10, 7);
+  g.fillStyle(0xd64545);
+  g.fillRect(tx2 + 2, -36, 5, 8);
+}
+
+// ───────────────────────── 關子嶺：火王爺廟口 ─────────────────────────
+
+function drawFireShrine(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const cx = w / 2;
+  const L = 26, R = w - 26;
+  // 廟埕石板與台基
+  g.fillStyle(0xb8b2a6);
+  g.fillRect(0, -6, w, 6);
+  g.fillStyle(0x9d968a);
+  g.fillRect(L - 10, -18, R - L + 20, 12);
+  g.fillStyle(0xb8b2a6);
+  g.fillRect(L - 10, -18, R - L + 20, 3);
+  // 牆
+  const wall = 0xc8473a;
+  g.fillStyle(wall);
+  g.fillRect(L, -150, R - L, 132);
+  bricks(g, L, -150, R - L, 132, shade(wall, -0.3), 9, 18);
+  // 石裙堵
+  g.fillStyle(0xa79f92);
+  g.fillRect(L, -46, R - L, 28);
+  g.lineStyle(1, 0x7d766b, 0.7);
+  for (let x = L + 28; x < R; x += 28) g.lineBetween(x, -46, x, -18);
+  // 兩側圓窗（火焰窗櫺）
+  for (const wx of [L + 24, R - 24]) {
+    g.fillStyle(0x5a3a2a);
+    g.fillCircle(wx, -96, 15);
+    g.fillStyle(0x3b8a6a);
+    g.fillCircle(wx, -96, 12);
+    g.fillStyle(0xf2c14e);
+    g.fillTriangle(wx - 6, -88, wx + 6, -88, wx, -106);
+    g.fillStyle(0xe0603a);
+    g.fillTriangle(wx - 3, -88, wx + 3, -88, wx, -98);
+  }
+  // 中門
+  const dl = cx - 30, dr = cx + 30;
+  g.fillStyle(0x3a2a20);
+  g.fillRect(dl - 5, -112, dr - dl + 10, 94);
+  g.fillStyle(0xb8322a);
+  g.fillRect(dl, -108, (dr - dl) / 2 - 1, 90);
+  g.fillRect(cx + 1, -108, (dr - dl) / 2 - 1, 90);
+  // 門上的火焰紋
+  for (const mx of [cx - 15, cx + 15]) {
+    g.fillStyle(0xf2c14e);
+    g.fillCircle(mx, -70, 9);
+    g.fillStyle(0xe0603a);
+    g.fillTriangle(mx - 6, -66, mx + 6, -66, mx, -86);
+    g.fillTriangle(mx - 7, -64, mx - 1, -64, mx - 6, -80);
+    g.fillTriangle(mx + 1, -64, mx + 7, -64, mx + 6, -80);
+    g.fillStyle(0xfff0a0);
+    g.fillTriangle(mx - 3, -64, mx + 3, -64, mx, -74);
+  }
+  g.fillStyle(C.gold);
+  for (let r = 0; r < 3; r++) for (const mx of [cx - 5, cx + 5]) g.fillCircle(mx, -40 + r * 7, 1.4);
+  night.fillStyle(0xffb050, 0.35);
+  night.fillRect(dl, -108, dr - dl, 90);
+  night.fillStyle(0xff8030, 0.2);
+  night.fillEllipse(cx, -36, 130, 70);
+  // 紅柱
+  for (const px of [L + 6, cx - 44, cx + 44, R - 6]) {
+    g.fillStyle(0xd02a24);
+    g.fillRect(px - 6, -150, 12, 132);
+    g.fillStyle(0xe85a4a);
+    g.fillRect(px - 4, -150, 3, 132);
+    g.fillStyle(0x8a8478);
+    g.fillRect(px - 8, -28, 16, 10);
+  }
+  // 楣樑彩繪
+  g.fillStyle(0x2f6a8a);
+  g.fillRect(L - 4, -160, R - L + 8, 11);
+  for (let x = L; x < R; x += 20) {
+    g.fillStyle([0xf2c14e, 0x3fa66a, 0xe0603a][(x / 20 | 0) % 3]);
+    g.fillRect(x + 4, -157, 11, 5);
+  }
+  // 燕尾屋頂 + 剪黏
+  const ridgeTop = swallowRoof(g, cx, -160, w - 10, -206, w - 70, 0xe0763a, 0xb8322a, 18, 7);
+  ridgeDeco(g, cx, ridgeTop, w - 70);
+  // 匾額
+  g.fillStyle(0x6a2a1a);
+  g.fillRoundedRect(cx - 46, -146, 92, 28, 3);
+  g.fillStyle(C.gold);
+  g.fillRoundedRect(cx - 43, -143, 86, 22, 3);
+  g.lineStyle(1.5, 0xa8761e);
+  g.strokeRoundedRect(cx - 40, -140, 80, 16, 2);
+  label(ctx, cx, -132, '火王爺廟', 14, 0x6a2a1a);
+  // 燈籠
+  lantern(ctx, cx - 44, -122, 9);
+  lantern(ctx, cx + 44, -122, 9);
+  lantern(ctx, L + 6, -128, 7);
+  lantern(ctx, R - 6, -128, 7);
+  // 香爐
+  const bx = cx;
+  g.fillStyle(0x6a5a3a);
+  g.fillRect(bx - 4, -10, 8, 6);
+  g.fillStyle(0xc89a3a);
+  g.fillRoundedRect(bx - 20, -30, 40, 20, 6);
+  g.fillStyle(0xa87a22);
+  g.fillRect(bx - 24, -34, 48, 5);
+  g.fillRect(bx - 18, -39, 5, 7);
+  g.fillRect(bx + 13, -39, 5, 7);
+  g.fillStyle(0xe8c46a, 0.6);
+  g.fillRect(bx - 16, -27, 7, 12);
+  g.lineStyle(1, 0x8a3a2a);
+  for (let i = -2; i <= 2; i++) g.lineBetween(bx + i * 4, -34, bx + i * 5, -46);
+  smoke(g, bx, -52, 6, 0xeae6de, 0.45);
+  night.fillStyle(0xff7a30, 0.4);
+  night.fillEllipse(bx, -34, 36, 9);
+  return cx + 70;
 }
 
 // ───────────────────────── 未知 id：簡單告示牌 ─────────────────────────

@@ -5,7 +5,10 @@ import type { Category, FacadeStyle } from './shops';
 // =====================================================================
 
 export type HairStyle = 'short' | 'long' | 'bald' | 'bun' | 'spiky' | 'ponytail' | 'bob';
-export type Accessory = 'none' | 'glasses' | 'hat' | 'apron' | 'headband' | 'beard' | 'cap' | 'scarf' | 'camera';
+export type Accessory =
+  | 'none' | 'glasses' | 'hat' | 'apron' | 'headband' | 'beard' | 'cap' | 'scarf' | 'camera'
+  // 關子嶺：浴衣、妖怪
+  | 'yukata' | 'kappa' | 'tanuki' | 'kitsune' | 'yukionna';
 
 export interface Look {
   skin: number;
@@ -77,7 +80,7 @@ export type ActorRef = string;
 
 export type Emote = 'anger' | 'heart' | 'sweat' | 'shock' | 'music' | 'idea' | 'sad' | 'star' | 'zzz';
 
-export type FxKind = 'firecracker' | 'confetti' | 'sparkle' | 'smoke' | 'flash' | 'coins' | 'stink';
+export type FxKind = 'firecracker' | 'confetti' | 'sparkle' | 'smoke' | 'flash' | 'coins' | 'stink' | 'quake' | 'leaves';
 
 export interface Effects {
   money?: number;
@@ -102,6 +105,24 @@ export interface Effects {
   levelUp?: string[];
   /** 準備祈神儀式（今天是神隱日就保護今天，否則保護明天） */
   ritual?: boolean;
+  /** 關子嶺：民怨增減 */
+  grievance?: number;
+  /** 關子嶺：水火同源改成某個經營模式（劇情用，不收復原費） */
+  fireMode?: FireMode;
+  /** 關子嶺：預約明天舉辦妖怪祭 */
+  festival?: boolean;
+  /** 關子嶺：加固管線（地震損失減少） */
+  reinforce?: boolean;
+  /** 關子嶺：大地震 */
+  quake?: boolean;
+  /** 關子嶺：樹葉錢的處理方式 */
+  leaves?: LeafChoice;
+  /** 關子嶺：封掉一口泉井 */
+  sealWell?: boolean;
+  /** 關子嶺：泉量永久增加（妖怪報恩） */
+  springBonus?: number;
+  /** 關子嶺：妖怪好感 */
+  yokaiFavor?: number;
   /** 過關 */
   chapterComplete?: boolean;
 }
@@ -182,6 +203,34 @@ export interface Mods {
   transport?: number;
   /** 外國旅客比例倍率 */
   foreign?: number;
+}
+
+export type FireMode = 'protect' | 'stall' | 'full';
+export type LeafChoice = 'accept' | 'burn' | 'charm' | 'charmBust';
+export type YokaiKind = 'kappa' | 'tanuki' | 'kitsune' | 'yukionna';
+
+/** 妖怪祭（關子嶺） */
+export interface Festival {
+  /** 舉辦的那一天 */
+  day: number;
+  /** 妖怪付的樹葉錢：會長的抽成、各租客的營收 */
+  leafCommission: number;
+  leafByTenant: Record<string, number>;
+  /** 這場被識破的妖怪數（好感每場最多 +3） */
+  exposed: number;
+  /** 天下第一鼎的結果（還沒煮是 undefined） */
+  cauldron?: boolean;
+}
+
+/** 大地震（關子嶺） */
+export interface QuakeState {
+  day: number;
+  /** 震前泉量 */
+  before: number;
+  /** 損失的泉量 */
+  loss: number;
+  /** 自然恢復的泉量 */
+  recovered: number;
 }
 
 export interface Buff {
@@ -273,6 +322,12 @@ export interface StreetDef {
   closeHour?: number;
   /** 交通：有設定的老街，人潮會被交通容量卡住 */
   transport?: { base: number; name: string };
+  /** 溫泉：露頭基本泉量、開井費用、每口井的泉量（關子嶺） */
+  spring?: { base: number; wellCost: number[]; wellYield: number };
+  /** 固定在第幾天發生大地震 */
+  quakeDay?: number;
+  /** 妖怪祭當天的打烊時間 */
+  festivalCloseHour?: number;
   shopTypes: string[];
   tenants: TenantProfile[];
   stories: StoryEvent[];
@@ -321,6 +376,8 @@ export interface Lot {
   shop: ShopInstance | null;
   /** 遊客服務中心（佔一個店面） */
   facility?: FacilityInstance | null;
+  /** 共同浴場（佔一個店面，關子嶺） */
+  bath?: boolean;
 }
 
 export type Weather = 'sunny' | 'rain' | 'fog' | 'heavyFog';
@@ -366,6 +423,13 @@ export interface DayStats {
   /** 在觀景台停下來看風景的人、投幣望遠鏡收入 */
   sightseers: number;
   telescope: number;
+  /** 水火同源：停下來的人、攤販收入 */
+  fireVisitors: number;
+  fireIncome: number;
+  /** 爬好漢坡的人 */
+  hikers: number;
+  /** 祭典夜：真妖怪消費次數、被識破的妖怪 */
+  yokai: number;
 }
 
 export interface DaySummary {
@@ -392,6 +456,15 @@ export interface DaySummary {
   overnight: number;
   sightseers?: number;
   telescope?: number;
+  fireVisitors?: number;
+  fireIncome?: number;
+  hikers?: number;
+  /** 關子嶺：泉量供需、民怨、暫停營業的店 */
+  spring?: { supply: number; demand: number };
+  grievanceBefore?: number;
+  grievanceAfter?: number;
+  closed?: string[];
+  festival?: boolean;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
@@ -450,4 +523,27 @@ export interface GameState {
   history: DaySummary[];
   gameOver: boolean;
   chapterComplete: boolean;
+  // ---- 關子嶺（其他老街用預設值） ----
+  /** 目前在用的泉井數、開過的泉井總數、上次開井是第幾天 */
+  wells: number;
+  wellsEver: number;
+  lastWellDay: number;
+  /** 民怨 0~100 */
+  grievance: number;
+  /** 今天因為抗議靜坐暫停營業的店面 */
+  closedToday: number[];
+  fireMode: FireMode;
+  /** 水火同源的火勢（1 = 平常） */
+  fireLevel: number;
+  /** 連續全面開發的天數 */
+  fireFullDays: number;
+  /** 加固了管線 */
+  reinforced: boolean;
+  quake: QuakeState | null;
+  /** 妖怪報恩增加的泉量 */
+  springBonus: number;
+  /** 已預約或進行中的妖怪祭 */
+  festival: Festival | null;
+  /** 妖怪好感（累積） */
+  yokaiFavor: number;
 }
