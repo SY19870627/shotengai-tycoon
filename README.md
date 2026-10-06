@@ -8,6 +8,8 @@
 
 推到 `main` 後會自動部署到 GitHub Pages：<https://sy19870627.github.io/shotengai-tycoon/>。手機建議橫拿，用手指拖曳就能移動街道。
 
+測試時可以在網址後面加上 `?unlock=all`，直接解鎖所有能玩的老街。
+
 第一次使用要到 repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
 
 ## 快速開始

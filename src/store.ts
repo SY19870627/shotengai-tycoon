@@ -57,6 +57,15 @@ export const store = {
   storyRunning: false,
 };
 
+// 測試用：網址加上 ?unlock=all 可以直接解鎖所有能玩的老街
+try {
+  if (new URLSearchParams(location.search).get('unlock') === 'all') {
+    for (const id of Object.keys(STREETS)) if (STREETS[id].playable && !store.meta.unlocked.includes(id)) store.meta.unlocked.push(id);
+  }
+} catch {
+  /* 非瀏覽器環境 */
+}
+
 /** 目前的遊戲狀態（在老街場景中一定存在） */
 export function S(): GameState {
   if (!store.state) throw new Error('沒有進行中的老街');
