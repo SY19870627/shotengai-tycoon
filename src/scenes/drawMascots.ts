@@ -29,6 +29,9 @@ function drawMascot(g: G, id: string, f: number): void {
     case 'taroCat': drawTaroCat(g, f); break;
     case 'lantern': drawLantern(g, f); break;
     case 'goldMouse': drawGoldMouse(g, f); break;
+    case 'mudboy': drawMudboy(g, f); break;
+    case 'chick': drawChick(g, f); break;
+    case 'flame': drawFlame(g, f); break;
     default: drawGeneric(g, f); break;
   }
 }
@@ -344,6 +347,129 @@ function drawLantern(g: G, f: number): void {
   // 「福」字點綴改用金色小圓
   g.fillStyle(0xf2c14e, 0.85);
   g.fillCircle(cx + 14, hy - 10, 2);
+}
+
+// ───────────────────────── 泥泥（關子嶺） ─────────────────────────
+
+function drawMudboy(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  const mud = 0x7a7570;
+  feet(g, cx, 84, shade(mud, -0.1), f, 8, 7);
+  // 滴下來的泥漿身體（上窄下寬）
+  const top = 30 + bob;
+  g.fillStyle(shade(mud, -0.25));
+  g.fillEllipse(cx + 3, top + 34, 50, 46);
+  g.fillStyle(mud);
+  g.fillEllipse(cx, top + 32, 50, 46);
+  g.fillEllipse(cx, top + 14, 36, 30);
+  // 往下滴的泥
+  for (const [dx, len] of [[-18, 10], [-6, 14], [10, 8], [19, 12]]) {
+    g.fillRoundedRect(cx + dx - 3, top + 46, 6, len + (f ? 2 : 0), 3);
+    g.fillCircle(cx + dx, top + 46 + len + (f ? 2 : 0), 3.5);
+  }
+  // 亮面與泥泡
+  g.fillStyle(shade(mud, 0.3), 0.8);
+  g.fillEllipse(cx - 11, top + 18, 10, 16);
+  g.fillStyle(shade(mud, 0.15));
+  for (const [dx, dy, r] of [[12, 40, 3], [-14, 44, 2.5], [4, 50, 2], [16, 26, 2]]) g.fillCircle(cx + dx, top + dy, r);
+  face(g, cx - 2, top + 26, 1, 0xd8a0a0);
+  arms(g, cx, top + 30, 22, mud, f);
+  // 頭上冒溫泉熱氣（♨）
+  g.lineStyle(2.5, 0xffffff, 0.85);
+  for (const dx of [-8, 0, 8]) {
+    g.beginPath();
+    const sx = cx + dx, sy = top - 2;
+    g.moveTo(sx, sy);
+    for (let i = 1; i <= 5; i++) g.lineTo(sx + Math.sin(i * 1.3 + f + dx) * 2.5, sy - i * 4);
+    g.strokePath();
+  }
+}
+
+// ───────────────────────── 甕仔雞仔（關子嶺） ─────────────────────────
+
+function drawChick(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  // 橘色小腳
+  g.lineStyle(3, 0xe8902a);
+  const sw = f === 0 ? 0 : 3;
+  g.lineBetween(cx - 6, 80, cx - 6 - sw, MH - 4);
+  g.lineBetween(cx + 6, 80, cx + 6 + sw, MH - 4);
+  g.lineBetween(cx - 10 - sw, MH - 3, cx - 2 - sw, MH - 3);
+  g.lineBetween(cx + 2 + sw, MH - 3, cx + 10 + sw, MH - 3);
+  // 圓滾滾的黃色身體
+  const yellow = 0xf6d24a;
+  const by = 62 + bob;
+  g.fillStyle(shade(yellow, -0.2));
+  g.fillCircle(cx + 2, by + 2, 21);
+  g.fillStyle(yellow);
+  g.fillCircle(cx, by, 21);
+  g.fillStyle(shade(yellow, 0.35));
+  g.fillEllipse(cx - 8, by - 6, 10, 14);
+  // 翅膀（拍動）
+  g.fillStyle(shade(yellow, -0.12));
+  g.fillEllipse(cx - 18, by + 3 + (f ? -3 : 0), 12, 18);
+  // 嘴與眼
+  g.fillStyle(0xe8902a);
+  g.fillTriangle(cx + 16, by - 4, cx + 26, by - 1, cx + 16, by + 2);
+  g.fillStyle(0x2a2024);
+  g.fillEllipse(cx + 9, by - 8, 4, 5.5);
+  g.fillStyle(0xffffff);
+  g.fillCircle(cx + 9.5, by - 9.5, 1.1);
+  g.fillStyle(0xf08a8a, 0.6);
+  g.fillEllipse(cx + 12, by + 2, 6, 3.5);
+  // 頭上頂著甕缸（像安全帽）
+  const jy = 34 + bob;
+  const clay = 0x9a5a34;
+  g.fillStyle(shade(clay, -0.25));
+  g.fillEllipse(cx + 2, jy + 4, 36, 26);
+  g.fillStyle(clay);
+  g.fillEllipse(cx, jy + 2, 36, 26);
+  g.fillStyle(shade(clay, 0.25));
+  g.fillEllipse(cx - 8, jy - 2, 10, 12);
+  g.fillStyle(shade(clay, -0.35));
+  g.fillRoundedRect(cx - 10, jy - 14, 20, 6, 2);
+  g.fillStyle(0x3a2420);
+  g.fillEllipse(cx, jy - 14, 16, 4);
+  // 甕口冒出香味
+  g.lineStyle(2, 0xffffff, 0.75);
+  g.beginPath();
+  g.moveTo(cx + 2, jy - 16);
+  for (let i = 1; i <= 5; i++) g.lineTo(cx + 2 + Math.sin(i * 1.2 + f) * 3, jy - 16 - i * 4);
+  g.strokePath();
+}
+
+// ───────────────────────── 火王仔（關子嶺） ─────────────────────────
+
+function drawFlame(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  // 光暈
+  g.fillStyle(0xffa040, 0.15);
+  g.fillCircle(cx, 52 + bob, 32);
+  g.fillStyle(0xffc860, 0.15);
+  g.fillCircle(cx, 54 + bob, 24);
+  feet(g, cx, 84, 0xb8321e, f, 7, 5);
+  // 水滴形火焰身體（尖端隨走路晃動）
+  const by = 60 + bob;
+  const tip = f === 0 ? -4 : 4;
+  const layers: [number, number][] = [[0xd8392f, 1], [0xf2802a, 0.78], [0xffd34a, 0.52]];
+  for (const [col, k] of layers) {
+    g.fillStyle(col);
+    g.fillCircle(cx, by + 4 * k, 22 * k);
+    g.fillTriangle(cx - 20 * k, by - 2 * k, cx + 20 * k, by - 2 * k, cx + tip * k, by - 44 * k);
+  }
+  // 頭頂小火舌
+  g.fillStyle(0xf2802a);
+  g.fillTriangle(cx - 14, by - 10, cx - 6, by - 10, cx - 12 - tip / 2, by - 26);
+  g.fillTriangle(cx + 8, by - 12, cx + 16, by - 12, cx + 14 - tip / 2, by - 28);
+  // 臉在黃色火心上
+  face(g, cx - 3, by + 4, 1, 0xff8a6a);
+  arms(g, cx, by + 6, 18, 0xd8392f, f);
+  // 水火同源：腳邊一小灘水
+  g.fillStyle(0x7ab8d8, 0.7);
+  g.fillEllipse(cx, MH - 2, 40, 5);
 }
 
 // ───────────────────────── 金礦鼠 ─────────────────────────
