@@ -1022,7 +1022,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (s.applicants.length) notes.push(`佈告欄有 ${s.applicants.length} 位應徵者在等你。`);
     if (s.forecast.kami) notes.push('明日預報：濃霧，老人家說可能是「神隱日」！可以先辦祈神儀式。');
     else if (s.forecast.weather === 'heavyFog') notes.push('明日預報：濃霧特報，石階濕滑，遊客容易跌倒。');
-    if (s.gameOver) notes.push('負債太多……老街撐不下去了。');
+    if (sum.sightseers) notes.push(`觀景台賞景 ${sum.sightseers} 人${sum.telescope ? `・望遠鏡投幣 $${sum.telescope}` : ''}`);
+    if (s.gameOver) notes.unshift('負債太多……老街撐不下去了。');
     m.add(this.text(W / 2, y + 382, notes.slice(0, 7).join('\n'), 14, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4).setWordWrapWidth(540, true));
     const label = s.gameOver ? '重新挑戰' : `開始第 ${s.day + 1} 天`;
     m.add(this.button(W / 2 - 120, y + 660 - 64, 240, 50, label, () => {

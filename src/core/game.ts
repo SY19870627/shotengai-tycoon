@@ -26,7 +26,40 @@ const WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '�
 const emptyStats = (): DayStats => ({
   passersby: 0, visitors: 0, revenue: 0, commission: 0, couponCost: 0, turnedAway: 0,
   stranded: 0, falls: 0, fallsTreated: 0, vanished: 0, found: 0, foreign: 0, overnight: 0,
+  sightseers: 0, telescope: 0,
 });
+
+// ───────────── 觀景台：路過的人會停下來看風景 ─────────────
+
+export const TELESCOPE_FEE = 10;
+
+/** 黃昏時段（看夕陽的人最多） */
+export function isSunset(s: GameState): boolean {
+  const h = s.minute / 60;
+  return h >= 16.5 && h < 18.7;
+}
+
+/** 走過觀景台的人停下來的機率：黃昏最高，濃霧最低 */
+export function sightChance(s: GameState): number {
+  const h = s.minute / 60;
+  let c = isSunset(s) ? 0.75 : h >= 19 ? 0.3 : 0.38;
+  if (s.weather === 'heavyFog') c *= 0.4;
+  else if (s.weather === 'fog') c *= 0.65;
+  else if (s.weather === 'rain') c *= 0.6;
+  return c;
+}
+
+export function registerSightseer(s: GameState): void {
+  s.today.sightseers += 1;
+}
+
+/** 投幣望遠鏡：錢直接進管理會（霧天看不到也照收，這就是人生） */
+export function useTelescope(s: GameState): number {
+  s.today.telescope += TELESCOPE_FEE;
+  s.today.commission += TELESCOPE_FEE;
+  s.money += TELESCOPE_FEE;
+  return TELESCOPE_FEE;
+}
 
 /** 這條街幾點打烊（遊戲內分鐘） */
 export function dayEndMin(s: GameState): number {
@@ -1076,6 +1109,8 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     ritual: s.kami && ritualProtected(s),
     foreign: s.today.foreign,
     overnight: s.today.overnight,
+    sightseers: s.today.sightseers,
+    telescope: s.today.telescope,
     avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,

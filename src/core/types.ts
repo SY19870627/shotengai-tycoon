@@ -363,6 +363,9 @@ export interface DayStats {
   found: number;
   foreign: number;
   overnight: number;
+  /** 在觀景台停下來看風景的人、投幣望遠鏡收入 */
+  sightseers: number;
+  telescope: number;
 }
 
 export interface DaySummary {
@@ -387,6 +390,8 @@ export interface DaySummary {
   ritual: boolean;
   foreign: number;
   overnight: number;
+  sightseers?: number;
+  telescope?: number;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;

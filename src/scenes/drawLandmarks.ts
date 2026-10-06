@@ -627,6 +627,13 @@ function drawYonganju(ctx: Ctx): number {
 
 // ───────────────────────── 九份：觀景台 ─────────────────────────
 
+/** 觀景台上可以互動的位置（相對於地標左緣） */
+export const VIEWPOINT = {
+  telescope: 78,
+  benchX: (w: number) => w / 2 - 20,
+  benchW: 74,
+};
+
 function drawViewpoint(ctx: Ctx): number {
   const { g, night, w } = ctx;
   // 石板平台
@@ -658,24 +665,23 @@ function drawViewpoint(ctx: Ctx): number {
     for (const dx of [-10, 0, 10]) g.fillEllipse(x + dx, -42, 6, 22);
   }
 
-  // 投幣望遠鏡
-  const tx = 78;
+  // 投幣望遠鏡（高度配合路人，路人真的會湊上去看）
+  const tx = VIEWPOINT.telescope;
   g.fillStyle(0x3b6a8a);
-  g.fillRect(tx - 3, -70, 6, 56);
+  g.fillRect(tx - 3, -42, 6, 28);
   g.fillRect(tx - 12, -18, 24, 5);
   g.fillStyle(0x2f5a78);
-  g.fillRoundedRect(tx - 12, -96, 24, 26, 6);
+  g.fillRoundedRect(tx - 10, -56, 20, 17, 5);
   g.fillStyle(0x4a82a8);
-  g.fillPoints([{ x: tx - 4, y: -92 }, { x: tx + 30, y: -104 }, { x: tx + 32, y: -92 }, { x: tx + 2, y: -80 }], true);
+  g.fillPoints([{ x: tx - 12, y: -52 }, { x: tx + 22, y: -64 }, { x: tx + 24, y: -53 }, { x: tx - 10, y: -42 }], true);
   g.fillStyle(0x223a4a);
-  g.fillEllipse(tx + 31, -98, 6, 13);
-  g.fillStyle(0x223a4a);
-  g.fillRect(tx - 18, -90, 8, 8);
+  g.fillEllipse(tx + 23, -58, 6, 12);
+  g.fillRect(tx - 17, -51, 6, 7);
   g.fillStyle(C.gold);
-  g.fillRect(tx - 4, -84, 8, 3);
+  g.fillRect(tx - 4, -46, 8, 2);
 
   // 長凳
-  bench(g, w / 2 - 20, 74);
+  bench(g, VIEWPOINT.benchX(w), VIEWPOINT.benchW);
 
   // 觀景台招牌
   const sx = w - 66;

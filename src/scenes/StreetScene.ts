@@ -4,6 +4,7 @@ import {
   nextLotCost, streetOf, profileOf, presentTenants, lotOfTenant, getRel, isActive, activityVariant,
   rollOrigin, fallChance, registerFall, vanishChance, registerVanish, strandedPerHour, BUS, ROUTE,
   dayEndMin, planCheckins, checkInGuest, roomsOf, isMinshuku,
+  sightChance, isSunset, registerSightseer, useTelescope,
 } from '../core/game';
 import { MODULES, FACILITY, facilityOf, moduleEff, staffRatio } from '../core/facilities';
 import { pickStory } from '../core/story';
@@ -14,7 +15,7 @@ import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight } from './drawShop';
-import { drawLandmark } from './drawLandmarks';
+import { drawLandmark, VIEWPOINT } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { ensureMascotTexture } from './drawMascots';
 import { ensureCharTexture, CHAR_H } from './drawCharacters';
@@ -40,7 +41,7 @@ interface Ped {
   favorite: Category;
   visits: number;
   doorsLeft: number;
-  state: 'walk' | 'entering' | 'inside' | 'leaving' | 'fallen';
+  state: 'walk' | 'entering' | 'inside' | 'leaving' | 'fallen' | 'sightsee';
   lot: number;
   leaveAt: number;
   animT: number;
@@ -50,6 +51,23 @@ interface Ped {
   fallIn: number;
   vanishIn: number;
   suitcase?: Phaser.GameObjects.Image;
+  /** 已經決定過要不要在觀景台停下來 */
+  sightDone?: boolean;
+  sight?: Sight;
+}
+
+type SightKind = 'view' | 'selfie' | 'telescope' | 'bench';
+interface Sight {
+  kind: SightKind;
+  phase: 'go' | 'stay' | 'back';
+  tx: number;
+  ty: number;
+  /** 停留剩餘毫秒 */
+  t: number;
+  total: number;
+  mid: boolean;
+  dir: 1 | -1;
+  seat: number;
 }
 
 interface LotView {
@@ -90,6 +108,9 @@ export class StreetScene extends Phaser.Scene {
   private peds: Ped[] = [];
   private actors = new Map<ActorRef, Actor>();
   private landmarkStand = new Map<string, number>();
+  private landmarkBox = new Map<string, { x: number; w: number }>();
+  private telescopeBusy = false;
+  private benchSeats = [false, false];
   private spawnAcc = 0;
   private highlight!: Phaser.GameObjects.Rectangle;
   private rain!: Phaser.GameObjects.Graphics;
@@ -133,6 +154,8 @@ export class StreetScene extends Phaser.Scene {
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
+    this.telescopeBusy = false;
+    this.benchSeats = [false, false];
     this.actors.clear();
     this.nightLayer = [];
     this.storyChecks = { morning: false, noon: false, evening: false, night: false };
@@ -259,6 +282,7 @@ export class StreetScene extends Phaser.Scene {
     art.night.setBlendMode(Phaser.BlendModes.ADD);
     this.nightLayer.push({ g: night });
     this.landmarkStand.set(id, x + art.standX);
+    this.landmarkBox.set(id, { x, w: width });
     const zone = this.add.zone(x, GROUND_Y - 360, width, 360).setOrigin(0).setInteractive({ useHandCursor: true });
     zone.on('pointerup', () => {
       if (this.drag.moved || store.storyRunning) return;
@@ -677,6 +701,7 @@ export class StreetScene extends Phaser.Scene {
             continue;
           }
         }
+        if (mult > 0 && p.state === 'walk' && !p.sightDone && this.maybeSightsee(p)) continue;
         if (mult > 0 && p.state === 'walk' && p.doorsLeft > 0 && p.visits < 2) {
           for (let i = 0; i < s.lots.length; i++) {
             const dx = this.L.doorX(i);
@@ -696,6 +721,8 @@ export class StreetScene extends Phaser.Scene {
         else if (p.state === 'walk' && !p.suitcase && hourOf(s) >= 23 && Math.random() < 0.03) this.fadeOutPed(p);
       } else if (p.state === 'inside' && s.minute >= p.leaveAt) {
         this.leaveShop(p);
+      } else if (p.state === 'sightsee') {
+        this.updateSight(p, dt, mult);
       }
       if (p.umbrella) p.umbrella.setPosition(p.sprite.x + p.dir * 4, p.sprite.y - 56).setAlpha(p.sprite.alpha);
       if (p.suitcase) p.suitcase.setPosition(p.sprite.x - p.dir * 16, p.sprite.y).setAlpha(p.sprite.alpha).setVisible(p.state !== 'inside');
@@ -735,6 +762,169 @@ export class StreetScene extends Phaser.Scene {
     this.tweens.add({ targets: p.sprite, alpha: 1, duration: 260 });
   }
 
+  // =================================================================== 觀景台
+
+  /** 路人走進觀景台範圍時，決定要不要停下來看風景 */
+  private maybeSightsee(p: Ped): boolean {
+    const box = this.landmarkBox.get('viewpoint');
+    if (!box) return false;
+    const x = p.sprite.x;
+    if (x < box.x + 40 || x > box.x + box.w - 70) return false;
+    p.sightDone = true;
+    const s = S();
+    const busy = this.peds.filter((q) => q.state === 'sightsee').length;
+    if (busy >= (isSunset(s) ? 9 : 6) || Math.random() >= sightChance(s)) return false;
+
+    const opts: SightKind[] = ['view', 'view', 'view', 'selfie', 'selfie'];
+    if (p.origin !== 'local') opts.push('selfie', 'selfie');
+    if (!this.telescopeBusy) opts.push('telescope', 'telescope');
+    const seat = this.benchSeats.findIndex((b) => !b);
+    if (seat >= 0 && !p.suitcase) opts.push('bench', 'bench');
+    const kind = Phaser.Utils.Array.GetRandom(opts) as SightKind;
+
+    let tx = Phaser.Math.Clamp(x + (Math.random() - 0.5) * 80, box.x + 30, box.x + box.w - 90);
+    let ty = GROUND_Y + 6 + Math.random() * 10;
+    let dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+    let seatIdx = -1;
+    if (kind === 'telescope') {
+      this.telescopeBusy = true;
+      tx = box.x + VIEWPOINT.telescope - 24;
+      ty = GROUND_Y + 6;
+      dir = 1;
+    } else if (kind === 'bench') {
+      seatIdx = seat;
+      this.benchSeats[seat] = true;
+      const bx = box.x + VIEWPOINT.benchX(box.w);
+      tx = bx + 20 + seat * (VIEWPOINT.benchW - 40);
+      ty = GROUND_Y + 1;
+    }
+    let total = kind === 'view' ? 2600 + Math.random() * 1600 : kind === 'selfie' ? 2000 : kind === 'telescope' ? 3400 : 5200;
+    if (isSunset(s)) total *= 1.6;
+    p.state = 'sightsee';
+    p.sight = { kind, phase: 'go', tx, ty, t: total, total, mid: false, dir, seat: seatIdx };
+    registerSightseer(s);
+    return true;
+  }
+
+  private releaseSight(sg: Sight) {
+    if (sg.kind === 'telescope') this.telescopeBusy = false;
+    if (sg.kind === 'bench' && sg.seat >= 0) this.benchSeats[sg.seat] = false;
+  }
+
+  private updateSight(p: Ped, dt: number, mult: number) {
+    const sg = p.sight;
+    if (!sg || mult <= 0) return;
+    const step = p.speed * 0.8 * mult * (dt / 1000);
+    const moveTo = (x: number, y: number): boolean => {
+      const dx = x - p.sprite.x, dy = y - p.sprite.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= step) {
+        p.sprite.setPosition(x, y);
+        p.sprite.setTexture(`ped${p.variant}_0`);
+        return true;
+      }
+      p.sprite.x += (dx / d) * step;
+      p.sprite.y += (dy / d) * step;
+      if (Math.abs(dx) > 1) p.sprite.setFlipX(dx < 0);
+      p.animT += dt * mult;
+      p.sprite.setTexture(`ped${p.variant}_${Math.floor(p.animT / 180) % 2}`);
+      p.sprite.setDepth(30 + p.sprite.y / 1000);
+      return false;
+    };
+    if (sg.phase === 'go') {
+      if (moveTo(sg.tx, sg.ty)) {
+        sg.phase = 'stay';
+        p.sprite.setFlipX(sg.dir === -1);
+        this.sightStart(p, sg);
+      }
+    } else if (sg.phase === 'stay') {
+      sg.t -= dt * mult;
+      if (!sg.mid && sg.t <= sg.total / 2) {
+        sg.mid = true;
+        this.sightMid(p, sg);
+      }
+      if (sg.t <= 0) {
+        sg.phase = 'back';
+        if (sg.kind === 'bench') p.sprite.setCrop().setY(p.sprite.y);
+        this.releaseSight(sg);
+      }
+    } else if (moveTo(p.sprite.x + p.dir * 30, p.baseY)) {
+      p.sight = undefined;
+      p.state = 'walk';
+      p.sprite.setFlipX(p.dir === -1).setDepth(30 + p.baseY / 1000);
+    }
+  }
+
+  private sightLine(p: Ped, pick: { local: string[]; jp: string[]; kr: string[] }): string {
+    return Phaser.Utils.Array.GetRandom(pick[p.origin]) as string;
+  }
+
+  /** 觀景台的台詞：依天氣與時段變化 */
+  private viewLines(): { local: string[]; jp: string[]; kr: string[] } {
+    const s = S();
+    const h = hourOf(s);
+    if (s.weather === 'heavyFog' || s.weather === 'fog') {
+      return { local: ['……全白的', '霧裡什麼都看不到啦', '我們是來看雲的嗎'], jp: ['真っ白…', '何も見えない…'], kr: ['안개뿐이야…', '아무것도 안 보여…'] };
+    }
+    if (isSunset(s)) {
+      return { local: ['夕陽好美！！', '整片海都變金色的', '這就是九份的黃昏'], jp: ['夕日すごい！', 'エモい…'], kr: ['노을 대박!', '너무 예쁘다…'] };
+    }
+    if (h >= 19 || h < 5) {
+      return { local: ['海上有漁火耶', '山城夜景好漂亮', '基隆港的燈都亮了'], jp: ['夜景きれい…', 'ロマンチック～'], kr: ['야경 미쳤다…', '로맨틱해~'] };
+    }
+    if (s.weather === 'rain') return { local: ['下雨的海也很有感覺', '雨中的基隆山～'], jp: ['雨もいいね'], kr: ['비 와도 좋네'] };
+    return { local: ['哇～看得到海！', '基隆山好近', '風好舒服～', '那座山像一顆雞蛋'], jp: ['きれい～！', '海だ！'], kr: ['와~ 바다다!', '경치 최고!'] };
+  }
+
+  private sightSay(p: Ped, text: string, color = '#ffffff', dy = 0) {
+    if (p.sprite.active) this.floatText(p.sprite.x, p.sprite.y - 74 - dy, text, color, 14);
+  }
+
+  private sightStart(p: Ped, sg: Sight) {
+    const s = S();
+    const color = p.origin === 'jp' ? '#ffd6e0' : p.origin === 'kr' ? '#d6e8ff' : '#ffffff';
+    switch (sg.kind) {
+      case 'view':
+        this.sightSay(p, this.sightLine(p, this.viewLines()), color);
+        break;
+      case 'selfie': {
+        const pose = { local: ['來，自拍！', '比個讚～'], jp: ['ピース！', 'はい、チーズ！'], kr: ['김치~!', '셀카 찍자!'] };
+        this.sightSay(p, isSunset(s) && p.origin === 'local' ? '夕陽自拍！' : this.sightLine(p, pose), color);
+        break;
+      }
+      case 'telescope': {
+        const fee = useTelescope(s);
+        this.floatText(sg.tx + 26, GROUND_Y - 70, `投幣 +$${fee}`, hex(C.gold), 14);
+        break;
+      }
+      case 'bench':
+        // 坐下：把腿藏到椅子後面
+        p.sprite.setTexture(`ped${p.variant}_0`).setCrop(0, 0, 30, 46);
+        this.sightSay(p, this.sightLine(p, { local: ['腳好酸…坐一下', '爬完石階要休息', '這裡好放空'], jp: ['ちょっと休憩…', '足が…'], kr: ['다리 아파…', '잠깐 쉬자'] }), '#d8d2e6');
+        break;
+    }
+  }
+
+  private sightMid(p: Ped, sg: Sight) {
+    const s = S();
+    const foggy = s.weather === 'fog' || s.weather === 'heavyFog';
+    const h = hourOf(s);
+    if (sg.kind === 'selfie') {
+      playFx(this, 'flash', p.sprite.x + p.dir * 10, p.sprite.y - 50);
+      this.sightSay(p, '喀嚓！', '#fff3b0');
+    } else if (sg.kind === 'telescope') {
+      const line = foggy ? '什麼都看不到！退錢啦！'
+        : isSunset(s) ? '太陽要掉進海裡了！'
+        : h >= 19 ? '……好黑，但有漁船的燈'
+        : Phaser.Utils.Array.GetRandom(['看到基隆山了！', '有一艘船耶！', '我看到我家了（並沒有）']);
+      this.sightSay(p, line, foggy ? '#ff9a8a' : '#ffffff');
+    } else if (sg.kind === 'view' && isSunset(s) && Math.random() < 0.5) {
+      playFx(this, 'flash', p.sprite.x, p.sprite.y - 50);
+    } else if (sg.kind === 'bench' && Math.random() < 0.3) {
+      this.sightSay(p, 'zzz…', '#9ec3e6');
+    }
+  }
+
   private fadeOutPed(p: Ped) {
     p.state = 'leaving';
     this.tweens.add({
@@ -748,6 +938,7 @@ export class StreetScene extends Phaser.Scene {
 
   private removePed(k: number) {
     const p = this.peds[k];
+    if (p.sight) this.releaseSight(p.sight);
     p.sprite.destroy();
     p.umbrella?.destroy();
     p.suitcase?.destroy();

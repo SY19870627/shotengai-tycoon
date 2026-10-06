@@ -6,6 +6,7 @@ import {
   buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
+  sightChance, useTelescope, registerSightseer, TELESCOPE_FEE,
 } from '../src/core/game';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
@@ -393,5 +394,31 @@ describe('九份：民宿與深夜', () => {
     s.buffs.push({ id: 'noBus', name: '停駛', days: 1, daysLeft: 1, mods: { transport: 0 } });
     simulateDay(s, seeded(4));
     expect(s.today.passersby).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('九份：觀景台', () => {
+  it('黃昏停下來看風景的人最多，濃霧最少', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.weather = 'sunny';
+    s.minute = 11 * 60;
+    const noon = sightChance(s);
+    s.minute = 17.5 * 60;
+    const sunset = sightChance(s);
+    s.weather = 'heavyFog';
+    const fog = sightChance(s);
+    expect(sunset).toBeGreaterThan(noon);
+    expect(fog).toBeLessThan(sunset);
+  });
+
+  it('望遠鏡投幣算進收入，並出現在結算', () => {
+    const s = createGame('jiufen', seeded(1));
+    const m = s.money;
+    registerSightseer(s);
+    useTelescope(s);
+    expect(s.money).toBe(m + TELESCOPE_FEE);
+    const sum = endDay(s, seeded(2));
+    expect(sum.sightseers).toBe(1);
+    expect(sum.telescope).toBe(TELESCOPE_FEE);
   });
 });
