@@ -363,6 +363,8 @@ export interface ShopInstance {
   totalRevenue: number;
   /** 昨天的淨利 */
   lastProfit: number;
+  /** 關子嶺溫泉旅館推出的方案 */
+  plans?: string[];
 }
 
 export interface FacilityInstance {
@@ -430,6 +432,9 @@ export interface DayStats {
   hikers: number;
   /** 祭典夜：真妖怪消費次數、被識破的妖怪 */
   yokai: number;
+  /** 旅館方案：泳池泳客、晚餐套餐 */
+  swimmers?: number;
+  dinners?: number;
 }
 
 export interface DaySummary {
@@ -465,6 +470,9 @@ export interface DaySummary {
   grievanceAfter?: number;
   closed?: string[];
   festival?: boolean;
+  swimmers?: number;
+  dinners?: number;
+  fireflies?: boolean;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;

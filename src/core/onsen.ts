@@ -1,5 +1,5 @@
 import { SHOP_BY_ID, type ShopDef } from './shops';
-import type { GameState, FireMode, LeafChoice, YokaiKind, Mods } from './types';
+import type { GameState, FireMode, LeafChoice, YokaiKind, Mods, ShopInstance } from './types';
 import { streetOf, profileOf, adjustSatOf, hourOf, type Result } from './game';
 
 /**
@@ -35,6 +35,12 @@ export function springUse(def: ShopDef, level: number): number {
   return def.spring ? def.spring + (level - 1) : 0;
 }
 
+/** 某家店實際要用的泉量（含旅館方案） */
+export function shopSpringUse(shop: ShopInstance): number {
+  const base = springUse(SHOP_BY_ID[shop.defId], shop.level);
+  return base + (shop.plans ?? []).reduce((n, id) => n + (RYOKAN_PLANS[id as PlanId]?.spring ?? 0), 0);
+}
+
 /** 目前的泉量供應 */
 export function springSupply(s: GameState): number {
   const sp = streetOf(s).spring;
@@ -50,7 +56,7 @@ export function springDemand(s: GameState): number {
   s.lots.forEach((l, i) => {
     if (l.bath) d += BATH.spring;
     if (!l.shop || s.closedToday.includes(i)) return;
-    d += springUse(SHOP_BY_ID[l.shop.defId], l.shop.level);
+    d += shopSpringUse(l.shop);
   });
   return d;
 }
@@ -264,6 +270,163 @@ export function dailyFireUpdate(s: GameState): void {
 /** 全面開發又火勢太大：每天可能失火 */
 export function fireAccidentChance(s: GameState): number {
   return s.fireMode === 'full' ? Math.max(0, s.fireLevel - 1.2) * 0.25 : 0;
+}
+
+// =====================================================================
+// 溫泉旅館的方案
+// =====================================================================
+
+export type PlanId = 'pool' | 'spa' | 'dinner' | 'stars';
+
+export interface PlanDef {
+  id: PlanId;
+  name: string;
+  /** 推出費用（管理會出） */
+  cost: number;
+  /** 每天多用的泉量 */
+  spring: number;
+  desc: string;
+  /** 街上要有這種店才能推 */
+  needs?: string;
+}
+
+export const RYOKAN_PLANS: Record<PlanId, PlanDef> = {
+  pool: {
+    id: 'pool', name: '大眾溫泉泳池', cost: 20000, spring: 4,
+    desc: '親子客最愛！週末入住率大增，白天還能賣泳客門票。最耗水，而且很吵，隔壁的住宿會抱怨。',
+  },
+  spa: {
+    id: 'spa', name: '泥漿 SPA 套裝', cost: 8000, spring: 1, needs: 'mudspa',
+    desc: '和泥漿美容店合作：房價 +5%、評價加分，兩家關係變好。住客隔天頂著灰臉逛街。',
+  },
+  dinner: {
+    id: 'dinner', name: '甕缸雞晚餐套餐', cost: 6000, spring: 0, needs: 'claypot',
+    desc: '住宿含一隻甕缸雞：房價 +15%、評價加分，甕缸雞店每位住客分到一份晚餐錢，兩家關係變好。',
+  },
+  stars: {
+    id: 'stars', name: '星空露天風呂', cost: 15000, spring: 2,
+    desc: '晚上躺在露天泥湯裡看星星：晴天評價大加分、房價 +10%。下雨天泡不了，會被抱怨。',
+  },
+};
+export const PLAN_IDS = Object.keys(RYOKAN_PLANS) as PlanId[];
+
+/** 這家店能不能推方案（關子嶺的溫泉旅館） */
+export function canHavePlans(s: GameState, lot: number): boolean {
+  const shop = s.lots[lot]?.shop;
+  return hasSpring(s) && !!shop && shop.defId === 'ryokan';
+}
+
+/** 能同時推幾個方案（= 旅館等級） */
+export function planSlots(shop: ShopInstance): number {
+  return shop.level;
+}
+
+export function hasPlan(shop: ShopInstance | null | undefined, id: PlanId): boolean {
+  return !!shop?.plans?.includes(id);
+}
+
+/** 街上有沒有某種店 */
+function streetHas(s: GameState, defId: string): boolean {
+  return s.lots.some((l) => l.shop?.defId === defId);
+}
+
+export function canAddPlan(s: GameState, lot: number, id: PlanId): Result {
+  if (!canHavePlans(s, lot)) return { ok: false, reason: '只有溫泉旅館能推方案' };
+  const shop = s.lots[lot].shop!;
+  const def = RYOKAN_PLANS[id];
+  if (hasPlan(shop, id)) return { ok: false, reason: '已經推出了' };
+  if ((shop.plans?.length ?? 0) >= planSlots(shop)) return { ok: false, reason: '方案滿了，補助裝修可以多推一個' };
+  if (def.needs && !streetHas(s, def.needs)) return { ok: false, reason: `街上要有${SHOP_BY_ID[def.needs].name}才能合作` };
+  if (s.money < def.cost) return { ok: false, reason: `資金不足（需要 ${money(def.cost)}）` };
+  return { ok: true };
+}
+
+/** 秀子姨很傳統：泳池、星空風呂她不喜歡 */
+const PLAN_MOOD: Record<PlanId, { traditional: number; normal: number }> = {
+  pool: { traditional: -10, normal: 4 },
+  stars: { traditional: -6, normal: 4 },
+  spa: { traditional: 5, normal: 4 },
+  dinner: { traditional: 6, normal: 4 },
+};
+
+export function addPlan(s: GameState, lot: number, id: PlanId): Result {
+  const can = canAddPlan(s, lot, id);
+  if (!can.ok) return can;
+  const shop = s.lots[lot].shop!;
+  s.money -= RYOKAN_PLANS[id].cost;
+  (shop.plans ??= []).push(id);
+  const traditional = !!profileOf(s, shop.tenantId)?.traits.includes('stubborn');
+  adjustSatOf(s, shop, traditional ? PLAN_MOOD[id].traditional : PLAN_MOOD[id].normal);
+  return { ok: true };
+}
+
+/** 撤掉方案（錢不退） */
+export function removePlan(s: GameState, lot: number, id: PlanId): Result {
+  const shop = s.lots[lot]?.shop;
+  if (!shop || !hasPlan(shop, id)) return { ok: false, reason: '沒有這個方案' };
+  shop.plans = shop.plans!.filter((p) => p !== id);
+  return { ok: true };
+}
+
+/** 方案讓房價變高多少 */
+export function planPriceMult(s: GameState, shop: ShopInstance): number {
+  let m = 1;
+  if (hasPlan(shop, 'dinner') && streetHas(s, 'claypot')) m *= 1.15;
+  if (hasPlan(shop, 'spa') && streetHas(s, 'mudspa')) m *= 1.05;
+  if (hasPlan(shop, 'stars')) m *= 1.1;
+  return m;
+}
+
+/** 方案讓入住率增加多少 */
+export function planOccupancy(s: GameState, shop: ShopInstance, weekend: boolean): number {
+  let r = 0;
+  if (hasPlan(shop, 'pool')) r += weekend ? 0.25 : 0.08;
+  if (hasPlan(shop, 'stars') && s.weather === 'sunny') r += 0.05;
+  return r;
+}
+
+/** 方案對住客評價的影響 */
+export function planReview(s: GameState, shop: ShopInstance): number {
+  let x = 0;
+  if (hasPlan(shop, 'stars')) x += s.weather === 'rain' ? -0.5 : s.weather === 'sunny' ? 0.6 : 0.2;
+  if (hasPlan(shop, 'spa') && streetHas(s, 'mudspa')) x += 0.3;
+  if (hasPlan(shop, 'dinner') && streetHas(s, 'claypot')) x += 0.3;
+  if (hasPlan(shop, 'stars') && firefliesOut(s)) x += 0.4;
+  return x;
+}
+
+/** 隔壁有大眾泳池的住宿：小孩尖叫、水花聲，住客睡不好 */
+export function poolNoise(s: GameState, lot: number): boolean {
+  return [lot - 1, lot + 1].some((j) => hasPlan(s.lots[j]?.shop, 'pool'));
+}
+
+/** 泳池白天賣泳客門票：回傳今天的泳客人數 */
+export const POOL_TICKET = 150;
+export function poolSwimmers(s: GameState, shop: ShopInstance, weekend: boolean): number {
+  if (!hasPlan(shop, 'pool')) return 0;
+  return Math.round(s.today.passersby * 0.025 * (weekend ? 1.5 : 1) * springRatio(s));
+}
+
+/** 晚餐套餐：甕缸雞店每位住客分到的晚餐錢 */
+export const DINNER_SHARE = 80;
+
+// =====================================================================
+// 螢火蟲（彩蛋）：好好守護溫泉，螢火蟲才會回來
+// =====================================================================
+
+/** 環境夠乾淨：泉井不超過 1 口、水火同源保育、民怨很低 */
+export function cleanMountain(s: GameState): boolean {
+  return hasSpring(s) && s.wells <= 1 && s.fireMode === 'protect' && s.grievance < 30;
+}
+
+/** 有沒有旅館推了星空露天風呂 */
+export function hasStarBath(s: GameState): boolean {
+  return s.lots.some((l) => hasPlan(l.shop, 'stars'));
+}
+
+/** 今晚螢火蟲會不會出來（第一次要先觸發劇情） */
+export function firefliesOut(s: GameState): boolean {
+  return s.flags.includes('fireflies') && cleanMountain(s) && hasStarBath(s) && s.weather === 'sunny';
 }
 
 // =====================================================================

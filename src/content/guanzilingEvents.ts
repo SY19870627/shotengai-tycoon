@@ -1,6 +1,6 @@
 import type { StoryEvent, StoryCtx } from '../core/types';
 import { SHOP_BY_ID } from '../core/shops';
-import { TOWNHALL, quakeLossPct } from '../core/onsen';
+import { TOWNHALL, quakeLossPct, cleanMountain, hasStarBath, hasPlan } from '../core/onsen';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt } from './dsl';
 
 const ST = 'guanziling';
@@ -218,6 +218,57 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
       emote(b.a, 'anger'),
       effect({ sat: [[b.a, -6]], grievance: 2 }),
       leave(b.a),
+    ],
+  },
+  // ------------------------------------------------------------ 旅館方案、螢火蟲
+  {
+    id: 'gz-ryokan-pool', street: ST, once: true, priority: 30, when: 'noon',
+    cond: (c) => (c.has('gz-ryokan') && hasPlan(c.shopOf('gz-ryokan'), 'pool') ? {} : null),
+    script: () => [
+      focus('gz-ryokan'),
+      appear('gz-ryokan'),
+      say('gz-ryokan', '泳池？泥湯哪有在游泳的！阮阿祖若是看到，會從厝頂跳下來！'),
+      emote('gz-ryokan', 'anger'),
+      appear('tourist', 'gz-ryokan', 120),
+      say('tourist', '阿姨！我兒子說這是他游過最好玩的泳池！灰色的耶！'),
+      emote('tourist', 'star'),
+      say('gz-ryokan', '……灰色的，是泥湯啦。好啦，囡仔歡喜就好。'),
+      leave('gz-ryokan'), leave('tourist'),
+    ],
+  },
+  {
+    id: 'gz-fireflies', street: ST, once: true, chance: 0.5, priority: 58, when: 'evening',
+    cond: (c) => (c.s.day >= 5 && c.s.weather === 'sunny' && cleanMountain(c.s) && hasStarBath(c.s) ? {} : null),
+    script: (_b, c) => {
+      const lot = c.s.lots.findIndex((l) => hasPlan(l.shop, 'stars'));
+      const at = lot >= 0 ? { lot } : { landmark: 'spring' };
+      return [
+        narrate('傍晚，星空露天風呂的客人忽然都安靜了下來……'),
+        focus(at),
+        appear('festGuest', at, -40),
+        say('festGuest', '欸……那是什麼？一閃一閃的……綠色的光……'),
+        fx('sparkle', 'festGuest'),
+        appear('gzElder', at, 80),
+        say('gzElder', '……螢火蟲。'),
+        say('gzElder', '幾十年沒看到了。以前山上到處都是，後來開發多了、水髒了，牠們就不見了。'),
+        say('gzElder', '水乾淨、山安靜，牠們才肯回來。會長，你有在顧這座山。'),
+        emote('gzElder', 'heart'),
+        narrate('關子嶺的螢火蟲回來了！只要好好守護這座山，晴天的晚上就看得到。'),
+        effect({ flag: ['fireflies'], rep: 3, buff: { id: 'fireflyNight', name: '螢火蟲回來了', days: 3, mods: { traffic: 1.15 } } }),
+        leave('festGuest'), leave('gzElder'),
+      ];
+    },
+  },
+  {
+    id: 'gz-fireflies-gone', street: ST, once: true, priority: 57, when: 'evening',
+    cond: (c) => (c.flag('fireflies') && !cleanMountain(c.s) ? {} : null),
+    script: () => [
+      focus({ landmark: 'spring' }),
+      appear('gzElder', { landmark: 'spring' }),
+      say('gzElder', '這幾暝……螢火蟲又少了。'),
+      say('gzElder', '牠們最誠實。山若不舒服，牠們就先走。'),
+      emote('gzElder', 'sad'),
+      leave('gzElder'),
     ],
   },
   // ------------------------------------------------------------ 大地震
