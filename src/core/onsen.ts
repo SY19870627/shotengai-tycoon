@@ -489,11 +489,22 @@ export const YOKAI_KINDS = Object.keys(YOKAI) as YokaiKind[];
 
 /** 祭典夜每位路人是真妖怪的機率 */
 export function yokaiChance(s: GameState): number {
-  return festivalNight(s) ? 0.1 : 0;
+  if (!festivalNight(s)) return 0;
+  return yokaiLeft(s).length ? 0.035 : 0;
 }
 
-export function rollYokai(rand: () => number): YokaiKind {
-  return YOKAI_KINDS[Math.floor(rand() * YOKAI_KINDS.length)];
+/** 今晚還沒出現的妖怪（每種一晚只來一隻） */
+export function yokaiLeft(s: GameState): YokaiKind[] {
+  const done = s.festival?.spawned ?? [];
+  return YOKAI_KINDS.filter((k) => !done.includes(k));
+}
+
+/** 決定這隻是哪種妖怪，並記下來 */
+export function rollYokai(s: GameState, rand: () => number): YokaiKind {
+  const left = yokaiLeft(s);
+  const kind = left.length ? left[Math.floor(rand() * left.length)] : YOKAI_KINDS[Math.floor(rand() * YOKAI_KINDS.length)];
+  if (s.festival) (s.festival.spawned ??= []).push(kind);
+  return kind;
 }
 
 /** 妖怪付真錢的比例（好感越高越多） */

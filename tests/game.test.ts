@@ -10,7 +10,7 @@ import {
 } from '../src/core/game';
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
-  resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered,
+  resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered, yokaiChance, rollYokai,
   addPlan, canAddPlan, removePlan, planPriceMult, poolNoise, firefliesOut, cleanMountain, inspectionChance, INSPECTION_FINE,
 } from '../src/core/onsen';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
@@ -565,6 +565,16 @@ describe('關子嶺', () => {
     resolveLeaves(t, 'burn');
     expect(t.reputation).toBeCloseTo(rep + 3);
     expect(t.yokaiFavor).toBe(1);
+  });
+
+  it('妖怪每種一晚只來一隻', () => {
+    const s = gz();
+    s.festival = { day: s.day, leafCommission: 0, leafByTenant: {}, exposed: 0 };
+    s.minute = 20 * 60;
+    expect(yokaiChance(s)).toBeGreaterThan(0);
+    const kinds = [0, 1, 2, 3].map((k) => rollYokai(s, seeded(k)));
+    expect(new Set(kinds).size).toBe(4);
+    expect(yokaiChance(s)).toBe(0);
   });
 
   it('識破妖怪：好感每場最多 +3，好感越高付真錢越多', () => {

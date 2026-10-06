@@ -850,11 +850,18 @@ export class StreetScene extends Phaser.Scene {
             }
           }
         }
+        // 妖怪整晚在街上閒晃：走到街頭就折返，不會自己離開
+        if (p.yokai && !p.yokai.revealed && p.state === 'walk' && ((p.dir === 1 && nx > this.L.endX - 20) || (p.dir === -1 && nx < this.L.startX + 20))) {
+          p.dir = p.dir === 1 ? -1 : 1;
+          p.sprite.setFlipX(p.dir === -1);
+          p.doorsLeft = 4;
+          p.visits = 0;
+        }
         if (nx < -60 || nx > this.L.worldW + 60) {
           this.removePed(k);
           continue;
         }
-        if (p.state === 'walk' && (p.doorsLeft <= 0 || p.visits >= 2) && Math.random() < 0.01) this.fadeOutPed(p);
+        if (p.state === 'walk' && !(p.yokai && !p.yokai.revealed) && (p.doorsLeft <= 0 || p.visits >= 2) && Math.random() < 0.01) this.fadeOutPed(p);
         // 深夜十一點後，一般遊客陸續下山，街上只剩住在九份的夜貓子
         else if (p.state === 'walk' && !p.suitcase && hourOf(s) >= 23 && !festivalActive(s) && Math.random() < 0.03) this.fadeOutPed(p);
       } else if (p.state === 'inside' && s.minute >= p.leaveAt) {
@@ -2224,7 +2231,7 @@ export class StreetScene extends Phaser.Scene {
     const h = hourOf(s);
     if (h >= 17) this.attach(p, 'shadow', 0, 0);
     if (h >= 19 && Math.random() < yokaiChance(s)) {
-      p.yokai = { kind: rollYokai(Math.random), leaves: paysLeaves(s, Math.random), revealed: false, tellT: 800 + Math.random() * 2500, tellOn: 0 };
+      p.yokai = { kind: rollYokai(s, Math.random), leaves: paysLeaves(s, Math.random), revealed: false, tellT: 800 + Math.random() * 2500, tellOn: 0 };
     }
     if (h < 17 || (!p.yokai && Math.random() > 0.6)) return;
     // 造型：真妖怪也穿得跟人類 cosplay 一樣
