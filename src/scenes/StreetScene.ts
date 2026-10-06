@@ -17,6 +17,7 @@ import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex }
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight } from './drawShop';
 import { drawLandmark, VIEWPOINT } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
+import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
 import { ensureCharTexture, CHAR_H } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
@@ -110,6 +111,7 @@ export class StreetScene extends Phaser.Scene {
   private landmarkStand = new Map<string, number>();
   private landmarkBox = new Map<string, { x: number; w: number }>();
   private telescopeBusy = false;
+  private vista: { g: Phaser.GameObjects.Graphics; glow: Phaser.GameObjects.Graphics; frame: VistaFrame; key: string } | null = null;
   private benchSeats = [false, false];
   private spawnAcc = 0;
   private highlight!: Phaser.GameObjects.Rectangle;
@@ -164,9 +166,20 @@ export class StreetScene extends Phaser.Scene {
     this.sky = this.add.graphics().setScrollFactor(0).setDepth(0);
     drawBackdrop(this, this.street.backdrop, this.L.worldW);
     this.drawStreetFloor();
+    this.vista = null;
+    this.lastSkyHour = -1;
     for (const it of this.L.items) {
       if (it.kind === 'landmark') this.createLandmark(it.id!, it.x, it.width);
       else this.createLot(it.lot!);
+    }
+    const vb = this.landmarkBox.get('viewpoint');
+    if (vb) {
+      this.vista = {
+        g: this.add.graphics().setDepth(1.2),
+        glow: this.add.graphics().setDepth(61).setBlendMode(Phaser.BlendModes.ADD),
+        frame: { x0: vb.x - VISTA_PAD, x1: vb.x + vb.w + VISTA_PAD },
+        key: '',
+      };
     }
     if (this.street.facade === 'jiufen') this.drawLanternStrings();
     this.drawStreetSigns();
@@ -582,6 +595,7 @@ export class StreetScene extends Phaser.Scene {
       this.sky.clear();
       this.sky.fillGradientStyle(top, top, bottom, bottom, 1);
       this.sky.fillRect(0, 0, W, GROUND_Y + 10);
+      if (this.vista) drawVista(this.vista.g, this.vista.glow, this.vista.frame, [top, bottom], hour, s.minute, s.weather);
       const n = nightness(hour);
       this.nightOverlay.setFillStyle(0x0b0d2a, n * 0.45 + (s.weather === 'rain' ? 0.1 : 0));
       for (const v of this.lotViews) {
