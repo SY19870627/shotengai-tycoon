@@ -439,22 +439,27 @@ describe('關子嶺', () => {
     const s = gz();
     place(s, 0, 'gz-egg');
     place(s, 1, 'gz-ryokan');
-    expect(springSupply(s)).toBe(6);
+    expect(springSupply(s)).toBe(12);
     expect(springDemand(s)).toBe(4);
     expect(springRatio(s)).toBe(1);
     place(s, 2, 'gz-mud');
     s.minute = 12 * 60;
     const before = enterChance(s, 2);
     place(s, 3, 'gz-ceo');
-    expect(springDemand(s)).toBe(9);
-    expect(springRatio(s)).toBeCloseTo(6 / 9);
-    expect(enterChance(s, 2)).toBeLessThan(before);
+    s.lots[3].shop!.level = 3;
+    s.lots[1].shop!.level = 3;
+    expect(springDemand(s)).toBe(1 + 5 + 2 + 5);
+    expect(springRatio(s)).toBeCloseTo(12 / 13);
+    const short = enterChance(s, 2);
+    s.springBonus = 10;
+    expect(enterChance(s, 2)).toBeGreaterThan(short);
+    expect(before).toBeGreaterThan(0);
   });
 
   it('開井增加泉量和民怨，三天內連續開挖民怨更多', () => {
     const s = gz();
     expect(drillWell(s).ok).toBe(true);
-    expect(springSupply(s)).toBe(9);
+    expect(springSupply(s)).toBe(15);
     expect(s.grievance).toBe(22);
     expect(drillWell(s).ok).toBe(true);
     expect(s.grievance).toBe(54);

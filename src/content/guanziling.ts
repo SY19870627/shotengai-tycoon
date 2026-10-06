@@ -501,7 +501,7 @@ export const GUANZILING: StreetDef = {
   visitors: { jp: 0, kr: 0 },
   closeHour: 22,
   festivalCloseHour: 26,
-  spring: { base: 6, wellCost: [10000, 18000, 28000, 42000], wellYield: 3 },
+  spring: { base: 12, wellCost: [10000, 18000, 28000, 42000], wellYield: 3 },
   quakeDay: 18,
   shopTypes: ['claypot', 'ryokan', 'bathhouse', 'mudspa', 'onsenegg', 'yukata', 'sanchan', 'cafe', 'souvenir', 'grocery'],
   tenants,
