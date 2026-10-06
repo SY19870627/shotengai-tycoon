@@ -24,7 +24,7 @@ import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
-import { ensureCharTexture, CHAR_H } from './drawCharacters';
+import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
@@ -33,6 +33,15 @@ import { PED_VARIANTS } from './BootScene';
 const MINUTES_PER_SEC = 8;
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
 const MODULE_COLOR: Record<string, number> = { firstaid: 0xd64545, multilingual: 0x2f6fb0, guide: 0xd9824a, broadcast: 0x7a4a9a };
+/** 穿浴衣的遊客造型 */
+const YUKATA_LOOKS: Look[] = [
+  { skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'bun', shirt: 0x4f7dc6, pants: 0x4f7dc6, accessory: 'yukata', age: 'young' },
+  { skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'short', shirt: 0x3a3a5a, pants: 0x3a3a5a, accessory: 'yukata', age: 'young' },
+  { skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'ponytail', shirt: 0xef8fb1, pants: 0xef8fb1, accessory: 'yukata', age: 'young' },
+  { skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xf2c14e, pants: 0xf2c14e, accessory: 'yukata', age: 'mid' },
+  { skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'long', shirt: 0x7a4a9a, pants: 0x7a4a9a, accessory: 'yukata', age: 'young' },
+];
+
 /** 角色站的位置（比路人前面一點） */
 const ACTOR_Y = GROUND_Y + SIDEWALK_H - 6;
 
@@ -71,6 +80,8 @@ interface Ped {
   floatY?: number;
   /** 祭典夜可以點 */
   tappable?: boolean;
+  /** 換了造型的路人（例如穿浴衣）用的貼圖 key 前綴 */
+  tex?: string;
 }
 
 type SightKind = 'view' | 'selfie' | 'telescope' | 'bench' | 'fireView' | 'fireSelfie' | 'fireSit' | 'fireBuy';
@@ -774,6 +785,11 @@ export class StreetScene extends Phaser.Scene {
     };
     this.peds.push(ped);
     if (festivalActive(s)) this.dressForFestival(ped);
+    // 開了浴衣店：街上有一些早上就租好浴衣的遊客
+    else if (!fromBus && hourOf(s) >= 9.5 && s.lots.some((l) => l.shop?.defId === 'yukata') && Math.random() < 0.1) {
+      this.wearYukata(ped);
+      ped.yukata = true;
+    }
     // 沒有翻譯時，外國旅客偶爾會一臉困惑
     if (origin !== 'local' && moduleEff(s, 'multilingual') === 0 && Math.random() < 0.08) {
       this.time.delayedCall(800, () => sprite.active && this.floatText(sprite.x, sprite.y - 70, origin === 'jp' ? 'えっと…？' : '어…?', '#ffffff', 14));
@@ -792,7 +808,7 @@ export class StreetScene extends Phaser.Scene {
         p.sprite.x = nx;
         p.animT += dt * mult;
         const fr = Math.floor(p.animT / 180) % 2;
-        if (!p.yokai?.revealed) p.sprite.setTexture(`ped${p.variant}_${fr}`);
+        if (!p.yokai?.revealed) p.sprite.setTexture(`${this.pedKey(p)}_${fr}`);
         p.sprite.y = p.baseY - fr - (p.floatY ?? 0);
         if (p.state === 'walk' && mult > 0) {
           if (p.vanishIn > 0 && (p.vanishIn -= dt * mult) <= 0) {
@@ -938,14 +954,14 @@ export class StreetScene extends Phaser.Scene {
       const d = Math.hypot(dx, dy);
       if (d <= step) {
         p.sprite.setPosition(x, y);
-        p.sprite.setTexture(`ped${p.variant}_0`);
+        p.sprite.setTexture(`${this.pedKey(p)}_0`);
         return true;
       }
       p.sprite.x += (dx / d) * step;
       p.sprite.y += (dy / d) * step;
       if (Math.abs(dx) > 1) p.sprite.setFlipX(dx < 0);
       p.animT += dt * mult;
-      p.sprite.setTexture(`ped${p.variant}_${Math.floor(p.animT / 180) % 2}`);
+      p.sprite.setTexture(`${this.pedKey(p)}_${Math.floor(p.animT / 180) % 2}`);
       p.sprite.setDepth(30 + p.sprite.y / 1000);
       return false;
     };
@@ -1018,7 +1034,7 @@ export class StreetScene extends Phaser.Scene {
       }
       case 'bench':
         // 坐下：把腿藏到椅子後面
-        p.sprite.setTexture(`ped${p.variant}_0`).setCrop(0, 0, 30, 46);
+        p.sprite.setTexture(`${this.pedKey(p)}_0`).setCrop(...this.sitCrop(p));
         this.sightSay(p, this.sightLine(p, { local: ['腳好酸…坐一下', '爬完石階要休息', '這裡好放空'], jp: ['ちょっと休憩…', '足が…'], kr: ['다리 아파…', '잠깐 쉬자'] }), '#d8d2e6');
         break;
     }
@@ -2343,7 +2359,7 @@ export class StreetScene extends Phaser.Scene {
     const anim = this.time.addEvent({
       delay: 220, loop: true, callback: () => {
         frame++;
-        if (p.sprite.active) p.sprite.setTexture(`ped${p.variant}_${frame % 2}`);
+        if (p.sprite.active) p.sprite.setTexture(`${this.pedKey(p)}_${frame % 2}`);
       },
     });
     const midX = (foot + top.x) / 2, midY = (GROUND_Y + top.y) / 2;
@@ -2425,7 +2441,7 @@ export class StreetScene extends Phaser.Scene {
         this.sightSay(p, Phaser.Utils.Array.GetRandom(['跟火合照！', '水火同源打卡！', '比個讚～']));
         break;
       case 'fireSit':
-        p.sprite.setTexture(`ped${p.variant}_0`).setCrop(0, 0, 30, 46);
+        p.sprite.setTexture(`${this.pedKey(p)}_0`).setCrop(...this.sitCrop(p));
         this.sightSay(p, Phaser.Utils.Array.GetRandom(['坐下來烤一下手', '好溫暖～', '看火看到發呆']), '#ffd8a0');
         break;
       case 'fireBuy':
@@ -2450,14 +2466,34 @@ export class StreetScene extends Phaser.Scene {
     }
   }
 
+  private pedKey(p: Ped): string {
+    return p.tex ?? `ped${p.variant}`;
+  }
+
+  /** 坐下時把腿藏起來（貼圖大小不同，裁切範圍也不同） */
+  private sitCrop(p: Ped): [number, number, number, number] {
+    return p.tex ? [0, 0, CHAR_W, 59] : [0, 0, 30, 46];
+  }
+
+  /** 換成穿浴衣的造型（角色貼圖縮小到路人的大小） */
+  private wearYukata(p: Ped) {
+    const k = p.variant % YUKATA_LOOKS.length;
+    p.tex = ensureCharTexture(this, `yukataGuest${k}`, YUKATA_LOOKS[k]);
+    p.yukata = true;
+    p.sprite.setTexture(`${p.tex}_0`).setScale(61 / CHAR_H);
+    for (const e of p.extras ?? []) if (e.key === 'mudface') e.img.destroy();
+    if (p.extras) p.extras = p.extras.filter((e) => e.key !== 'mudface');
+  }
+
   /** 逛完溫泉類的店：灰臉、穿浴衣、泡湯泡得臉紅紅 */
   private afterOnsenVisit(p: Ped, defId: string, lot: number) {
-    if (defId === 'mudspa' && !p.extras?.some((e) => e.key === 'mudface')) {
+    if (defId === 'mudspa' && !p.extras?.some((e) => e.key === 'mudface') && !p.tex) {
       this.attach(p, 'mudface', 2, -47);
       this.floatText(this.L.doorX(lot), GROUND_Y - 80, '敷臉中～', '#d8d2d0', 14);
     } else if (defId === 'yukata' && !p.yukata) {
       p.yukata = true;
-      this.attach(p, 'yukata-robe', 0, -21, 0.0001)?.setScale(1, 1.23);
+      this.wearYukata(p);
+      p.doorsLeft = Math.max(p.doorsLeft, 4);
       this.floatText(this.L.doorX(lot), GROUND_Y - 80, '換上浴衣了！', '#ffc8e0', 14);
     } else if (defId === 'bathhouse' && Math.random() < 0.5) {
       this.floatText(this.L.doorX(lot), GROUND_Y - 80, Phaser.Utils.Array.GetRandom(['♨ 好舒服～', '泥湯好滑！', '整個人都軟了']), '#ffd0c0', 14);
