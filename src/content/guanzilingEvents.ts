@@ -1,6 +1,6 @@
 import type { StoryEvent, StoryCtx } from '../core/types';
 import { SHOP_BY_ID } from '../core/shops';
-import { TOWNHALL, quakeLossPct, cleanMountain, hasStarBath, hasPlan } from '../core/onsen';
+import { TOWNHALL, quakeLossPct, cleanMountain, hasStarBath, hasPlan, INSPECTION_FINE } from '../core/onsen';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt } from './dsl';
 
 const ST = 'guanziling';
@@ -113,15 +113,16 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
       appear('gz-cai', { landmark: 'fire' }),
       appear('me', { landmark: 'fire' }, -100),
       say('gz-cai', '會長你看！這團火燒了三百年，免費的天然氣耶！就這樣圍起來給人看？太浪費了！'),
-      say('gz-cai', '擺台爆米花機、烤個魷魚，遊客一定排隊。每個人收個十幾塊，管理會也有錢。'),
+      say('gz-cai', '在火上烤肉、烤魷魚，遊客一定排隊！反正公所的人很少上山來。'),
       emote('gz-cai', 'idea'),
       appear('priest', { landmark: 'fire' }, 110),
-      say('priest', '……這是火王爺的火，不是瓦斯爐。'),
-      choice('要拿水火同源來做生意嗎？',
-        opt('開放小攤販試試看', { fireMode: 'stall', sat: [['gz-cai', 10]] }, [
-          say('gz-cai', '讚啦！明天就把爆米花機推上來！'),
-          say('priest', '……唉，小心火燭。'),
-          emote('priest', 'sweat'),
+      say('priest', '……這是火王爺的火，不是瓦斯爐。而且這裡是保護區，連一顆爆米花都不能烤。'),
+      say('gz-cai', '好啦好啦，那在步道旁邊擺攤總可以吧？賣平安符、伴手禮，不碰火。'),
+      choice('要在水火同源做生意嗎？',
+        opt('合法的周邊擺攤就好（不碰火）', { fireMode: 'stall', sat: [['gz-cai', 6]] }, [
+          say('gz-cai', '好，平安符我明天就去批！'),
+          say('priest', '不碰火就好。平安符……順便拿來廟裡過火一下。'),
+          emote('priest', 'heart'),
         ]),
         opt('維持保育，只供參觀', { sat: [['gz-cai', -6]], rep: 1 }, [
           say('gz-cai', '好啦好啦，有錢不賺……'),
@@ -158,7 +159,7 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
       say('priest', '你看那團火，是不是比以前小了？'),
       emote('me', 'shock'),
       choice('火王爺好像不高興了',
-        opt('改回小攤販，並辦法會賠罪', { fireMode: 'stall', rep: 1, grievance: -5 }, [
+        opt('拆掉烤肉區、只留周邊擺攤，並辦法會賠罪', { fireMode: 'stall', rep: 1, grievance: -5 }, [
           say('priest', '好，我來準備。火王爺會原諒的。'),
           fx('smoke', 'priest'),
         ], 3000),
@@ -182,18 +183,18 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
       emote('gzChief', 'sweat'),
       appear('priest', { landmark: 'fire' }, 110),
       say('priest', '……'),
-      narrate('處理火災花了 $8,000，聲望下降。烤肉區只能先改回小攤販。'),
+      narrate('處理火災花了 $8,000，聲望下降。違規烤肉區被拆除，只剩合法的周邊擺攤。'),
       effect({ unflag: ['fireAccident'], money: -8000, rep: -5, fireMode: 'stall' }),
       leave('gzChief'), leave('priest'),
     ],
   },
   {
     id: 'gz-popcorn', street: ST, cooldown: 6, chance: 0.5, priority: 12, when: 'noon',
-    cond: (c) => (c.s.fireMode === 'stall' ? {} : null),
+    cond: (c) => (c.s.fireMode === 'full' ? {} : null),
     script: () => [
       focus({ landmark: 'fire' }),
       appear('tourist', { landmark: 'fire' }, -50),
-      say('tourist', '老闆，一包爆米花！火大一點！'),
+      say('tourist', '老闆，爆米花直接放在火上烤！火大一點！'),
       fx('firecracker', { landmark: 'fire' }),
       narrate('「砰砰砰砰砰——！」爆米花機炸開了，整片爆米花像下雪一樣飄下來。'),
       fx('confetti', { landmark: 'fire' }),
@@ -270,6 +271,28 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
       emote('gzElder', 'sad'),
       leave('gzElder'),
     ],
+  },
+  {
+    id: 'gz-inspection', street: ST, cooldown: 1, priority: 87, when: 'morning',
+    cond: (c) => (c.flag('inspection') ? {} : null),
+    script: (_b, c) => {
+      const a = c.has('gz-cai') ? 'gz-cai' : 'bbqBoss';
+      return [
+        narrate('一早，一台公務車開上山……'),
+        focus({ landmark: 'fire' }),
+        appear('inspector', { landmark: 'fire' }, -40),
+        say('inspector', '我們接到檢舉，水火同源保護區裡面有人用火烤肉。'),
+        say('inspector', '這裡是保護區，連爆米花都不能烤。依規定開罰，烤肉設備今天全部拆除。'),
+        appear(a, { landmark: 'fire' }, 90),
+        say(a, '呃……長官，這個是……臨時的啦……'),
+        emote(a, 'sweat'),
+        appear('reporter', { landmark: 'fire' }, 190),
+        fx('flash', 'reporter'),
+        narrate(`罰款 $${INSPECTION_FINE.toLocaleString('en-US')}、聲望下降。違規烤肉區被拆除，只剩合法的周邊擺攤。`),
+        effect({ unflag: ['inspection'], money: -INSPECTION_FINE, rep: -4, fireMode: 'stall' }),
+        leave('inspector'), leave(a), leave('reporter'),
+      ];
+    },
   },
   // ------------------------------------------------------------ 大地震
   {
@@ -379,8 +402,8 @@ export const GUANZILING_EVENTS: StoryEvent[] = [
         emote('priest', 'anger'),
         choice('火變大了，要趁機賺一波嗎？',
           opt('維持現狀', {}, [say(a, '唉，有錢都不賺……')]),
-          opt('全面開發成烤肉區', { fireMode: 'full', grievance: 5 }, [
-            say(a, '這就對了！'),
+          opt('偷偷開違規烤肉區', { fireMode: 'full', grievance: 5 }, [
+            say(a, '這就對了！公所的人很少上山啦，被抓到再說！'),
             say('priest', '……火大，風險也大。會長自己保重。'),
             emote('priest', 'sweat'),
           ]),
