@@ -99,6 +99,8 @@ export interface Effects {
   unlockActivity?: string[];
   /** 租客離開 */
   leave?: string[];
+  /** 新租客接手舊租客的店面（保留裝修等級與方案）：[舊租客, 新租客, 租金等級] */
+  takeOver?: [string, string, number];
   /** 調整租金等級 [租客, 等級] */
   rentTier?: [string, number][];
   /** 店面升一級 */
