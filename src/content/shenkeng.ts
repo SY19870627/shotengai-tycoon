@@ -477,6 +477,7 @@ export const SHENKENG: StreetDef = {
   maintenance: 300,
   lotCost: 6000,
   weather: { rain: 0.2, fog: 0.05 },
+  visitors: { jp: 0.06, kr: 0.04 },
   shopTypes: ['stinkytofu', 'tofuice', 'douhua', 'brownsugar', 'snack', 'grocery', 'cafe', 'souvenir'],
   tenants,
   stories,

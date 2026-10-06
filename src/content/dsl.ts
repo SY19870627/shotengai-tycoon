@@ -4,8 +4,8 @@ import type { ActorRef, Emote, Effects, Step, ChoiceOption, FxKind, Look } from 
 export const say = (actor: ActorRef, text: string): Step => ({ t: 'say', actor, text });
 export const emote = (actor: ActorRef, kind: Emote): Step => ({ t: 'emote', actor, kind });
 export const narrate = (text: string): Step => ({ t: 'narrate', text });
-export const focus = (on: ActorRef | { landmark: string }): Step => ({ t: 'focus', on });
-export const appear = (actor: ActorRef, near?: ActorRef | { landmark: string }, dx?: number): Step =>
+export const focus = (on: ActorRef | { landmark: string } | { lot: number }): Step => ({ t: 'focus', on });
+export const appear = (actor: ActorRef, near?: ActorRef | { landmark: string } | { lot: number }, dx?: number): Step =>
   ({ t: 'appear', actor, near, dx });
 export const walk = (actor: ActorRef, to: ActorRef | { landmark: string }, dx?: number): Step => ({ t: 'walk', actor, to, dx });
 export const leave = (actor: ActorRef): Step => ({ t: 'leave', actor });

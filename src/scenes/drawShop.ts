@@ -373,3 +373,129 @@ export function drawLockedLot(scene: Phaser.Scene, cost: number, isNext: boolean
   }
   return objs;
 }
+
+/** 遊客服務中心（救護站 + 服務台） */
+export function drawFacilityBuilding(
+  scene: Phaser.Scene, level: number, modules: string[], slots: number,
+  icons: Record<string, { icon: string; name: string; color: number }>,
+): Phaser.GameObjects.GameObject[] {
+  const g = scene.add.graphics();
+  const objs: Phaser.GameObjects.GameObject[] = [g];
+  const { left, right } = FACADE;
+  const top = -buildingHeight(level);
+  const wall = 0xf1efe6;
+  // 主體
+  g.fillStyle(wall);
+  g.fillRect(left, top, right - left, -top);
+  g.fillStyle(0x3f8f4f);
+  g.fillRect(left - 4, top - 12, right - left + 8, 14);
+  g.fillRect(left, top + 2, 6, -top - 2);
+  g.fillRect(right - 6, top + 2, 6, -top - 2);
+  // 樓上大玻璃窗
+  for (let f = 0; f < level; f++) {
+    const wy = FACADE.signTop - 70 - f * 46;
+    if (wy < top + 12) break;
+    g.fillStyle(0x9ec3d6);
+    g.fillRect(left + 20, wy, right - left - 40, 34);
+    g.fillStyle(0xffffff, 0.35);
+    g.fillTriangle(left + 20, wy, left + 70, wy, left + 20, wy + 30);
+    g.fillStyle(0x3f8f4f);
+    for (let x = left + 20 + 50; x < right - 20; x += 50) g.fillRect(x, wy, 3, 34);
+  }
+  // 招牌
+  g.fillStyle(0x2f6f3f);
+  g.fillRoundedRect(left + 10, FACADE.signTop, right - left - 20, 34, 4);
+  objs.push(scene.add.text(LOT_W / 2, FACADE.signTop + 17, '遊客服務中心', {
+    fontFamily: FONT, fontSize: '18px', fontStyle: '900', color: '#ffffff',
+  }).setOrigin(0.5));
+  for (let i = 0; i < level; i++) objs.push(scene.add.star(right - 24 - i * 12, FACADE.signTop + 8, 5, 2.4, 5, C.gold));
+  // 一樓：模組看板
+  g.fillStyle(0xe2ddd0);
+  g.fillRect(left + 6, FACADE.floorTop - 10, right - left - 12, -FACADE.floorTop + 10);
+  const boardW = 34, gap = 6;
+  for (let k = 0; k < 4; k++) {
+    const bx = left + 14 + k * (boardW + gap);
+    const by = FACADE.floorTop - 4;
+    const id = modules[k];
+    if (id) {
+      const ic = icons[id];
+      g.fillStyle(ic.color);
+      g.fillRoundedRect(bx, by, boardW, boardW, 6);
+      objs.push(scene.add.text(bx + boardW / 2, by + boardW / 2, ic.icon, {
+        fontFamily: FONT, fontSize: '19px', fontStyle: '900', color: '#ffffff',
+      }).setOrigin(0.5));
+    } else if (k < slots) {
+      g.lineStyle(2, 0x9a958a);
+      g.strokeRoundedRect(bx, by, boardW, boardW, 6);
+      objs.push(scene.add.text(bx + boardW / 2, by + boardW / 2, '空', {
+        fontFamily: FONT, fontSize: '13px', color: '#9a958a',
+      }).setOrigin(0.5));
+    }
+  }
+  // 玻璃門
+  g.fillStyle(0x3a3a3a);
+  g.fillRect(FACADE.doorLeft - 4, FACADE.floorTop + 10, FACADE.doorRight - FACADE.doorLeft + 8, -FACADE.floorTop - 10);
+  g.fillStyle(0xbfd8e2);
+  g.fillRect(FACADE.doorLeft, FACADE.floorTop + 14, (FACADE.doorRight - FACADE.doorLeft) / 2 - 1, -FACADE.floorTop - 14);
+  g.fillRect(FACADE.doorLeft + (FACADE.doorRight - FACADE.doorLeft) / 2 + 1, FACADE.floorTop + 14, (FACADE.doorRight - FACADE.doorLeft) / 2 - 1, -FACADE.floorTop - 14);
+  // 門口服務台
+  g.fillStyle(0x6b4a30);
+  g.fillRect(left + 18, -40, 110, 40);
+  g.fillStyle(0x3f8f4f);
+  g.fillRect(left + 18, -44, 110, 6);
+  // 救護站：門上紅十字燈
+  if (modules.includes('firstaid')) {
+    g.fillStyle(0xffffff);
+    g.fillCircle(FACADE.doorRight + 10, FACADE.floorTop - 20, 13);
+    g.fillStyle(0xd64545);
+    g.fillRect(FACADE.doorRight + 5, FACADE.floorTop - 30, 10, 20);
+    g.fillRect(FACADE.doorRight, FACADE.floorTop - 25, 20, 10);
+  }
+  return objs;
+}
+
+/** 巴士（0 小巴、1 大巴、2 雙層） */
+export function drawBus(scene: Phaser.Scene, level: number, label: string): Phaser.GameObjects.Container {
+  const c = scene.add.container(0, 0);
+  const g = scene.add.graphics();
+  c.add(g);
+  const len = [130, 210, 230][level];
+  const h = [62, 72, 124][level];
+  const color = [0x3f8f4f, 0x2f6fb0, 0xc0392b][level];
+  // 車身（原點在車頭底部中央偏右，向左延伸）
+  g.fillStyle(0x000000, 0.25);
+  g.fillEllipse(-len / 2, 4, len, 10);
+  g.fillStyle(color);
+  g.fillRoundedRect(-len, -h - 10, len, h, 10);
+  g.fillStyle(0xf6f0e0);
+  g.fillRect(-len, -24, len, 6);
+  // 車窗
+  const rows = level === 2 ? 2 : 1;
+  for (let r = 0; r < rows; r++) {
+    const wy = -h - 2 + r * 54;
+    for (let x = -len + 12; x < -30; x += 28) {
+      g.fillStyle(0xbfe0ee);
+      g.fillRect(x, wy, 22, 22);
+    }
+  }
+  // 擋風玻璃與車門
+  g.fillStyle(0xbfe0ee);
+  g.fillRoundedRect(-26, -h - 2, 20, h - 30, 4);
+  g.fillStyle(0x2a2a2a);
+  g.fillRect(-48, -46, 16, 36);
+  // 輪子
+  g.fillStyle(0x222222);
+  g.fillCircle(-len + 28, -8, 12);
+  g.fillCircle(-36, -8, 12);
+  g.fillStyle(0x888888);
+  g.fillCircle(-len + 28, -8, 5);
+  g.fillCircle(-36, -8, 5);
+  // 車頭燈
+  g.fillStyle(0xf2c14e);
+  g.fillCircle(-4, -30, 4);
+  c.add(scene.add.text(-len / 2 - 14, -h + (level === 2 ? 46 : 26), label, {
+    fontFamily: FONT, fontSize: level === 0 ? '12px' : '14px', fontStyle: '900', color: '#ffffff',
+  }).setOrigin(0.5));
+  c.setSize(len, h);
+  return c;
+}

@@ -3,7 +3,10 @@ import {
   createGame, signTenant, unlockLot, nextLotCost, enterChance, neighborEffects, tryEnter, completeVisit, endDay,
   startNextDay, serialize, deserialize, DAY_START_MIN, startActivity, canStartActivity, applyEffects, getRel, addRel,
   renovate, evict, setRentTier, postAd, profileOf, presentTenants, combinedMods, generateTenant, weekdayName,
+  buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
+  transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
 } from '../src/core/game';
+import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
@@ -238,5 +241,102 @@ describe('一天的流程', () => {
     const sum = endDay(s);
     expect(sum.visitors).toBeGreaterThan(30);
     expect(sum.net).toBeGreaterThan(0);
+  });
+});
+
+describe('九份：濃霧、神隱日、服務中心、交通', () => {
+  it('服務中心佔店面、模組需要人力，人手不足時效果打折', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.money = 999999;
+    expect(buildFacility(s, 0).ok).toBe(true);
+    expect(signTenant(s, 0, 'jf-fu', 0).ok).toBe(false); // 店面被佔了
+    expect(buildFacility(s, 1).ok).toBe(false); // 只能一座
+    expect(installModule(s, 'firstaid').ok).toBe(true);
+    expect(installModule(s, 'guide').ok).toBe(true);
+    expect(installModule(s, 'broadcast').ok).toBe(false); // Lv1 只有 2 格
+    expect(upgradeFacility(s).ok).toBe(true);
+    expect(installModule(s, 'broadcast').ok).toBe(true);
+    const f = facilityOf(s)!.f;
+    expect(moduleEff(s, 'firstaid')).toBe(0);
+    setStaff(s, 2);
+    expect(staffRatio(f)).toBeCloseTo(2 / 5);
+    setStaff(s, 5);
+    expect(moduleEff(s, 'firstaid')).toBe(1);
+    expect(setStaff(s, 99).ok).toBe(false);
+    // 薪水在打烊時扣
+    const m = s.money;
+    const sum = endDay(s);
+    expect(sum.wages).toBeGreaterThan(0);
+    expect(s.money).toBe(m + sum.rent - sum.maintenance - sum.wages);
+  });
+
+  it('有救護站時跌倒會被處理，沒處理的跌倒會扣聲望', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.weather = 'heavyFog';
+    for (let k = 0; k < 10; k++) registerFall(s, seeded(k));
+    expect(s.today.fallsTreated).toBe(0);
+    const before = s.reputation;
+    endDay(s);
+    expect(s.reputation).toBeLessThan(before);
+
+    const s2 = createGame('jiufen', seeded(1));
+    s2.money = 99999;
+    buildFacility(s2, 0); installModule(s2, 'firstaid'); setStaff(s2, 2);
+    for (let k = 0; k < 10; k++) registerFall(s2, seeded(k));
+    expect(s2.today.fallsTreated).toBe(10);
+  });
+
+  it('神隱日會讓遊客消失，祈神儀式可以保護當天或隔天', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.money = 99999;
+    s.kami = true;
+    expect(vanishChance(s)).toBeGreaterThan(0);
+    expect(startActivity(s, 'ritual').ok).toBe(true);
+    expect(ritualProtected(s)).toBe(true);
+    expect(vanishChance(s)).toBe(0);
+    // 預報明天是神隱日 → 儀式保護明天
+    const s2 = createGame('jiufen', seeded(1));
+    s2.money = 99999;
+    expect(canStartActivity(s2, 'ritual').ok).toBe(false);
+    s2.forecast = { weather: 'heavyFog', kami: true };
+    expect(startActivity(s2, 'ritual').ok).toBe(true);
+    startNextDay(s2, seeded(3));
+    expect(s2.kami).toBe(true);
+    expect(ritualProtected(s2)).toBe(true);
+    // 深坑沒有神隱
+    expect(createGame('shenkeng').unlockedActivities).not.toContain('ritual');
+  });
+
+  it('前三天不會有濃霧，預報會成為隔天的天氣', () => {
+    for (let k = 0; k < 50; k++) expect(rollForecast(STREETS.jiufen, 2, seeded(k)).weather).not.toBe('heavyFog');
+    const s = createGame('jiufen', seeded(5));
+    const f = s.forecast;
+    startNextDay(s, seeded(6));
+    expect(s.weather).toBe(f.weather);
+  });
+
+  it('交通容量會卡住人潮，升級巴士與路線可以提高', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.money = 999999;
+    s.reputation = 60;
+    s.day = 2; // 週六
+    s.minute = 13 * 60;
+    s.lots.forEach((l) => (l.unlocked = true));
+    const cap0 = transportCapacity(s);
+    expect(trafficPerHour(s)).toBeLessThanOrEqual(cap0);
+    expect(strandedPerHour(s)).toBeGreaterThan(0);
+    expect(upgradeBus(s).ok).toBe(true);
+    expect(upgradeRoute(s).ok).toBe(true);
+    expect(transportCapacity(s)).toBeGreaterThan(cap0 * 2);
+    expect(transportCapacity(createGame('shenkeng'))).toBe(Infinity);
+  });
+
+  it('舊存檔可以讀取並補上新欄位', () => {
+    const s = createGame('jiufen', seeded(1)) as unknown as Record<string, unknown>;
+    for (const k of ['kami', 'forecast', 'ritualDay', 'bus', 'route']) delete s[k];
+    const loaded = deserialize(JSON.stringify(s))!;
+    expect(loaded.bus).toBe(0);
+    expect(loaded.forecast).toBeTruthy();
+    expect(loaded.unlockedActivities).toContain('ritual');
   });
 });

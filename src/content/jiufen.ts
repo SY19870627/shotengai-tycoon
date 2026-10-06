@@ -1,5 +1,6 @@
 import type { StreetDef, TenantProfile, StoryEvent, GameState } from '../core/types';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look } from './dsl';
+import { JIUFEN_EVENTS } from './jiufenEvents';
 
 const ST = 'jiufen';
 const shops = (s: GameState) => s.lots.filter((l) => l.shop).length;
@@ -395,7 +396,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'jf-fog', street: ST, cooldown: 6, chance: 0.6, priority: 20, when: 'noon',
-    cond: (c) => (c.s.weather === 'fog' && c.present.length >= 2 ? { a: c.present[Math.floor(c.rand() * c.present.length)] } : null),
+    cond: (c) => ((c.s.weather === 'fog' || c.s.weather === 'heavyFog') && c.present.length >= 2 ? { a: c.present[Math.floor(c.rand() * c.present.length)] } : null),
     script: (b) => [
       narrate('濃霧籠罩山城……'),
       focus(b.a),
@@ -473,10 +474,13 @@ export const JIUFEN: StreetDef = {
   rentMult: 1.6,
   maintenance: 600,
   lotCost: 12000,
-  weather: { rain: 0.25, fog: 0.2 },
+  weather: { rain: 0.2, fog: 0.16, heavyFog: 0.12 },
+  kamikakushi: 0.45,
+  visitors: { jp: 0.3, kr: 0.2 },
+  transport: { base: 50, name: '上山公車' },
   shopTypes: ['taro', 'teahouse', 'fishball', 'caogui', 'ocarina', 'souvenir', 'cafe', 'grocery'],
   tenants,
-  stories,
+  stories: [...stories, ...JIUFEN_EVENTS],
   activities: {
     templeFair: { name: '九份廟會遶境', temple: '山城廟宇' },
     mascots: [

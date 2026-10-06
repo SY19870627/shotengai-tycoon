@@ -1,7 +1,7 @@
 import type { ActivityVariant, Mods } from './types';
 
 export interface ActivityDef {
-  id: 'coupon' | 'templeFair' | 'mascot' | 'legend' | 'influencer';
+  id: 'coupon' | 'templeFair' | 'mascot' | 'legend' | 'influencer' | 'ritual';
   name: string;
   description: string;
   /** 基本花費（變體可以覆寫） */
@@ -47,6 +47,12 @@ export const ACTIVITIES: ActivityDef[] = [
     description: '請網紅來直播一天。不同網紅效果不同，人太多店家塞爆的話可能會被留負評。',
     cost: 5000, days: 1, cooldown: 4, startUnlocked: true, minRep: 0,
     mods: {}, hasVariants: true,
+  },
+  {
+    id: 'ritual', name: '祈神儀式',
+    description: '請廟方在霧中設壇祈福，保佑遊客不被「神隱」。只能在神隱日當天，或預報明天是神隱日時舉辦。',
+    cost: 6000, days: 1, cooldown: 0, startUnlocked: false, minRep: 0,
+    mods: {}, hasVariants: false,
   },
 ];
 

@@ -8,7 +8,7 @@ function comingSoon(id: string, name: string, region: string, difficulty: number
     id, name, region, difficulty, tagline, map, intro: '', playable: false,
     facade: 'redbrick', backdrop: 'basin-hills', ground: 'brick', layout: [], landmarks: [],
     startLots: 0, startMoney: 0, startRep: 0, baseTraffic: 0, repTraffic: 0, weekendMult: 1, rentMult: 1,
-    maintenance: 0, lotCost: 0, weather: { rain: 0, fog: 0 }, shopTypes: [], tenants: [], stories: [],
+    maintenance: 0, lotCost: 0, weather: { rain: 0, fog: 0 }, visitors: { jp: 0, kr: 0 }, shopTypes: [], tenants: [], stories: [],
     activities: { templeFair: { name: '', temple: '' }, mascots: [], legends: [] }, goals: [],
   };
 }

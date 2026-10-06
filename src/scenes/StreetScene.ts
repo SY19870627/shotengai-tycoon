@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
 import {
-  DAY_END_MIN, hourOf, trafficPerHour, notePasserby, enterChance, tryEnter, completeVisit, endDay,
+  DAY_END_MIN, hourOf, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, endDay,
   nextLotCost, streetOf, profileOf, presentTenants, lotOfTenant, getRel, isActive, activityVariant,
+  rollOrigin, fallChance, registerFall, vanishChance, registerVanish, strandedPerHour, BUS, ROUTE,
 } from '../core/game';
+import { MODULES, FACILITY, facilityOf, moduleEff, staffRatio } from '../core/facilities';
 import { pickStory } from '../core/story';
 import { passerbyRoute } from '../core/sim';
 import { SHOP_BY_ID, isOpen, type Category } from '../core/shops';
-import type { ActorRef, Emote, FxKind, Look, StreetDef } from '../core/types';
+import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin } from '../core/types';
 import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
-import { drawShopFacade, drawEmptyLot, drawLockedLot, FACADE, buildingHeight } from './drawShop';
+import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight } from './drawShop';
 import { drawLandmark } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { ensureMascotTexture } from './drawMascots';
@@ -23,6 +25,7 @@ import { PED_VARIANTS } from './BootScene';
 const MINUTES_PER_SEC = 8;
 const LAST_SPAWN_MIN = 22.5 * 60;
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
+const MODULE_COLOR: Record<string, number> = { firstaid: 0xd64545, multilingual: 0x2f6fb0, guide: 0xd9824a, broadcast: 0x7a4a9a };
 /** 角色站的位置（比路人前面一點） */
 const ACTOR_Y = GROUND_Y + SIDEWALK_H - 6;
 
@@ -36,11 +39,15 @@ interface Ped {
   favorite: Category;
   visits: number;
   doorsLeft: number;
-  state: 'walk' | 'entering' | 'inside' | 'leaving';
+  state: 'walk' | 'entering' | 'inside' | 'leaving' | 'fallen';
   lot: number;
   leaveAt: number;
   animT: number;
   baseY: number;
+  origin: Origin;
+  /** 再走幾毫秒會跌倒／消失（-1 = 不會） */
+  fallIn: number;
+  vanishIn: number;
 }
 
 interface LotView {
@@ -92,6 +99,14 @@ export class StreetScene extends Phaser.Scene {
   private activitySig = '';
   private processionTimer = 0;
   private storytellerTimer = 0;
+  private busQueue: { origin: Origin; fall: boolean; vanish: boolean; span: number }[] = [];
+  private busTimer = 2000;
+  private busBusy = false;
+  private queueLayer!: Phaser.GameObjects.Container;
+  private queueTimer = 0;
+  private fogTint!: Phaser.GameObjects.Rectangle;
+  private ritualTimer = 0;
+  private ritualX = -1;
 
   constructor() {
     super('street');
@@ -125,10 +140,15 @@ export class StreetScene extends Phaser.Scene {
     this.rain = this.add.graphics().setScrollFactor(0).setDepth(55);
     this.rainDrops = Array.from({ length: 140 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 500 + Math.random() * 300 }));
     this.fog = this.add.container(0, 0).setScrollFactor(0).setDepth(56);
-    for (let i = 0; i < 7; i++) {
-      const e = this.add.ellipse(Math.random() * W, 160 + Math.random() * 380, 500 + Math.random() * 300, 120, 0xffffff, 0.22);
+    for (let i = 0; i < 12; i++) {
+      const e = this.add.ellipse(Math.random() * W, 140 + Math.random() * 420, 500 + Math.random() * 300, 120, 0xffffff, 0.22);
+      e.setVisible(i < 7);
       this.fog.add(e);
     }
+    this.fogTint = this.add.rectangle(0, 0, W, H, 0xffffff, 0).setOrigin(0).setScrollFactor(0).setDepth(57);
+    this.queueLayer = this.add.container(0, 0).setDepth(29);
+    this.busQueue = [];
+    this.busBusy = false;
 
     this.setupInput();
     this.redrawAllLots();
@@ -273,6 +293,31 @@ export class StreetScene extends Phaser.Scene {
 
     if (!lot.unlocked) {
       view.container.add(drawLockedLot(this, nextLotCost(s), i === firstLocked));
+    } else if (lot.facility) {
+      const f = lot.facility;
+      const icons = Object.fromEntries(MODULES.map((m) => [m.id, { icon: m.icon, name: m.name, color: MODULE_COLOR[m.id] }]));
+      view.container.add(drawFacilityBuilding(this, f.level, f.modules, FACILITY.slots[f.level], icons));
+      view.lights.fillStyle(0xffe2a0, 0.45);
+      view.lights.fillRect(x0 + 28, GROUND_Y - 230, LOT_W - 56, 34);
+      // 門口站著的員工（人數 = 投入的人力）
+      const key = ensureCharTexture(this, 'staff', NPCS.staff.look);
+      const n = Math.min(4, f.staff);
+      for (let k = 0; k < n; k++) {
+        const img = this.add.image(x0 + 34 + k * 30, GROUND_Y + 4, `${key}_0`).setOrigin(0.5, 1).setScale(0.8).setDepth(12);
+        view.extras.push(img);
+      }
+      if (f.staff > 4) {
+        view.extras.push(this.add.text(x0 + 34 + 4 * 30, GROUND_Y - 30, `+${f.staff - 4}`, {
+          fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: '#ffffff', backgroundColor: '#3f8f4f', padding: { x: 4, y: 1 },
+        }).setDepth(12));
+      }
+      if (f.modules.length && staffRatio(f) < 1) {
+        const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(f.level) - 26, `人手不足 ${f.staff}/${f.modules.reduce((a, id) => a + (MODULES.find((m) => m.id === id)?.staff ?? 0), 0)}`, {
+          fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: '#ffffff', backgroundColor: '#d64545', padding: { x: 6, y: 2 },
+        }).setOrigin(0.5).setDepth(40);
+        this.tweens.add({ targets: tag, alpha: 0.5, yoyo: true, repeat: -1, duration: 600 });
+        view.extras.push(tag);
+      }
     } else if (!lot.shop) {
       view.container.add(drawEmptyLot(this, this.street.facade, s.applicants.length));
     } else {
@@ -341,7 +386,8 @@ export class StreetScene extends Phaser.Scene {
       return;
     }
     const lot = S().lots[i];
-    const h = lot.shop ? buildingHeight(lot.shop.level) + 14 : 250;
+    const lv = lot.shop?.level ?? lot.facility?.level;
+    const h = lv ? buildingHeight(lv) + 14 : 250;
     this.highlight.setPosition(this.L.lotX(i) + 2, GROUND_Y - h).setSize(LOT_W - 4, h + 6).setVisible(true);
     this.panTo(this.L.lotX(i) + LOT_W / 2);
   }
@@ -409,7 +455,7 @@ export class StreetScene extends Phaser.Scene {
       if (!store.storyRunning) {
         s.minute = Math.min(DAY_END_MIN, s.minute + dm);
         if (s.minute < LAST_SPAWN_MIN) {
-          this.spawnAcc += (trafficPerHour(s) * dm) / 60;
+          this.spawnAcc += tickTraffic(s, dm);
           while (this.spawnAcc >= 1) {
             this.spawnAcc -= 1;
             this.spawnPed();
@@ -423,6 +469,8 @@ export class StreetScene extends Phaser.Scene {
     this.updateEnvironment(dt);
     this.updateLotOpenState();
     this.updateActivities(dt, active, dm);
+    this.updateBus(dt, active);
+    this.updateQueue(dt);
     if (active) this.updateAmbient(dt);
 
     if (active && s.minute >= DAY_END_MIN) this.closeDay();
@@ -480,13 +528,21 @@ export class StreetScene extends Phaser.Scene {
         this.rain.lineBetween(d.x, d.y, d.x - 3, d.y + 14);
       }
     }
-    this.fog.setVisible(s.weather === 'fog');
-    if (s.weather === 'fog') {
-      for (const e of this.fog.list as Phaser.GameObjects.Ellipse[]) {
-        e.x += (dt / 1000) * 20;
+    const foggy = s.weather === 'fog' || s.weather === 'heavyFog';
+    const heavy = s.weather === 'heavyFog';
+    const ritual = isActive(s, 'ritual');
+    this.fog.setVisible(foggy);
+    if (foggy) {
+      (this.fog.list as Phaser.GameObjects.Ellipse[]).forEach((e, i) => {
+        e.setVisible(heavy || i < 7);
+        e.setFillStyle(s.kami && !ritual ? 0xf0e4ff : 0xffffff, heavy ? (ritual ? 0.22 : 0.34) : 0.22);
+        e.x += (dt / 1000) * (heavy ? 12 : 20);
         if (e.x > W + 300) e.x = -300;
-      }
+      });
     }
+    // 濃霧時整個畫面蒙上一層白；神隱日帶一點紫
+    const tintA = heavy ? (ritual ? 0.1 : 0.2) : 0;
+    this.fogTint.setFillStyle(s.kami && !ritual ? 0xe8dcf8 : 0xffffff, tintA);
   }
 
   // =================================================================== 路人
@@ -495,11 +551,24 @@ export class StreetScene extends Phaser.Scene {
     const s = S();
     notePasserby(s);
     const open = s.lots.filter((l) => l.unlocked).length;
-    const { start, dir, span } = passerbyRoute(open, Math.random);
+    const route = passerbyRoute(open, Math.random);
+    const origin = rollOrigin(s, Math.random);
+    const fall = Math.random() < fallChance(s);
+    const vanish = Math.random() < vanishChance(s);
+    // 有交通問題的老街：一部分遊客是搭公車來的，先在山下排隊
+    if (this.street.transport && Math.random() < 0.45) {
+      this.busQueue.push({ origin, fall, vanish, span: route.span });
+      return;
+    }
+    this.createPed(route.start, route.dir, route.span, origin, fall, vanish, false);
+  }
+
+  private createPed(start: number, dir: 1 | -1, span: number, origin: Origin, fall: boolean, vanish: boolean, fromBus: boolean, busX = 0) {
+    const s = S();
     const variant = Math.floor(Math.random() * PED_VARIANTS);
     const baseY = GROUND_Y + 8 + Math.random() * (SIDEWALK_H - 18);
-    const fromEdge = start === 0 && dir === 1 && Math.random() < 0.5;
-    const x = fromEdge ? -30 : this.L.doorX(start) - dir * (LOT_W / 2 + Math.random() * 40);
+    const fromEdge = !fromBus && start === 0 && dir === 1 && Math.random() < 0.5;
+    const x = fromBus ? busX : fromEdge ? -30 : this.L.doorX(start) - dir * (LOT_W / 2 + Math.random() * 40);
     const sprite = this.add.image(x, baseY, `ped${variant}_0`).setOrigin(0.5, 1).setDepth(30 + baseY / 1000).setFlipX(dir === -1);
     if (!fromEdge) {
       sprite.setAlpha(0);
@@ -510,11 +579,22 @@ export class StreetScene extends Phaser.Scene {
       umbrella = this.add.image(x, baseY - 56, 'umbrella').setDepth(sprite.depth + 0.0001)
         .setTint([0x4f7dc6, 0xd64545, 0xf2c14e, 0x5bb36a, 0xffffff][variant % 5]);
     }
+    if (fromBus) {
+      sprite.setY(ACTOR_Y + 30).setAlpha(0);
+      this.tweens.add({ targets: sprite, y: baseY, alpha: 1, duration: 300 });
+    }
     this.peds.push({
       sprite, umbrella, variant, dir, speed: 70 + Math.random() * 40,
       favorite: CATS[Math.floor(Math.random() * CATS.length)],
-      visits: 0, doorsLeft: span, state: 'walk', lot: -1, leaveAt: 0, animT: 0, baseY,
+      visits: 0, doorsLeft: span + (fromBus ? 1 : 0), state: 'walk', lot: -1, leaveAt: 0, animT: 0, baseY,
+      origin,
+      fallIn: fall ? 800 + Math.random() * 4000 : -1,
+      vanishIn: vanish ? 600 + Math.random() * 3000 : -1,
     });
+    // 沒有翻譯時，外國旅客偶爾會一臉困惑
+    if (origin !== 'local' && moduleEff(s, 'multilingual') === 0 && Math.random() < 0.08) {
+      this.time.delayedCall(800, () => sprite.active && this.floatText(sprite.x, sprite.y - 70, origin === 'jp' ? 'えっと…？' : '어…?', '#ffffff', 14));
+    }
   }
 
   private updatePeds(dt: number, running: boolean) {
@@ -530,12 +610,24 @@ export class StreetScene extends Phaser.Scene {
         const fr = Math.floor(p.animT / 180) % 2;
         p.sprite.setTexture(`ped${p.variant}_${fr}`);
         p.sprite.y = p.baseY - fr;
+        if (p.state === 'walk' && mult > 0) {
+          if (p.vanishIn > 0 && (p.vanishIn -= dt * mult) <= 0) {
+            p.vanishIn = -1;
+            this.vanishPed(p);
+            continue;
+          }
+          if (p.fallIn > 0 && (p.fallIn -= dt * mult) <= 0) {
+            p.fallIn = -1;
+            this.fallPed(p);
+            continue;
+          }
+        }
         if (mult > 0 && p.state === 'walk' && p.doorsLeft > 0 && p.visits < 2) {
           for (let i = 0; i < s.lots.length; i++) {
             const dx = this.L.doorX(i);
             if ((prevX - dx) * (nx - dx) <= 0 && prevX !== nx) {
               p.doorsLeft -= 1;
-              if (Math.random() < enterChance(s, i, p.favorite)) this.enterShop(p, i);
+              if (Math.random() < enterChance(s, i, p.favorite, p.origin)) this.enterShop(p, i);
               break;
             }
           }
@@ -572,8 +664,12 @@ export class StreetScene extends Phaser.Scene {
   private leaveShop(p: Ped) {
     const s = S();
     const i = p.lot;
-    const r = completeVisit(s, i, 0.8 + Math.random() * 0.4);
+    const r = completeVisit(s, i, 0.8 + Math.random() * 0.4, p.origin);
     if (r.income > 0) this.floatText(this.L.doorX(i), GROUND_Y - 112, `+$${r.income}`, hex(C.gold), 17);
+    if (p.origin !== 'local' && Math.random() < 0.35) {
+      const words = p.origin === 'jp' ? ['おいしい！', 'すごい！', 'かわいい！', '最高！'] : ['맛있어요!', '대박!', '예뻐요!', '최고!'];
+      this.floatText(this.L.doorX(i) + 30, GROUND_Y - 80, Phaser.Utils.Array.GetRandom(words), p.origin === 'jp' ? '#ffd6e0' : '#d6e8ff', 15);
+    }
     if (r.coupon && Math.random() < 0.4) this.floatText(this.L.doorX(i) - 40, GROUND_Y - 80, '用了消費券', '#f2c14e', 13);
     p.state = 'walk';
     p.lot = -1;
@@ -623,9 +719,12 @@ export class StreetScene extends Phaser.Scene {
   }
 
   /** 角色、租客門口、地標在世界中的 x */
-  private anchorX(ref: ActorRef | { landmark: string } | undefined): number | null {
+  private anchorX(ref: ActorRef | { landmark: string } | { lot: number } | undefined): number | null {
     if (!ref) return null;
-    if (typeof ref !== 'string') return this.landmarkStand.get(ref.landmark) ?? null;
+    if (typeof ref !== 'string') {
+      if ('lot' in ref) return this.L.doorX(ref.lot);
+      return this.landmarkStand.get(ref.landmark) ?? null;
+    }
     const a = this.actors.get(ref);
     if (a) return a.sprite.x;
     const lot = lotOfTenant(S(), ref);
@@ -743,7 +842,7 @@ export class StreetScene extends Phaser.Scene {
     if (x !== null) await this.panTo(x, true, 600);
   }
 
-  async stageAppear(ref: ActorRef, near?: ActorRef | { landmark: string }, dx = 0): Promise<void> {
+  async stageAppear(ref: ActorRef, near?: ActorRef | { landmark: string } | { lot: number }, dx = 0): Promise<void> {
     let x = this.anchorX(near ?? ref);
     if (x === null) x = this.cameras.main.scrollX + W / 2;
     // 租客預設從自己店門口走出來
@@ -928,7 +1027,7 @@ export class StreetScene extends Phaser.Scene {
   private rebuildActivityProps() {
     const s = S();
     this.activityLayer.removeAll(true);
-    for (const ref of ['storyteller']) {
+    for (const ref of ['storyteller', 'priest']) {
       const a = this.actors.get(ref);
       if (a?.ambient) this.removeActor(ref);
     }
@@ -972,6 +1071,25 @@ export class StreetScene extends Phaser.Scene {
         }
       }
     }
+    // 祈神儀式：在石階前設壇
+    if (isActive(s, 'ritual')) {
+      const lm = this.street.layout.find((l) => l.kind === 'landmark' && l.id === 'stairs') as { id: string } | undefined
+        ?? this.street.layout.find((l) => l.kind === 'landmark') as { id: string } | undefined;
+      const x = (lm && this.landmarkStand.get(lm.id)) ?? this.L.startX;
+      const g = this.add.graphics();
+      g.fillStyle(0xb3262e);
+      g.fillRect(x - 50, ACTOR_Y - 40, 100, 40);
+      g.fillStyle(0x6b4a30);
+      g.fillRect(x - 54, ACTOR_Y - 44, 108, 6);
+      g.fillStyle(0xc8902a);
+      g.fillRect(x - 12, ACTOR_Y - 62, 24, 18);
+      g.fillStyle(0xf2a93b);
+      for (const fx of [-36, -22, 22, 36]) g.fillCircle(x + fx, ACTOR_Y - 50, 6);
+      this.activityLayer.add(g);
+      this.activityLayer.add(this.add.text(x, ACTOR_Y - 20, '祈神', { fontFamily: FONT, fontSize: '15px', fontStyle: '900', color: '#f2c14e' }).setOrigin(0.5));
+      this.spawnActor('priest', x + 80, true);
+      this.ritualX = x;
+    } else this.ritualX = -1;
     // 網紅
     const inf = s.activities.find((a) => a.id === 'influencer');
     if (inf?.variant) this.spawnWanderer('influencer', 'influencer', inf.variant);
@@ -998,7 +1116,7 @@ export class StreetScene extends Phaser.Scene {
 
   private updateActivities(dt: number, running: boolean, dm: number) {
     const s = S();
-    const sig = `${s.activities.map((a) => a.id + a.variant).join(',')}|${s.mascot}|${s.flags.includes('streetCat')}|${s.lots.map((l) => (l.shop ? 1 : 0)).join('')}`;
+    const sig = `${s.activities.map((a) => a.id + a.variant).join(',')}|${isActive(s, 'ritual')}|${s.mascot}|${s.flags.includes('streetCat')}|${s.lots.map((l) => (l.shop ? 1 : 0)).join('')}`;
     if (sig !== this.activitySig) {
       this.activitySig = sig;
       for (const w of this.wanderers.values()) {
@@ -1043,6 +1161,19 @@ export class StreetScene extends Phaser.Scene {
       a.sprite.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * store.speed * (dt / 1000));
       a.animT += dt * store.speed;
       a.sprite.setTexture(`${a.key}_${Math.floor(a.animT / 200) % 2}`);
+    }
+    // 儀式：香煙裊裊
+    if (running && this.ritualX >= 0) {
+      this.ritualTimer -= dt * store.speed;
+      if (this.ritualTimer <= 0) {
+        this.ritualTimer = 700;
+        playFx(this, 'smoke', this.ritualX, ACTOR_Y - 60, 45);
+        const priest = this.actors.get('priest');
+        if (priest && Math.random() < 0.15 && !priest.bubble) {
+          this.showBubble(priest, Phaser.Utils.Array.GetRandom(['山神土地保庇～', '霧散！平安！', '眾神保佑，遊客平安回家～']));
+          this.time.delayedCall(2200, () => { if (priest.bubble) { priest.bubble.destroy(); priest.bubble = undefined; } });
+        }
+      }
     }
     // 說書人定時講一句
     if (running && isActive(s, 'legend')) {
@@ -1108,12 +1239,173 @@ export class StreetScene extends Phaser.Scene {
     });
   }
 
+  // =================================================================== 跌倒、神隱
+
+  private fallPed(p: Ped) {
+    const s = S();
+    const treated = registerFall(s, Math.random);
+    p.state = 'fallen';
+    this.tweens.killTweensOf(p.sprite);
+    p.sprite.setAlpha(1).setAngle(p.dir * 90).setY(p.baseY - 6);
+    playFx(this, 'smoke', p.sprite.x, p.baseY - 10, 40);
+    this.floatText(p.sprite.x, p.baseY - 60, '哎唷！', '#ffffff', 16);
+    const getUp = (good: boolean) => {
+      if (!p.sprite.active || p.state !== 'fallen') return;
+      p.sprite.setAngle(0).setY(p.baseY);
+      p.state = 'walk';
+      this.floatText(p.sprite.x, p.baseY - 70, good ? '謝謝救護員！' : '好痛…沒有救護站嗎？', good ? '#a0f0b0' : '#ff9a9a', 14);
+    };
+    if (!treated) {
+      this.time.delayedCall(2000, () => getUp(false));
+      return;
+    }
+    // 救護員從服務中心跑出來
+    const fac = facilityOf(s);
+    const fromX = fac ? this.L.doorX(fac.lot) : p.sprite.x - 400;
+    const key = ensureCharTexture(this, 'medic', NPCS.medic.look);
+    const m = this.add.image(fromX, ACTOR_Y, `${key}_0`).setOrigin(0.5, 1).setDepth(46).setFlipX(fromX > p.sprite.x);
+    const kit = this.add.text(0, 0, '✚', { fontFamily: FONT, fontSize: '16px', fontStyle: '900', color: '#d64545', backgroundColor: '#ffffff', padding: { x: 3, y: 0 } })
+      .setOrigin(0.5).setDepth(47);
+    let frame = 0;
+    const anim = this.time.addEvent({
+      delay: 120, loop: true, callback: () => {
+        frame++;
+        if (!m.active) return;
+        m.setTexture(`${key}_${frame % 2}`);
+        kit.setPosition(m.x + (m.flipX ? -14 : 14), m.y - 34);
+      },
+    });
+    const targetX = p.sprite.x - p.dir * 28;
+    const dur = Math.min(2200, Math.max(500, Math.abs(fromX - targetX) / 0.45));
+    this.tweens.add({
+      targets: m, x: targetX, duration: dur,
+      onComplete: () => {
+        if (!m.active) return;
+        playFx(this, 'sparkle', p.sprite.x, p.baseY - 30, 40);
+        this.floatText(p.sprite.x, p.baseY - 95, '✚ 救護中', '#ffffff', 15);
+        this.time.delayedCall(1000, () => {
+          getUp(true);
+          if (!m.active) return;
+          m.setFlipX(!m.flipX);
+          this.tweens.add({
+            targets: m, x: fromX, duration: dur,
+            onComplete: () => { anim.remove(); m.destroy(); kit.destroy(); },
+          });
+        });
+      },
+    });
+  }
+
+  private vanishPed(p: Ped) {
+    const s = S();
+    const found = registerVanish(s, Math.random);
+    p.state = 'leaving';
+    this.tweens.killTweensOf(p.sprite);
+    playFx(this, 'sparkle', p.sprite.x, p.baseY - 30, 40);
+    this.floatText(p.sprite.x, p.baseY - 75, '……咦？', '#e6d6ff', 15);
+    this.tweens.add({
+      targets: p.sprite, alpha: 0, scaleX: 0.2, duration: 1100,
+      onComplete: () => {
+        if (!found) {
+          const k = this.peds.indexOf(p);
+          if (k >= 0) this.removePed(k);
+          return;
+        }
+        // 尋人廣播站把人找回來
+        const fac = facilityOf(s);
+        if (fac) this.floatText(this.L.doorX(fac.lot), GROUND_Y - 160, '廣播：走失的旅客請到服務中心～', '#ffffff', 14);
+        this.time.delayedCall(1600, () => {
+          if (!p.sprite.active) return;
+          p.sprite.setScale(1);
+          this.tweens.add({ targets: p.sprite, alpha: 1, duration: 400 });
+          p.state = 'walk';
+          this.floatText(p.sprite.x, p.baseY - 75, '找到了！', '#a0f0b0', 15);
+        });
+      },
+    });
+  }
+
+  // =================================================================== 交通：公車與山下排隊
+
+  private busStopX() {
+    return this.L.startX - 60;
+  }
+
+  private updateBus(dt: number, running: boolean) {
+    if (!this.street.transport || !running || this.busBusy) return;
+    this.busTimer -= dt * store.speed;
+    if (this.busTimer > 0) return;
+    const s = S();
+    this.busTimer = 5000 / ROUTE[s.route].mult;
+    if (this.busQueue.length) this.runBus();
+  }
+
+  private runBus() {
+    const s = S();
+    this.busBusy = true;
+    const lvl = s.bus;
+    const bus = drawBus(this, lvl, BUS[lvl].name).setDepth(48);
+    const roadY = GROUND_Y + SIDEWALK_H + 66;
+    const stopX = this.busStopX();
+    bus.setPosition(-20, roadY);
+    this.tweens.add({
+      targets: bus, x: stopX, duration: 1100, ease: 'Cubic.easeOut',
+      onComplete: () => {
+        const n = Math.min(this.busQueue.length, BUS[lvl].seats * 3);
+        const riders = this.busQueue.splice(0, n);
+        this.floatText(stopX - 40, roadY - (lvl === 2 ? 150 : 100), `${BUS[lvl].name}到站 ${riders.length} 人`, '#ffffff', 15);
+        riders.forEach((r, k) => {
+          this.time.delayedCall(k * 90, () => {
+            if (this.scene.isActive()) this.createPed(0, 1, r.span, r.origin, r.fall, r.vanish, true, stopX - 40 + Math.random() * 10);
+          });
+        });
+        this.time.delayedCall(riders.length * 90 + 500, () => {
+          this.tweens.add({
+            targets: bus, x: -300, duration: 1100, ease: 'Cubic.easeIn',
+            onComplete: () => { bus.destroy(); this.busBusy = false; },
+          });
+        });
+      },
+    });
+  }
+
+  /** 交通容量不夠時，左下角出現排隊等公車的人龍 */
+  private updateQueue(dt: number) {
+    if (!this.street.transport) return;
+    this.queueTimer -= dt;
+    if (this.queueTimer > 0) return;
+    this.queueTimer = 1500;
+    const s = S();
+    const rate = store.waitingNextDay ? 0 : strandedPerHour(s);
+    const n = Math.min(10, Math.round(rate / 12));
+    this.queueLayer.removeAll(true);
+    if (n <= 0) return;
+    const y = H - 6;
+    const sign = this.add.text(12, y - 92, `山下排隊上不來　約 ${Math.round(rate)} 人／小時`, {
+      fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: '#ffffff', backgroundColor: '#b3262e', padding: { x: 6, y: 2 },
+    });
+    this.queueLayer.add(sign);
+    for (let k = 0; k < n; k++) {
+      const v = (k * 7 + 3) % PED_VARIANTS;
+      const img = this.add.image(24 + k * 24, y, `ped${v}_0`).setOrigin(0.5, 1).setScale(0.85);
+      this.queueLayer.add(img);
+    }
+    if (Math.random() < 0.5) {
+      const words = ['排好久…', '公車怎麼還不來', 'バスまだ？', '버스 언제 와요?', '腳好痠'];
+      const t = this.add.text(24 + Math.floor(Math.random() * n) * 24, y - 70, Phaser.Utils.Array.GetRandom(words), {
+        fontFamily: FONT, fontSize: '13px', color: '#2a2433', backgroundColor: '#ffffff', padding: { x: 4, y: 2 },
+      }).setOrigin(0.5);
+      this.queueLayer.add(t);
+    }
+  }
+
   // =================================================================== 一天的開始與結束
 
   private closeDay() {
     const s = S();
     for (const p of this.peds) if ((p.state === 'inside' || p.state === 'entering') && p.lot >= 0) completeVisit(s, p.lot, 1);
     for (let k = this.peds.length - 1; k >= 0; k--) this.removePed(k);
+    this.busQueue = [];
     this.clearAmbientActors();
     const summary = endDay(s);
     store.waitingNextDay = true;
@@ -1126,6 +1418,8 @@ export class StreetScene extends Phaser.Scene {
 
   private onDayStarted() {
     for (let k = this.peds.length - 1; k >= 0; k--) this.removePed(k);
+    this.busQueue = [];
+    this.queueLayer.removeAll(true);
     this.spawnAcc = 0;
     this.lastSkyHour = -1;
     this.storyChecks = { morning: false, noon: false, evening: false };

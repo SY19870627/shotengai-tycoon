@@ -3,6 +3,8 @@ import {
   unlockLot, nextLotCost, neighborEffects, signTenant, rejectApplicant, postAd, AD_COST, profileOf, renovate,
   giveGift, GIFT_COST, evict, setRentTier, startNextDay, startActivity, canStartActivity, activityCost, getRel,
   relLabel, presentTenants, lotOfTenant, streetOf, weekdayName, WEATHER_NAME, combinedMods, rentIncome,
+  forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
+  transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
   MAX_APPLICANTS, goalsDone,
 } from '../core/game';
 import {
@@ -14,6 +16,7 @@ import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant } f
 import { store, bus, Ev, save, toast, S, completeChapter } from '../store';
 import { W, H, C, FONT, hex, money, clock } from '../theme';
 import { drawPortrait } from './drawCharacters';
+import { MODULES, FACILITY, facilityOf, staffNeeded, staffRatio, wageOf, type ModuleDef } from '../core/facilities';
 import { ensureMascotTexture } from './drawMascots';
 import { StoryDirector, type StoryUI } from './StoryDirector';
 import type { StreetScene } from './StreetScene';
@@ -41,6 +44,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private repBar!: Phaser.GameObjects.Rectangle;
   private repText!: Phaser.GameObjects.Text;
   private weatherText!: Phaser.GameObjects.Text;
+  private forecastChip!: Phaser.GameObjects.Text;
   private chips!: Phaser.GameObjects.Container;
   private chipSig = '';
   private speedButtons: Button[] = [];
@@ -183,7 +187,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.text(16, 7, street.name, 20, hex(C.gold), '900');
     this.dayText = this.text(16, 35, '', 15, '#d8d2e6');
     this.weatherText = this.text(108, 35, '', 14, '#ffffff', '700').setBackgroundColor('#4a4460').setPadding(6, 1, 6, 1);
-    this.clockText = this.text(176, 10, '', 32, '#ffffff', '900');
+    this.forecastChip = this.text(180, 35, '', 13, '#ffffff', '700').setPadding(6, 1, 6, 1);
+    this.clockText = this.text(194, 10, '', 32, '#ffffff', '900');
 
     this.text(300, 7, '資金', 13, '#a49dbb');
     this.moneyText = this.text(300, 23, '', 24, hex(C.gold), '900');
@@ -203,7 +208,10 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private refreshTop() {
     const s = S();
     this.dayText.setText(`第 ${s.day} 天・${weekdayName(s)}`);
-    this.weatherText.setText(WEATHER_NAME[s.weather]).setX(16 + this.dayText.width + 8);
+    const bad = s.weather === 'heavyFog';
+    this.weatherText.setText(s.kami ? '神隱日' : WEATHER_NAME[s.weather])
+      .setBackgroundColor(s.kami ? '#7a4a9a' : bad ? '#b3262e' : '#4a4460').setX(16 + this.dayText.width + 8);
+    this.forecastChip.setVisible(false);
     this.clockText.setText(clock(s.minute));
     this.moneyText.setText(money(s.money)).setColor(s.money < 0 ? hex(C.red) : hex(C.gold));
     this.todayText.setText(`今日抽成 ${money(s.today.commission - s.today.couponCost)}`);
@@ -213,8 +221,18 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const done = streetOf(s).goals.filter((g) => g.check(s)).length;
     this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
 
-    // 活動與加成標籤
+    // 天氣預報、活動與加成標籤
     const items: string[] = [];
+    const colors: string[] = [];
+    if (s.kami) {
+      items.push(ritualProtected(s) ? '神隱日・祈神儀式保佑中' : '神隱日！遊客會消失');
+      colors.push(ritualProtected(s) ? '#c9b3e6' : '#d6a0ff');
+    } else if (s.weather === 'heavyFog') {
+      items.push('濃霧：遊客容易跌倒');
+      colors.push('#ffb0a0');
+    }
+    items.push(`明日預報：${forecastText(s.forecast)}`);
+    colors.push(s.forecast.kami || s.forecast.weather === 'heavyFog' ? '#ff9a8a' : '#d8d2e6');
     for (const a of s.activities) {
       const def = ACTIVITIES.find((d) => d.id === a.id)!;
       const v = a.variant ? (a.id === 'influencer' ? INFLUENCERS : a.id === 'legend' ? streetOf(s).activities.legends : []).find((x) => x.id === a.variant) : undefined;
@@ -228,8 +246,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.chipSig = sig;
       this.chips.removeAll(true);
       let x = 0;
-      for (const it of items) {
-        const t = this.text(x, 0, it, 13, '#2a2433', '700').setBackgroundColor('#f2c14e').setPadding(8, 3, 8, 3);
+      for (const [k, it] of items.entries()) {
+        const t = this.text(x, 0, it, 13, '#2a2433', '700').setBackgroundColor(colors[k] ?? '#f2c14e').setPadding(8, 3, 8, 3);
         this.chips.add(t);
         x += t.width + 6;
       }
@@ -250,10 +268,12 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.sideButtons.add(b.root);
       return b;
     };
-    mk(0, '活動', 0xb3262e, () => this.showActivities());
-    mk(66, '租客\n關係', 0x3f6f8f, () => this.showRelations());
-    this.goalButton = mk(132, '目標', 0x3f8f4f, () => this.showGoals());
-    mk(198, '地圖', 0x4a4460, () => this.confirmBackToMap());
+    let y = 0;
+    mk(y, '活動', 0xb3262e, () => this.showActivities());
+    if (streetOf(S()).transport) mk((y += 66), '交通', 0xd9824a, () => this.showTransport());
+    mk((y += 66), '租客\n關係', 0x3f6f8f, () => this.showRelations());
+    this.goalButton = mk((y += 66), '目標', 0x3f8f4f, () => this.showGoals());
+    mk((y += 66), '地圖', 0x4a4460, () => this.confirmBackToMap());
   }
 
   // =================================================================== 下方面板
@@ -287,6 +307,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.panel.add(this.button(W - 50, 10, 38, 34, '✕', () => this.select(-1), 0x3c3652, 16).root);
     const lot = S().lots[i];
     if (!lot.unlocked) this.panelLocked(i);
+    else if (lot.facility) this.panelFacility(i);
     else if (!lot.shop) this.panelBoard(i);
     else this.panelTenant(i);
   }
@@ -346,7 +367,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (!s.applicants.length) {
       p.add(this.text(24, 80, '目前沒有人應徵……可以花錢刊登招租廣告，或等明天看看。', 16, '#cfc8e0'));
     }
-    const ad = this.button(W - 220, 60, 196, 52, `刊登招租廣告\n${money(AD_COST)}`, () => {
+    const ad = this.button(W - 226, 50, 202, 48, `刊登招租廣告　${money(AD_COST)}`, () => {
       const r = postAd(s);
       if (!r.ok) return toast(r.reason);
       bus.emit(Ev.LotRedraw, -1);
@@ -354,9 +375,178 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.rebuildPanel();
     }, 0x7a4a9a, 15);
     p.add(ad.root);
-    p.add(this.text(W - 220, 122, `佈告欄最多 ${MAX_APPLICANTS} 人`, 12, '#a49dbb'));
-    this.liveRefresh = () => ad.setEnabled(s.money >= AD_COST && s.applicants.length < MAX_APPLICANTS);
+    let fb: Button | null = null;
+    if (!facilityOf(s)) {
+      fb = this.button(W - 226, 106, 202, 50, `改建：遊客服務中心\n${money(FACILITY.buildCost)}（不收租金）`, () => {
+        const r = buildFacility(s, i);
+        if (!r.ok) return toast(r.reason);
+        bus.emit(Ev.LotRedraw, -1);
+        save();
+        toast('遊客服務中心落成！記得安裝服務、雇用員工。');
+        this.rebuildPanel();
+      }, 0x3f8f4f, 13);
+      p.add(fb.root);
+    }
+    this.liveRefresh = () => {
+      ad.setEnabled(s.money >= AD_COST && s.applicants.length < MAX_APPLICANTS);
+      fb?.setEnabled(s.money >= FACILITY.buildCost);
+    };
     this.liveRefresh();
+  }
+
+  /** 遊客服務中心 */
+  private panelFacility(i: number) {
+    const s = S();
+    const p = this.panel;
+    const f = s.lots[i].facility!;
+    const wage = wageOf(streetOf(s).rentMult);
+    p.add(this.text(20, 10, `遊客服務中心　Lv.${f.level}`, 21, '#ffffff', '900'));
+    p.add(this.text(20, 40, `可安裝 ${FACILITY.slots[f.level]} 項服務・最多 ${FACILITY.maxStaff[f.level]} 位員工・不收租金`, 13, '#a49dbb'));
+    // 人力
+    p.add(this.text(20, 66, '投入人力', 14, '#cfc8e0', '700'));
+    const minus = this.button(100, 60, 34, 32, '－', () => this.changeStaff(-1), 0x3c3652, 18);
+    const staffText = this.text(152, 64, '', 20, '#ffffff', '900').setOrigin(0.5, 0);
+    const plus = this.button(170, 60, 34, 32, '＋', () => this.changeStaff(1), 0x3c3652, 18);
+    p.add([minus.root, staffText, plus.root]);
+    const wageText = this.text(214, 60, '', 12, '#a49dbb').setLineSpacing(2);
+    p.add(wageText);
+    p.add(this.text(20, 104, '運作程度', 14, '#cfc8e0', '700'));
+    p.add(this.add.rectangle(100, 113, 200, 14, 0x1a1724).setOrigin(0, 0.5));
+    const effBar = this.add.rectangle(101, 113, 0, 12, 0x5bb36a).setOrigin(0, 0.5);
+    const effText = this.text(306, 104, '', 12, '#ffffff', '700');
+    p.add([effBar, effText]);
+    const stats = this.text(20, 130, '', 13, '#cfe8d3');
+    p.add(stats);
+    // 服務模組
+    const mx = 400, mw = 150;
+    MODULES.forEach((m, k) => {
+      const x = mx + k * (mw + 8);
+      const installed = f.modules.includes(m.id);
+      const c = this.add.container(x, 12);
+      c.add(this.add.rectangle(0, 0, mw, 148, installed ? 0x2f4f3a : 0x3c3652).setOrigin(0).setStrokeStyle(2, installed ? 0x5bb36a : 0x6b6280));
+      c.add(this.text(10, 8, `${m.icon} ${m.name}`, 16, '#ffffff', '900'));
+      c.add(this.text(10, 34, m.desc, 11, '#cfc8e0').setWordWrapWidth(mw - 18, true).setLineSpacing(2));
+      c.add(this.text(10, 98, `需要 ${m.staff} 人`, 12, '#f2c14e', '700'));
+      if (installed) {
+        c.add(this.text(mw / 2, 128, '運作中', 14, '#8fe0a0', '900').setOrigin(0.5));
+      } else {
+        const full = f.modules.length >= FACILITY.slots[f.level];
+        const b = this.button(8, 114, mw - 16, 28, full ? '空間不足，先升級' : `安裝 ${money(m.cost)}`, () => {
+          const r = installModule(s, m.id as ModuleDef['id']);
+          if (!r.ok) return toast(r.reason);
+          bus.emit(Ev.LotRedraw, i);
+          save();
+          toast(`${m.name}安裝好了！記得確認人力是否足夠。`);
+          this.rebuildPanel();
+        }, 0x3f8f4f, 13);
+        b.setEnabled(!full && s.money >= m.cost);
+        c.add(b.root);
+      }
+      p.add(c);
+    });
+    // 升級與拆除
+    const up = f.level < FACILITY.maxLevel
+      ? this.button(1036, 14, 154, 64, `升級服務中心\n${money(FACILITY.upgradeCost[f.level])}`, () => {
+        const r = upgradeFacility(s);
+        if (!r.ok) return toast(r.reason);
+        bus.emit(Ev.LotRedraw, i);
+        save();
+        this.rebuildPanel();
+      }, 0x3f8f4f, 14)
+      : null;
+    if (up) {
+      up.setEnabled(s.money >= FACILITY.upgradeCost[f.level]);
+      p.add(up.root);
+    } else p.add(this.text(1113, 40, '已是最高等級', 14, '#a49dbb').setOrigin(0.5));
+    let confirmUntil = 0;
+    const del = this.button(1036, 96, 154, 44, '拆除（恢復空店面）', () => {
+      if (this.time.now > confirmUntil) {
+        confirmUntil = this.time.now + 2500;
+        del.setText('再點一次確認');
+        this.time.delayedCall(2500, () => del.root.active && del.setText('拆除（恢復空店面）'));
+        return;
+      }
+      demolishFacility(s);
+      bus.emit(Ev.LotRedraw, -1);
+      save();
+      this.select(i);
+    }, 0x8a3b3b, 13);
+    p.add(del.root);
+    this.liveRefresh = () => {
+      const need = staffNeeded(f);
+      const ratio = staffRatio(f);
+      staffText.setText(String(f.staff));
+      wageText.setText(`日薪 ${money(wage)}／人\n今日薪資 ${money(f.staff * wage)}`);
+      effBar.width = 198 * (f.modules.length ? ratio : 0);
+      effBar.setFillStyle(ratio >= 1 ? 0x5bb36a : ratio >= 0.5 ? 0xf2c14e : 0xd64545);
+      effText.setText(f.modules.length ? `${Math.round(ratio * 100)}%（需要 ${need} 人）` : '還沒安裝服務');
+      const t2 = s.today;
+      stats.setText(`今日：跌倒 ${t2.falls}（救護 ${t2.fallsTreated}）・外國旅客 ${t2.foreign}・神隱 ${t2.vanished}（找回 ${t2.found}）`);
+      minus.setEnabled(f.staff > 0);
+      plus.setEnabled(f.staff < FACILITY.maxStaff[f.level]);
+    };
+    this.liveRefresh();
+  }
+
+  private changeStaff(d: number) {
+    const s = S();
+    const fac = facilityOf(s);
+    if (!fac) return;
+    const r = setStaff(s, fac.f.staff + d);
+    if (!r.ok) return toast(r.reason);
+    bus.emit(Ev.LotRedraw, fac.lot);
+    save();
+  }
+
+  /** 交通建設 */
+  private showTransport() {
+    if (store.storyRunning) return;
+    const s = S();
+    const street = streetOf(s);
+    if (!street.transport) return;
+    const { m, x, y } = this.openModal(900, 520);
+    this.closeButton(m, x + 900 - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '交通建設', 26, hex(C.ink), '900'));
+    m.add(this.text(x + 190, y + 34, '九份最大的問題不是沒人來，而是「上不來」。交通容量不夠，遊客就會卡在山下。', 15, '#6a6378'));
+    const cap = transportCapacity(s);
+    const now = trafficPerHour(s);
+    const stuck = strandedPerHour(s);
+    m.add(this.text(x + 30, y + 74, [
+      `目前：${BUS[s.bus].name}・${ROUTE[s.route].name}　交通容量 每小時 ${Math.round(cap)} 人`,
+      `此刻上山 ${Math.round(now)} 人／小時，卡在山下 ${Math.round(stuck)} 人／小時`,
+      `今天累計有 ${Math.round(s.today.stranded)} 人上不來`,
+    ].join('\n'), 16, '#3a3346').setLineSpacing(6));
+    const card = (cx: number, title: string, levels: { name: string; mult: number; cost: number }[], cur: number, fn: () => void, note: string) => {
+      const cy = y + 170;
+      m.add(this.add.rectangle(cx, cy, 400, 310, 0xffffff).setOrigin(0).setStrokeStyle(2, 0xd8cfe0));
+      m.add(this.text(cx + 20, cy + 16, title, 21, hex(C.ink), '900'));
+      levels.forEach((lv, k) => {
+        const done = k <= cur;
+        m.add(this.text(cx + 20, cy + 56 + k * 40, `${done ? '✔' : '□'} ${lv.name}　容量 ×${lv.mult}${k > 0 ? `　${money(lv.cost)}` : ''}`, 17,
+          k === cur ? '#2f7d3f' : done ? '#6a6378' : '#3a3346', k === cur ? '900' : '400'));
+      });
+      m.add(this.text(cx + 20, cy + 186, note, 13, '#8a8296').setWordWrapWidth(360, true));
+      const next = levels[cur + 1];
+      const b = this.button(cx + 20, cy + 240, 360, 50, next ? `升級為 ${next.name}　${money(next.cost)}` : '已經是最高等級', () => {
+        fn();
+      }, C.red, 17);
+      b.setEnabled(!!next && s.money >= next.cost);
+      m.add(b.root);
+    };
+    card(x + 30, '巴士', BUS, s.bus, () => {
+      const r = upgradeBus(s);
+      if (!r.ok) return toast(r.reason);
+      save();
+      toast(`換成${BUS[s.bus].name}了！看看街口的公車。`);
+      this.showTransport();
+    }, '車越大，一次載上山的人越多。街口到站的公車會跟著換成新的車型。');
+    card(x + 470, '公車路線', ROUTE, s.route, () => {
+      const r = upgradeRoute(s);
+      if (!r.ok) return toast(r.reason);
+      save();
+      toast(`路線升級：${ROUTE[s.route].name}！公車會更常來。`);
+      this.showTransport();
+    }, '班次越密，公車越常到站。週末人潮最需要。');
   }
 
   /** 租客管理 */
@@ -603,17 +793,23 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (store.storyRunning) return;
     const s = S();
     const street = streetOf(s);
-    const { m, x, y } = this.openModal(1180, 560);
-    this.closeButton(m, x + 1180 - 54, y + 18);
+    const list = ACTIVITIES.filter((a) => a.id !== 'ritual' || s.unlockedActivities.includes('ritual'));
+    const MW = 1220;
+    const { m, x, y } = this.openModal(MW, 560);
+    this.closeButton(m, x + MW - 54, y + 18);
     m.add(this.text(x + 30, y + 24, '舉辦活動', 26, hex(C.ink), '900'));
     m.add(this.text(x + 200, y + 34, '花錢辦活動吸引人潮，效果會直接演在街上。', 15, '#6a6378'));
-    const cardW = 214, gap = 10;
-    ACTIVITIES.forEach((a, k) => {
+    const gap = 10;
+    const cardW = Math.floor((MW - 60 - gap * (list.length - 1)) / list.length);
+    list.forEach((a, k) => {
       const cx = x + 30 + k * (cardW + gap), cy = y + 80;
       const unlocked = s.unlockedActivities.includes(a.id);
       const name = a.id === 'templeFair' ? street.activities.templeFair.name : a.name;
       m.add(this.add.rectangle(cx, cy, cardW, 440, 0xffffff).setOrigin(0).setStrokeStyle(2, 0xd8cfe0));
-      m.add(this.add.rectangle(cx, cy, cardW, 8, [0xf2c14e, 0xd64545, 0xef8fb1, 0x7a4a9a, 0x4f86c6][k]).setOrigin(0));
+      m.add(this.add.rectangle(cx, cy, cardW, 8, [0xf2c14e, 0xd64545, 0xef8fb1, 0x7a4a9a, 0x4f86c6, 0xb07a2a][k % 6]).setOrigin(0));
+      if (a.id === 'ritual' && (s.kami || s.forecast.kami) && s.ritualDay < s.day + (s.kami ? 0 : 1)) {
+        m.add(this.text(cx + cardW - 10, cy + 20, '需要！', 13, '#ffffff', '900').setOrigin(1, 0).setBackgroundColor('#b3262e').setPadding(5, 1, 5, 1));
+      }
       m.add(this.text(cx + 14, cy + 20, name, 20, hex(C.ink), '900'));
       m.add(this.text(cx + 14, cy + 56, a.description, 14, '#4a4356').setWordWrapWidth(cardW - 28, true).setLineSpacing(4));
       const meta: string[] = [];
@@ -771,7 +967,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private showSummary(sum: DaySummary) {
     this.rebuildPanel();
     const s = S();
-    const { m, x, y } = this.openModal(600, 560, 0.6, false);
+    const { m, x, y } = this.openModal(600, 660, 0.6, false);
     m.add(this.text(W / 2, y + 36, `第 ${sum.day} 天（${sum.weekday}）打烊結算`, 25, hex(C.ink), '900').setOrigin(0.5));
     m.add(this.text(W / 2, y + 68, `天氣：${sum.weatherName}　路過 ${sum.passersby} 人・進店 ${sum.visitors} 人`, 15, '#6a6378').setOrigin(0.5));
     const rows: [string, string, string?][] = [
@@ -780,6 +976,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       ['營收抽成（10%）', `+${money(sum.commission)}`, '#2f7d3f'],
       ['消費券補貼', sum.couponCost ? `-${money(sum.couponCost)}` : '—', '#b33a3a'],
       ['街道維護費', `-${money(sum.maintenance)}`, '#b33a3a'],
+      ['服務中心員工薪資', sum.wages ? `-${money(sum.wages)}` : '—', '#b33a3a'],
       ['本日淨利', money(sum.net), sum.net >= 0 ? '#2f7d3f' : '#b33a3a'],
       ['客滿擋掉', `${sum.turnedAway} 人`],
       ['聲望', `${sum.reputationBefore.toFixed(1)} → ${sum.reputationAfter.toFixed(1)}`, sum.reputationAfter >= sum.reputationBefore ? '#2f7d3f' : '#b33a3a'],
@@ -788,18 +985,24 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       const ry = y + 100 + r * 30;
       m.add(this.text(x + 70, ry, k, 17, '#4a4356'));
       m.add(this.text(x + 530, ry, v, 18, col ?? hex(C.ink), '700').setOrigin(1, 0));
-      if (r === 5) m.add(this.add.rectangle(x + 60, ry - 5, 480, 1, 0x000000, 0.2).setOrigin(0));
+      if (r === 6) m.add(this.add.rectangle(x + 60, ry - 5, 480, 1, 0x000000, 0.2).setOrigin(0));
     });
     const notes: string[] = [];
     if (sum.bestShop) notes.push(`今日之星：${sum.bestShop.name}（營收 ${money(sum.bestShop.revenue)}）`);
     if (sum.leftShops.length) notes.push(`退租了：${sum.leftShops.join('、')}`);
     if (sum.unhappyShops.length) notes.push(`很不開心、可能退租：${sum.unhappyShops.join('、')}`);
     if (sum.turnedAway > 25) notes.push('很多客人因為客滿進不去，可以補助租客裝修擴店。');
+    if (sum.foreign) notes.push(`外國旅客消費 ${sum.foreign} 人次`);
+    if (sum.stranded > 20) notes.push(`有 ${sum.stranded} 人卡在山下上不來，可以升級交通。`);
+    if (sum.falls) notes.push(`濃霧跌倒 ${sum.falls} 人，救護站處理 ${sum.fallsTreated} 人${sum.falls > sum.fallsTreated ? '，其餘讓名聲受損' : ''}`);
+    if (sum.kami) notes.push(sum.ritual ? '神隱日：祈神儀式保佑大家平安，名聲上升！' : `神隱日：${sum.vanished} 人消失，找回 ${sum.found} 人。名聲大跌……`);
     if (s.applicants.length) notes.push(`佈告欄有 ${s.applicants.length} 位應徵者在等你。`);
+    if (s.forecast.kami) notes.push('明日預報：濃霧，老人家說可能是「神隱日」！可以先辦祈神儀式。');
+    else if (s.forecast.weather === 'heavyFog') notes.push('明日預報：濃霧特報，石階濕滑，遊客容易跌倒。');
     if (s.gameOver) notes.push('負債太多……老街撐不下去了。');
-    m.add(this.text(W / 2, y + 352, notes.join('\n'), 15, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(5));
+    m.add(this.text(W / 2, y + 382, notes.slice(0, 7).join('\n'), 14, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4).setWordWrapWidth(540, true));
     const label = s.gameOver ? '重新挑戰' : `開始第 ${s.day + 1} 天`;
-    m.add(this.button(W / 2 - 120, y + 560 - 66, 240, 50, label, () => {
+    m.add(this.button(W / 2 - 120, y + 660 - 64, 240, 50, label, () => {
       this.closeModal();
       if (s.gameOver) {
         this.scene.stop('street');

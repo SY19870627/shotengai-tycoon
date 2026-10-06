@@ -5,8 +5,10 @@
  */
 import {
   createGame, endDay, startNextDay, unlockLot, nextLotCost, signTenant, profileOf, applyEffects,
-  startActivity, canStartActivity, goalsDone, renovate, presentTenants,
+  startActivity, canStartActivity, goalsDone, renovate, presentTenants, buildFacility, installModule, setStaff,
+  upgradeBus, upgradeRoute, BUS, ROUTE, upgradeFacility,
 } from '../src/core/game';
+import { facilityOf, FACILITY } from '../src/core/facilities';
 import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { SHOP_BY_ID } from '../src/core/shops';
@@ -28,6 +30,10 @@ function runStories(when: 'morning' | 'noon' | 'evening') {
 }
 
 for (let d = 1; d <= 30; d++) {
+  if (process.argv[4] !== 'dumb' && street.transport && !facilityOf(s) && d >= 3 && s.money > 22000) {
+    const i = s.lots.findIndex((l) => l.unlocked && !l.shop);
+    if (i >= 0 && buildFacility(s, i).ok) { installModule(s, 'firstaid'); setStaff(s, 2); log.push('  [建設] 服務中心＋救護站'); }
+  }
   // 填滿空店面
   for (let i = 0; i < s.lots.length; i++) {
     const lot = s.lots[i];
@@ -38,6 +44,22 @@ for (let d = 1; d <= 30; d++) {
   }
   if (s.lots.every((l) => !l.unlocked || l.shop) && s.money > nextLotCost(s) + 8000) {
     unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+  }
+  // 九份：蓋服務中心、升級交通、神隱日辦儀式
+  const smart = process.argv[4] !== 'dumb';
+  if (smart && street.transport) {
+    if (!facilityOf(s) && s.money > 30000 && d >= 4) {
+      const i = s.lots.findIndex((l) => l.unlocked && !l.shop);
+      if (i >= 0 && buildFacility(s, i).ok) { installModule(s, 'firstaid'); setStaff(s, 2); log.push('  [建設] 服務中心＋救護站'); }
+    }
+    const fac = facilityOf(s);
+    if (fac && s.money > 30000 && fac.f.modules.length < FACILITY.slots[fac.f.level]) {
+      for (const m of ['guide', 'multilingual', 'broadcast'] as const) if (installModule(s, m).ok) { setStaff(s, Math.min(FACILITY.maxStaff[fac.f.level], fac.f.staff + 2)); log.push(`  [建設] ${m}`); break; }
+    }
+    if (fac && s.money > 60000 && fac.f.level < 3) upgradeFacility(s);
+    if (s.money > (BUS[s.bus + 1]?.cost ?? 1e9) + 20000) { upgradeBus(s); log.push('  [交通] 巴士升級'); }
+    else if (s.money > (ROUTE[s.route + 1]?.cost ?? 1e9) + 20000) { upgradeRoute(s); log.push('  [交通] 路線升級'); }
+    if (canStartActivity(s, 'ritual').ok) { startActivity(s, 'ritual'); log.push('  [儀式] 祈神'); }
   }
   if (s.money > 25000) {
     const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
@@ -59,7 +81,9 @@ for (let d = 1; d <= 30; d++) {
     `D${String(d).padStart(2)} ${sum.weekday} ${sum.weatherName} 路人${String(sum.passersby).padStart(5)} 來客${String(sum.visitors).padStart(4)}` +
     ` 營收${String(sum.revenue).padStart(7)} 租金${String(sum.rent).padStart(6)} 抽成${String(sum.commission).padStart(5)}` +
     ` 淨利${String(sum.net).padStart(6)} 客滿${String(sum.turnedAway).padStart(4)} 聲望${sum.reputationAfter.toFixed(1).padStart(5)}` +
-    ` 資金${String(s.money).padStart(7)} 店${presentTenants(s).length} 滿意[${sats}]` + (sum.leftShops.length ? ` 退租:${sum.leftShops}` : ''),
+    ` 資金${String(s.money).padStart(7)} 店${presentTenants(s).length} 滿意[${sats}]` + (sum.leftShops.length ? ` 退租:${sum.leftShops}` : '') +
+    (sum.stranded ? ` 山下${sum.stranded}` : '') + (sum.falls ? ` 跌倒${sum.falls}(救${sum.fallsTreated})` : '') +
+    (sum.kami ? ` 神隱${sum.vanished}(找回${sum.found})${sum.ritual ? '有儀式' : ''}` : '') + ` 外國${sum.foreign}`,
   );
   for (const l of log.splice(0)) console.log(l);
   if (s.chapterComplete) { console.log('*** 過關 ***'); break; }

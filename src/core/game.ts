@@ -6,8 +6,9 @@ import { TRAITS } from './traits';
 import { ACTIVITY_BY_ID, INFLUENCERS, type ActivityDef } from './activities';
 import type {
   GameState, StreetDef, TenantProfile, ShopInstance, DaySummary, DayStats, Effects, Mods, ActivityVariant,
-  Look, TraitId,
+  Look, TraitId, Weather, Forecast, Origin,
 } from './types';
+import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
 
 export const DAY_START_MIN = 7 * 60;
@@ -24,6 +25,7 @@ const WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '�
 
 const emptyStats = (): DayStats => ({
   passersby: 0, visitors: 0, revenue: 0, commission: 0, couponCost: 0, turnedAway: 0,
+  stranded: 0, falls: 0, fallsTreated: 0, vanished: 0, found: 0, foreign: 0,
 });
 
 // =====================================================================
@@ -48,6 +50,11 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     reputation: street.startRep,
     minute: DAY_START_MIN,
     weather: 'sunny',
+    kami: false,
+    forecast: { weather: 'sunny', kami: false },
+    ritualDay: 0,
+    bus: 0,
+    route: 0,
     lots: Array.from({ length: lotCount(street) }, (_, i) => ({ unlocked: i < street.startLots, shop: null })),
     applicants: [],
     generated: [],
@@ -57,7 +64,10 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     storyLog: {},
     activities: [],
     cooldowns: {},
-    unlockedActivities: Object.values(ACTIVITY_BY_ID).filter((a) => a.startUnlocked).map((a) => a.id),
+    unlockedActivities: [
+      ...Object.values(ACTIVITY_BY_ID).filter((a) => a.startUnlocked).map((a) => a.id),
+      ...(street.kamikakushi ? ['ritual'] : []),
+    ],
     mascot: null,
     buffs: [],
     today: emptyStats(),
@@ -68,6 +78,7 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
   };
   // 開局佈告欄先有幾位應徵者
   for (let k = 0; k < 3; k++) addApplicant(s, rand);
+  s.forecast = rollForecast(street, 2, rand);
   return s;
 }
 
@@ -92,13 +103,187 @@ export function isWeekend(s: GameState): boolean {
   return weekdayIndex(s) >= 5;
 }
 
-export const WEATHER_NAME = { sunny: '晴天', rain: '下雨', fog: '起霧' } as const;
+export const WEATHER_NAME: Record<Weather, string> = { sunny: '晴天', rain: '下雨', fog: '起霧', heavyFog: '濃霧' };
 
-function rollWeather(street: StreetDef, rand: () => number): GameState['weather'] {
+function rollWeather(street: StreetDef, rand: () => number): Weather {
   const r = rand();
-  if (r < street.weather.rain) return 'rain';
-  if (r < street.weather.rain + street.weather.fog) return 'fog';
+  const w = street.weather;
+  if (r < w.rain) return 'rain';
+  if (r < w.rain + w.fog) return 'fog';
+  if (r < w.rain + w.fog + (w.heavyFog ?? 0)) return 'heavyFog';
   return 'sunny';
+}
+
+/** 擲出某一天的天氣預報（前兩天不會有濃霧，讓玩家先熟悉） */
+export function rollForecast(street: StreetDef, day: number, rand: () => number): Forecast {
+  let weather = rollWeather(street, rand);
+  if (day < 3 && weather === 'heavyFog') weather = 'fog';
+  const kami = weather === 'heavyFog' && day >= 4 && rand() < (street.kamikakushi ?? 0);
+  return { weather, kami };
+}
+
+export function forecastText(f: Forecast): string {
+  if (f.kami) return '濃霧・神隱日？';
+  return WEATHER_NAME[f.weather];
+}
+
+// =====================================================================
+// 外國旅客
+// =====================================================================
+
+export const ORIGIN_NAME: Record<Origin, string> = { local: '本地', jp: '日本', kr: '韓國' };
+
+/** 各國旅客偏好（只是輕微傾向） */
+const ORIGIN_PREF: Record<Origin, Record<string, number>> = {
+  local: {},
+  jp: { teahouse: 1.4, taro: 1.25, ocarina: 1.2, fishball: 1.1, douhua: 1.15 },
+  kr: { cafe: 1.35, souvenir: 1.3, caogui: 1.15, tofuice: 1.2, brownsugar: 1.15 },
+};
+
+export function rollOrigin(s: GameState, rand: () => number): Origin {
+  const v = streetOf(s).visitors;
+  const f = combinedMods(s).foreign ?? 1;
+  const r = rand();
+  if (r < v.jp * f) return 'jp';
+  if (r < (v.jp + v.kr) * f) return 'kr';
+  return 'local';
+}
+
+// =====================================================================
+// 交通
+// =====================================================================
+
+export const BUS = [
+  { name: '小巴士', mult: 1, cost: 0, seats: 6 },
+  { name: '大巴士', mult: 1.6, cost: 20000, seats: 10 },
+  { name: '雙層巴士', mult: 2.4, cost: 45000, seats: 15 },
+];
+export const ROUTE = [
+  { name: '一般班次', mult: 1, cost: 0 },
+  { name: '加開班次', mult: 1.3, cost: 12000 },
+  { name: '直達專車', mult: 1.6, cost: 28000 },
+];
+
+/** 每小時最多能運多少人上山（沒有交通限制的老街回傳 Infinity） */
+export function transportCapacity(s: GameState): number {
+  const t = streetOf(s).transport;
+  if (!t) return Infinity;
+  return t.base * BUS[s.bus].mult * ROUTE[s.route].mult * (combinedMods(s).transport ?? 1);
+}
+
+export function upgradeBus(s: GameState): Result {
+  if (!streetOf(s).transport) return { ok: false, reason: '這條街沒有交通問題' };
+  const next = BUS[s.bus + 1];
+  if (!next) return { ok: false, reason: '已經是最大的巴士了' };
+  if (s.money < next.cost) return { ok: false, reason: `資金不足（需要 $${next.cost.toLocaleString('en-US')}）` };
+  s.money -= next.cost;
+  s.bus += 1;
+  return { ok: true };
+}
+
+export function upgradeRoute(s: GameState): Result {
+  if (!streetOf(s).transport) return { ok: false, reason: '這條街沒有交通問題' };
+  const next = ROUTE[s.route + 1];
+  if (!next) return { ok: false, reason: '路線已經最好了' };
+  if (s.money < next.cost) return { ok: false, reason: `資金不足（需要 $${next.cost.toLocaleString('en-US')}）` };
+  s.money -= next.cost;
+  s.route += 1;
+  return { ok: true };
+}
+
+// =====================================================================
+// 濃霧、跌倒、神隱
+// =====================================================================
+
+/** 每位路人跌倒的機率 */
+export function fallChance(s: GameState): number {
+  const base = s.weather === 'heavyFog' ? 0.025 : s.weather === 'fog' ? 0.006 : s.weather === 'rain' ? 0.004 : 0;
+  return base * (1 - 0.5 * moduleEff(s, 'guide'));
+}
+
+/** 記錄一次跌倒，回傳有沒有被救護站處理 */
+export function registerFall(s: GameState, rand: () => number): boolean {
+  s.today.falls += 1;
+  const treated = rand() < moduleEff(s, 'firstaid');
+  if (treated) s.today.fallsTreated += 1;
+  return treated;
+}
+
+export function ritualProtected(s: GameState): boolean {
+  return s.ritualDay === s.day;
+}
+
+/** 每位路人被「神隱」的機率 */
+export function vanishChance(s: GameState): number {
+  return s.kami && !ritualProtected(s) ? 0.08 : 0;
+}
+
+/** 記錄一位遊客消失，回傳有沒有被廣播找回來 */
+export function registerVanish(s: GameState, rand: () => number): boolean {
+  s.today.vanished += 1;
+  const found = rand() < 0.5 * moduleEff(s, 'broadcast');
+  if (found) s.today.found += 1;
+  return found;
+}
+
+// =====================================================================
+// 遊客服務中心
+// =====================================================================
+
+export function buildFacility(s: GameState, lotIndex: number): Result {
+  const lot = s.lots[lotIndex];
+  if (!lot?.unlocked) return { ok: false, reason: '店面還沒整修' };
+  if (lot.shop || lot.facility) return { ok: false, reason: '這裡已經有店了' };
+  if (facilityOf(s)) return { ok: false, reason: '一條街只能蓋一座服務中心' };
+  if (s.money < FACILITY.buildCost) return { ok: false, reason: `資金不足（需要 $${FACILITY.buildCost.toLocaleString('en-US')}）` };
+  s.money -= FACILITY.buildCost;
+  lot.facility = { level: 1, modules: [], staff: 0 };
+  return { ok: true };
+}
+
+export function upgradeFacility(s: GameState): Result {
+  const fac = facilityOf(s);
+  if (!fac) return { ok: false, reason: '還沒有服務中心' };
+  if (fac.f.level >= FACILITY.maxLevel) return { ok: false, reason: '已經是最高等級' };
+  const cost = FACILITY.upgradeCost[fac.f.level];
+  if (s.money < cost) return { ok: false, reason: `資金不足（需要 $${cost.toLocaleString('en-US')}）` };
+  s.money -= cost;
+  fac.f.level += 1;
+  return { ok: true };
+}
+
+export function installModule(s: GameState, id: ModuleDef['id']): Result {
+  const fac = facilityOf(s);
+  if (!fac) return { ok: false, reason: '還沒有服務中心' };
+  const m = MODULE_BY_ID[id];
+  if (fac.f.modules.includes(id)) return { ok: false, reason: '已經安裝了' };
+  if (fac.f.modules.length >= FACILITY.slots[fac.f.level]) return { ok: false, reason: '空間不夠，先升級服務中心' };
+  if (s.money < m.cost) return { ok: false, reason: `資金不足（需要 $${m.cost.toLocaleString('en-US')}）` };
+  s.money -= m.cost;
+  fac.f.modules.push(id);
+  return { ok: true };
+}
+
+export function setStaff(s: GameState, n: number): Result {
+  const fac = facilityOf(s);
+  if (!fac) return { ok: false, reason: '還沒有服務中心' };
+  const max = FACILITY.maxStaff[fac.f.level];
+  if (n < 0) return { ok: false, reason: '已經沒有員工了' };
+  if (n > max) return { ok: false, reason: `目前最多雇用 ${max} 人，升級服務中心可以增加` };
+  fac.f.staff = n;
+  return { ok: true };
+}
+
+export function demolishFacility(s: GameState): Result {
+  const fac = facilityOf(s);
+  if (!fac) return { ok: false, reason: '還沒有服務中心' };
+  s.lots[fac.lot].facility = null;
+  return { ok: true };
+}
+
+export function facilityWages(s: GameState): number {
+  const fac = facilityOf(s);
+  return fac ? fac.f.staff * wageOf(streetOf(s).rentMult) : 0;
 }
 
 // =====================================================================
@@ -199,7 +384,7 @@ export function signTenant(s: GameState, lotIndex: number, tenantId: string, tie
   const p = profileOf(s, tenantId);
   if (!lot || !p) return { ok: false, reason: '無效的操作' };
   if (!lot.unlocked) return { ok: false, reason: '這個店面還沒整修' };
-  if (lot.shop) return { ok: false, reason: '這裡已經有租客了' };
+  if (lot.shop || lot.facility) return { ok: false, reason: '這裡已經有租客了' };
   if (tier > p.maxRentTier) return { ok: false, reason: p.lines.refuse, refused: true };
   lot.shop = {
     tenantId, defId: p.shopType, level: 1, rentTier: tier,
@@ -338,6 +523,7 @@ export function neighborEffects(s: GameState, index: number): NeighborEffect[] {
   const shop = s.lots[index]?.shop;
   if (!shop) return [];
   const out: NeighborEffect[] = [];
+  if (s.lots[index - 1]?.facility || s.lots[index + 1]?.facility) out.push({ label: '服務中心帶來人潮', mult: 1.06 });
   s.lots.forEach((l, j) => {
     const n = l.shop;
     if (!n || j === index) return;
@@ -383,9 +569,14 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
     if (v?.mods) all.push(v.mods);
   }
   for (const b of s.buffs) all.push(b.mods);
-  const out = { traffic: 1, appealAll: 1, repPerDay: 0, appeal: {} as Partial<Record<Category, number>>, shopAppeal: {} as Record<string, number> };
+  const out = {
+    traffic: 1, appealAll: 1, repPerDay: 0, transport: 1, foreign: 1,
+    appeal: {} as Partial<Record<Category, number>>, shopAppeal: {} as Record<string, number>,
+  };
   for (const m of all) {
     out.traffic *= m.traffic ?? 1;
+    out.transport *= m.transport ?? 1;
+    out.foreign *= m.foreign ?? 1;
     out.appealAll *= m.appealAll ?? 1;
     out.repPerDay += m.repPerDay ?? 0;
     for (const [k, v] of Object.entries(m.appeal ?? {})) out.appeal[k as Category] = (out.appeal[k as Category] ?? 1) * v;
@@ -395,11 +586,12 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
 }
 
 export function isActive(s: GameState, actId: string): boolean {
+  if (actId === 'ritual') return ritualProtected(s);
   return s.activities.some((a) => a.id === actId);
 }
 
 /** 路人經過時走進這家店的機率 */
-export function enterChance(s: GameState, index: number, favorite?: Category): number {
+export function enterChance(s: GameState, index: number, favorite?: Category, origin: Origin = 'local'): number {
   const shop = s.lots[index]?.shop;
   if (!shop) return 0;
   const def = SHOP_BY_ID[shop.defId];
@@ -422,7 +614,12 @@ export function enterChance(s: GameState, index: number, favorite?: Category): n
   // 天氣
   if (s.weather === 'rain' && def.category === 'leisure') p *= 1.4;
   if (s.weather === 'rain' && def.id === 'fishball') p *= 1.3;
-  if (s.weather === 'fog' && def.id === 'teahouse') p *= 1.3;
+  if ((s.weather === 'fog' || s.weather === 'heavyFog') && def.id === 'teahouse') p *= 1.3;
+  // 外國旅客：有偏好，但沒有多語服務時語言不通
+  if (origin !== 'local') {
+    p *= ORIGIN_PREF[origin][def.id] ?? 1;
+    p *= 0.8 + 0.3 * moduleEff(s, 'multilingual');
+  }
   // 心情很差的租客顧店也不認真
   if (shop.satisfaction < 25) p *= 0.85;
   if (favorite && favorite === def.category) p *= 1.6;
@@ -444,9 +641,34 @@ export function trafficPerHour(s: GameState): number {
   const mods = combinedMods(s);
   let base = street.baseTraffic + shops * 3 + s.reputation * street.repTraffic;
   if (isWeekend(s)) base *= street.weekendMult;
+  const guide = moduleEff(s, 'guide');
   if (s.weather === 'rain') base *= 0.65;
-  if (s.weather === 'fog') base *= 0.85;
-  return base * timeCurve(hourOf(s)) * mods.traffic;
+  if (s.weather === 'fog') base *= 0.85 + 0.1 * guide;
+  if (s.weather === 'heavyFog') base *= 0.65 + 0.2 * guide;
+  const demand = base * timeCurve(hourOf(s)) * mods.traffic;
+  return Math.min(demand, transportCapacity(s));
+}
+
+/** 想來但被交通擋在山下的人（每小時） */
+export function strandedPerHour(s: GameState): number {
+  const cap = transportCapacity(s);
+  if (!isFinite(cap)) return 0;
+  const street = streetOf(s);
+  const shops = s.lots.filter((l) => l.shop).length;
+  const mods = combinedMods(s);
+  let base = street.baseTraffic + shops * 3 + s.reputation * street.repTraffic;
+  if (isWeekend(s)) base *= street.weekendMult;
+  const guide = moduleEff(s, 'guide');
+  if (s.weather === 'rain') base *= 0.65;
+  if (s.weather === 'fog') base *= 0.85 + 0.1 * guide;
+  if (s.weather === 'heavyFog') base *= 0.65 + 0.2 * guide;
+  return Math.max(0, base * timeCurve(hourOf(s)) * mods.traffic - cap);
+}
+
+/** 時間前進 dm 分鐘：回傳這段時間新到的路人數（小數），並記錄被卡在山下的人 */
+export function tickTraffic(s: GameState, dm: number): number {
+  s.today.stranded += (strandedPerHour(s) * dm) / 60;
+  return (trafficPerHour(s) * dm) / 60;
 }
 
 export function notePasserby(s: GameState): void {
@@ -474,12 +696,15 @@ export interface VisitResult {
 }
 
 /** 客人消費完離開 */
-export function completeVisit(s: GameState, index: number, spendRoll = 1): VisitResult {
+export function completeVisit(s: GameState, index: number, spendRoll = 1, origin: Origin = 'local'): VisitResult {
   const shop = s.lots[index]?.shop;
   if (!shop) return { revenue: 0, income: 0, coupon: false };
   const def = SHOP_BY_ID[shop.defId];
   shop.inside = Math.max(0, shop.inside - 1);
-  const revenue = Math.round(def.spend * (1 + (shop.level - 1) * 0.25) * spendRoll);
+  // 外國觀光客出手比較大方，有翻譯時更願意多買
+  const foreignMult = origin === 'local' ? 1 : 1.15 + 0.15 * moduleEff(s, 'multilingual');
+  if (origin !== 'local') s.today.foreign += 1;
+  const revenue = Math.round(def.spend * (1 + (shop.level - 1) * 0.25) * spendRoll * foreignMult);
   shop.todayVisitors += 1;
   shop.todayRevenue += revenue;
   shop.totalRevenue += revenue;
@@ -508,6 +733,12 @@ export function activityCost(s: GameState, actId: ActivityDef['id'], variantId?:
 export function canStartActivity(s: GameState, actId: ActivityDef['id'], variantId?: string): Result {
   const def = ACTIVITY_BY_ID[actId];
   if (!s.unlockedActivities.includes(actId)) return { ok: false, reason: '還沒解鎖' };
+  if (actId === 'ritual') {
+    if (s.ritualDay >= s.day) return { ok: false, reason: '已經準備好儀式了' };
+    if (!s.kami && !s.forecast.kami) return { ok: false, reason: '只有神隱日才需要' };
+    if (s.money < def.cost) return { ok: false, reason: `資金不足（需要 $${def.cost.toLocaleString('en-US')}）` };
+    return { ok: true };
+  }
   if (s.reputation < def.minRep) return { ok: false, reason: `聲望需達 ${def.minRep}` };
   if (actId === 'mascot' && s.mascot) return { ok: false, reason: '已經有吉祥物了' };
   if (isActive(s, actId)) return { ok: false, reason: '活動進行中' };
@@ -527,7 +758,10 @@ export function startActivity(
   const def = ACTIVITY_BY_ID[actId];
   s.money -= activityCost(s, actId, variantId);
   if (!s.flags.includes(`held-${actId}`)) s.flags.push(`held-${actId}`);
-  if (actId === 'mascot') {
+  if (actId === 'ritual') {
+    // 今天是神隱日就保護今天，否則保護明天
+    s.ritualDay = s.kami ? s.day : s.day + 1;
+  } else if (actId === 'mascot') {
     s.mascot = variantId!;
     s.reputation = Math.min(100, s.reputation + 2);
   } else {
@@ -573,6 +807,7 @@ export function applyEffects(s: GameState, e: Effects, rand: () => number = Math
     if (shop && shop.level < MAX_LEVEL) shop.level += 1;
   }
   for (const id of e.leave ?? []) removeTenant(s, id);
+  if (e.ritual) s.ritualDay = s.kami ? s.day : s.day + 1;
   if (e.chapterComplete) s.chapterComplete = true;
 }
 
@@ -667,7 +902,22 @@ export function reputationDelta(s: GameState): number {
   let d = fromVisitors + variety * 0.15 + traitRep - crowding - unhappy * 0.3 - 0.4 - (shops.length === 0 ? 1 : 0);
   if (d > 0) d *= 1 - s.reputation / 120;
   d += combinedMods(s).repPerDay;
+  d += eventRepDelta(s);
   return Math.round(d * 10) / 10;
+}
+
+/** 濃霧跌倒、神隱日、服務中心對聲望的影響 */
+export function eventRepDelta(s: GameState): number {
+  const t = s.today;
+  const untreated = t.falls - t.fallsTreated;
+  let d = -Math.min(5, untreated * 0.3) + Math.min(1.5, t.fallsTreated * 0.1);
+  if (s.kami) {
+    if (ritualProtected(s)) d += 1.5;
+    else d -= 2 + Math.min(2, (t.vanished - t.found) * 0.05);
+  }
+  const fac = facilityOf(s);
+  if (fac && fac.f.modules.length && staffRatio(fac.f) >= 1) d += 0.2;
+  return d;
 }
 
 /** 打烊結算 */
@@ -675,7 +925,8 @@ export function endDay(s: GameState): DaySummary {
   const street = streetOf(s);
   const rent = rentIncome(s);
   const maintenance = street.maintenance + unlockedCount(s) * 60;
-  s.money += rent - maintenance;
+  const wages = facilityWages(s);
+  s.money += rent - maintenance - wages;
   const before = s.reputation;
   s.reputation = Math.max(0, Math.min(100, Math.round((s.reputation + reputationDelta(s)) * 10) / 10));
 
@@ -690,7 +941,7 @@ export function endDay(s: GameState): DaySummary {
   const summary: DaySummary = {
     day: s.day,
     weekday: weekdayName(s),
-    weatherName: WEATHER_NAME[s.weather],
+    weatherName: s.kami ? '濃霧・神隱日' : WEATHER_NAME[s.weather],
     passersby: s.today.passersby,
     visitors: s.today.visitors,
     revenue: s.today.revenue,
@@ -698,7 +949,16 @@ export function endDay(s: GameState): DaySummary {
     commission: s.today.commission,
     couponCost: s.today.couponCost,
     maintenance,
-    net: rent + s.today.commission - s.today.couponCost - maintenance,
+    wages,
+    net: rent + s.today.commission - s.today.couponCost - maintenance - wages,
+    stranded: Math.round(s.today.stranded),
+    falls: s.today.falls,
+    fallsTreated: s.today.fallsTreated,
+    vanished: s.today.vanished,
+    found: s.today.found,
+    kami: s.kami,
+    ritual: s.kami && ritualProtected(s),
+    foreign: s.today.foreign,
     turnedAway: s.today.turnedAway,
     reputationBefore: before,
     reputationAfter: s.reputation,
@@ -708,6 +968,10 @@ export function endDay(s: GameState): DaySummary {
   };
   s.history.push(summary);
   if (s.history.length > 30) s.history.shift();
+  // 神隱日沒辦儀式、又有人沒找回來：隔天早上會有後續
+  if (s.kami && !ritualProtected(s) && s.today.vanished - s.today.found > 0 && !s.flags.includes('kamiAftermath')) {
+    s.flags.push('kamiAftermath');
+  }
   if (s.money <= BANKRUPT_AT) s.gameOver = true;
   return summary;
 }
@@ -716,7 +980,9 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
   s.day += 1;
   s.minute = DAY_START_MIN;
   s.today = emptyStats();
-  s.weather = rollWeather(streetOf(s), rand);
+  s.weather = s.forecast.weather;
+  s.kami = s.forecast.kami;
+  s.forecast = rollForecast(streetOf(s), s.day + 1, rand);
   for (const a of s.activities) a.daysLeft -= 1;
   s.activities = s.activities.filter((a) => a.daysLeft > 0);
   for (const b of s.buffs) b.daysLeft -= 1;
@@ -833,6 +1099,13 @@ export function deserialize(raw: string): GameState | null {
   try {
     const data = JSON.parse(raw) as GameState;
     if (data?.version !== 2 || !Array.isArray(data.lots) || !STREETS[data.streetId]) return null;
+    // 舊存檔補上新欄位
+    data.kami ??= false;
+    data.forecast ??= rollForecast(STREETS[data.streetId], data.day + 1, Math.random);
+    data.ritualDay ??= 0;
+    data.bus ??= 0;
+    data.route ??= 0;
+    if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
     if (data.minute >= DAY_END_MIN) {
       startNextDay(data);
       return data;

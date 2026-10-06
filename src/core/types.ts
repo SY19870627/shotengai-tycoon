@@ -100,13 +100,15 @@ export interface Effects {
   rentTier?: [string, number][];
   /** 店面升一級 */
   levelUp?: string[];
+  /** 準備祈神儀式（今天是神隱日就保護今天，否則保護明天） */
+  ritual?: boolean;
   /** 過關 */
   chapterComplete?: boolean;
 }
 
 export type Step =
   | { t: 'focus'; on: ActorRef | { landmark: string } | { lot: number } }
-  | { t: 'appear'; actor: ActorRef; near?: ActorRef | { landmark: string }; dx?: number }
+  | { t: 'appear'; actor: ActorRef; near?: ActorRef | { landmark: string } | { lot: number }; dx?: number }
   | { t: 'walk'; actor: ActorRef; to: ActorRef | { landmark: string }; dx?: number }
   | { t: 'say'; actor: ActorRef; text: string }
   | { t: 'emote'; actor: ActorRef; kind: Emote }
@@ -176,6 +178,10 @@ export interface Mods {
   appeal?: Partial<Record<Category, number>>;
   shopAppeal?: Record<string, number>;
   repPerDay?: number;
+  /** 交通容量倍率（臨時停車場等） */
+  transport?: number;
+  /** 外國旅客比例倍率 */
+  foreign?: number;
 }
 
 export interface Buff {
@@ -257,8 +263,14 @@ export interface StreetDef {
   maintenance: number;
   /** 開放下一個店面的基本費用 */
   lotCost: number;
-  /** 起霧／下雨的機率 */
-  weather: { rain: number; fog: number };
+  /** 下雨／起霧／濃霧的機率 */
+  weather: { rain: number; fog: number; heavyFog?: number };
+  /** 濃霧日變成神隱日的機率（只有九份） */
+  kamikakushi?: number;
+  /** 外國旅客比例 */
+  visitors: { jp: number; kr: number };
+  /** 交通：有設定的老街，人潮會被交通容量卡住 */
+  transport?: { base: number; name: string };
   shopTypes: string[];
   tenants: TenantProfile[];
   stories: StoryEvent[];
@@ -296,9 +308,25 @@ export interface ShopInstance {
   lastProfit: number;
 }
 
+export interface FacilityInstance {
+  level: number;
+  modules: string[];
+  staff: number;
+}
+
 export interface Lot {
   unlocked: boolean;
   shop: ShopInstance | null;
+  /** 遊客服務中心（佔一個店面） */
+  facility?: FacilityInstance | null;
+}
+
+export type Weather = 'sunny' | 'rain' | 'fog' | 'heavyFog';
+export type Origin = 'local' | 'jp' | 'kr';
+
+export interface Forecast {
+  weather: Weather;
+  kami: boolean;
 }
 
 export interface Applicant {
@@ -313,6 +341,13 @@ export interface DayStats {
   commission: number;
   couponCost: number;
   turnedAway: number;
+  /** 被交通卡在山下的人 */
+  stranded: number;
+  falls: number;
+  fallsTreated: number;
+  vanished: number;
+  found: number;
+  foreign: number;
 }
 
 export interface DaySummary {
@@ -326,7 +361,16 @@ export interface DaySummary {
   commission: number;
   couponCost: number;
   maintenance: number;
+  wages: number;
   net: number;
+  stranded: number;
+  falls: number;
+  fallsTreated: number;
+  vanished: number;
+  found: number;
+  kami: boolean;
+  ritual: boolean;
+  foreign: number;
   turnedAway: number;
   reputationBefore: number;
   reputationAfter: number;
@@ -344,7 +388,16 @@ export interface GameState {
   day: number;
   reputation: number;
   minute: number;
-  weather: 'sunny' | 'rain' | 'fog';
+  weather: Weather;
+  /** 今天是神隱日 */
+  kami: boolean;
+  /** 明日預報 */
+  forecast: Forecast;
+  /** 祈神儀式保護的那一天 */
+  ritualDay: number;
+  /** 交通：巴士等級 0 小巴、1 大巴、2 雙層；路線等級 0~2 */
+  bus: number;
+  route: number;
   lots: Lot[];
   applicants: Applicant[];
   /** 隨機產生的租客資料 */

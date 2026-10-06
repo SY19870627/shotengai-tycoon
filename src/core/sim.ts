@@ -1,5 +1,8 @@
-import { DAY_END_MIN, trafficPerHour, notePasserby, enterChance, tryEnter, completeVisit } from './game';
-import type { GameState } from './types';
+import {
+  DAY_END_MIN, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, rollOrigin, fallChance, registerFall,
+  vanishChance, registerVanish,
+} from './game';
+import type { GameState, Origin } from './types';
 import { SHOP_BY_ID, type Category } from './shops';
 
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
@@ -22,13 +25,17 @@ export function passerbyRoute(lots: number, rand: () => number): { start: number
  * 每位路人依 passerbyRoute 逛一段街，最多進 2 家店。
  */
 export function simulateDay(s: GameState, rand: () => number = Math.random, stepMin = 1): void {
-  const pending: { lot: number; leaveAt: number }[] = [];
+  const pending: { lot: number; leaveAt: number; origin: Origin }[] = [];
   let carry = 0;
   while (s.minute < DAY_END_MIN) {
-    carry += (trafficPerHour(s) * stepMin) / 60;
+    carry += tickTraffic(s, stepMin);
     while (carry >= 1) {
       carry -= 1;
       notePasserby(s);
+      const origin = rollOrigin(s, rand);
+      // 濃霧跌倒、神隱消失
+      if (rand() < fallChance(s)) registerFall(s, rand);
+      if (rand() < vanishChance(s) && !registerVanish(s, rand)) continue;
       const fav = CATS[Math.floor(rand() * CATS.length)];
       let visits = 0;
       const { start, dir, span } = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
@@ -36,10 +43,10 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
         const i = start + dir * k;
         if (i < 0 || i >= s.lots.length) break;
         if (visits >= 2) break;
-        if (rand() < enterChance(s, i, fav)) {
+        if (rand() < enterChance(s, i, fav, origin)) {
           if (tryEnter(s, i)) {
             const def = SHOP_BY_ID[s.lots[i].shop!.defId];
-            pending.push({ lot: i, leaveAt: s.minute + def.stayMinutes });
+            pending.push({ lot: i, leaveAt: s.minute + def.stayMinutes, origin });
             visits++;
           }
         }
@@ -48,10 +55,10 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
     s.minute += stepMin;
     for (let k = pending.length - 1; k >= 0; k--) {
       if (pending[k].leaveAt <= s.minute) {
-        completeVisit(s, pending[k].lot, 0.8 + rand() * 0.4);
+        completeVisit(s, pending[k].lot, 0.8 + rand() * 0.4, pending[k].origin);
         pending.splice(k, 1);
       }
     }
   }
-  for (const p of pending) completeVisit(s, p.lot, 1);
+  for (const p of pending) completeVisit(s, p.lot, 1, p.origin);
 }
