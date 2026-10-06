@@ -53,6 +53,8 @@ export const store = {
   speed: 1,
   selected: -1,
   waitingNextDay: false,
+  /** 祭典夜：街上還沒被識破的妖怪數（街景每格更新，介面顯示） */
+  yokaiOnStreet: 0,
   /** 劇情演出中（時間暫停、不能點店面） */
   storyRunning: false,
 };
