@@ -67,11 +67,11 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   // 關子嶺：泉水不夠就開井、民怨高就辦說明會、蓋共同浴場
   if (smart && hasSpring(s)) {
     const cost = wellCost(s);
-    if (springRatio(s) < 1 && cost !== null && s.money > cost + 8000 && s.grievance < 40) {
+    if (springRatio(s) < 1 && cost !== null && s.money > cost + 8000 && s.grievance < 30 && s.wells < 3) {
       drillWell(s);
       log.push(`  [泉水] 開井（泉量 ${springSupply(s)}／需求 ${springDemand(s)}，民怨 ${s.grievance}）`);
     }
-    if (s.grievance >= 45 && canHoldTownhall(s).ok) { holdTownhall(s); log.push('  [民怨] 說明會'); }
+    if (s.grievance >= 38 && canHoldTownhall(s).ok) { holdTownhall(s); log.push('  [民怨] 說明會'); }
     if (s.grievance >= 35 && bathLot(s) < 0 && s.money > BATH.cost + 10000) {
       const i = s.lots.findIndex((l) => l.unlocked && !l.shop && !l.facility);
       if (i >= 0 && buildBath(s, i).ok) log.push('  [民怨] 共同浴場');

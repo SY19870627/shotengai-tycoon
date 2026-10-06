@@ -168,7 +168,7 @@ export function addGrievance(s: GameState, d: number): void {
 /** 每天打烊時民怨的自然變化 */
 export function dailyGrievanceDelta(s: GameState): number {
   if (!hasSpring(s)) return 0;
-  let d = 0.5 * s.wells - 2;
+  let d = 0.5 * s.wells - 2.5;
   if (bathLot(s) >= 0) d -= BATH.grievance;
   if (s.fireMode === 'full') d += 1;
   return d;

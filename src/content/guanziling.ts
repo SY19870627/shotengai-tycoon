@@ -495,7 +495,7 @@ export const GUANZILING: StreetDef = {
     ],
   },
   goals: [
-    { id: 'rep', text: '聲望達到 65', check: (s) => s.reputation >= 65 },
+    { id: 'rep', text: '聲望達到 70', check: (s) => s.reputation >= 70 },
     { id: 'shops', text: '同時有 8 家店營業', check: (s) => shops(s) >= 8 },
     { id: 'fest', text: '天下第一鼎成功一次', check: (s) => s.flags.includes('cauldronOk') },
     { id: 'spring', text: '震後泉量恢復到震前的 80%', check: (s) => springRecovered(s) },
