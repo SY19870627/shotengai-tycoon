@@ -5,6 +5,7 @@ import {
   renovate, evict, setRentTier, postAd, profileOf, presentTenants, combinedMods, generateTenant, weekdayName,
   buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
+  planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
 } from '../src/core/game';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
@@ -338,5 +339,59 @@ describe('九份：濃霧、神隱日、服務中心、交通', () => {
     expect(loaded.bus).toBe(0);
     expect(loaded.forecast).toBeTruthy();
     expect(loaded.unlockedActivities).toContain('ritual');
+  });
+});
+
+describe('九份：民宿與深夜', () => {
+  it('九份營業到凌晨一點，深坑照舊十一點', () => {
+    expect(dayEndMin(createGame('jiufen'))).toBe(25 * 60);
+    expect(dayEndMin(createGame('shenkeng'))).toBe(23 * 60);
+  });
+
+  it('民宿不接散客，入住人數不超過房間數，入住會付房錢', () => {
+    const s = createGame('jiufen', seeded(1));
+    s.reputation = 90;
+    s.day = 2;
+    place(s, 0, 'jf-lan', 1);
+    s.minute = 13 * 60;
+    expect(enterChance(s, 0)).toBe(0);
+    const plan = planCheckins(s, seeded(2));
+    expect(plan.length).toBeGreaterThan(0);
+    expect(plan.length).toBeLessThanOrEqual(roomsOf(s, 0));
+    const m = s.money;
+    const r = checkInGuest(s, plan[0], seeded(3));
+    expect(r.revenue).toBeGreaterThan(1000);
+    expect(s.money).toBe(m + r.income);
+    expect(s.tonight.length).toBe(1);
+  });
+
+  it('隔壁開到半夜的店會吵到民宿：入住率與評價都下降', () => {
+    const quiet = createGame('jiufen', seeded(1));
+    place(quiet, 0, 'jf-lan', 1);
+    place(quiet, 1, 'jf-ocarina', 0);
+    const noisy = createGame('jiufen', seeded(1));
+    place(noisy, 0, 'jf-lan', 1);
+    place(noisy, 1, 'jf-tea', 0);
+    expect(noisyNeighbors(noisy, 0)).toContain('月見茶樓');
+    expect(occupancyRate(noisy, 0)).toBeLessThan(occupancyRate(quiet, 0));
+    for (const st of [quiet, noisy]) for (let k = 0; k < 4; k++) checkInGuest(st, { lot: 0, origin: 'local' }, seeded(k));
+    const sq = endDay(quiet, seeded(5));
+    const sn = endDay(noisy, seeded(5));
+    expect(sn.avgStars!).toBeLessThan(sq.avgStars!);
+  });
+
+  it('住一晚的客人隔天早上從民宿出發逛街，不受交通限制', () => {
+    const s = createGame('jiufen', seeded(1));
+    place(s, 0, 'jf-lan', 1);
+    for (let k = 0; k < 4; k++) checkInGuest(s, { lot: 0, origin: 'jp' }, seeded(k));
+    endDay(s, seeded(2));
+    startNextDay(s, seeded(3));
+    expect(s.morning.length).toBe(4);
+    expect(s.tonight.length).toBe(0);
+    expect(s.reviews.length).toBe(4);
+    // 把交通容量壓到 0：住客還是會出現在街上
+    s.buffs.push({ id: 'noBus', name: '停駛', days: 1, daysLeft: 1, mods: { transport: 0 } });
+    simulateDay(s, seeded(4));
+    expect(s.today.passersby).toBeGreaterThanOrEqual(4);
   });
 });

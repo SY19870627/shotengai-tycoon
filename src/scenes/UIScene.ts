@@ -5,6 +5,7 @@ import {
   relLabel, presentTenants, lotOfTenant, streetOf, weekdayName, WEATHER_NAME, combinedMods, rentIncome,
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
+  noisyNeighbors,
   MAX_APPLICANTS, goalsDone,
 } from '../core/game';
 import {
@@ -23,7 +24,7 @@ import type { StreetScene } from './StreetScene';
 
 const PANEL_H = 172;
 const PANEL_Y = H - PANEL_H;
-const CAT_LABEL: Record<string, string> = { food: '餐飲', retail: '零售', leisure: '休閒', daily: '民生' };
+const CAT_LABEL: Record<string, string> = { food: '餐飲', retail: '零售', leisure: '休閒', daily: '民生', stay: '住宿' };
 
 interface Button {
   root: Phaser.GameObjects.Container;
@@ -645,6 +646,21 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       satBar.setFillStyle(sat >= 65 ? 0x5bb36a : sat >= 35 ? 0xf2c14e : 0xd64545);
       satText.setText(`${sat}　${sat >= 65 ? '開心' : sat >= 35 ? '普通' : sat >= 20 ? '不滿' : '想退租！'}`);
       const open = isOpen(def, s.minute / 60);
+      if (def.category === 'stay') {
+        const tonight = s.tonight.filter((g) => g.lot === i).length;
+        const rooms = capacityAt(def, shop.level);
+        const noisy = noisyNeighbors(s, i);
+        status.setText(noisy.length ? `● 今晚 ${tonight}/${rooms} 間・隔壁太吵！` : `● 今晚入住 ${tonight}/${rooms} 間`)
+          .setColor(noisy.length ? '#f0a0a0' : '#8fe0a0');
+        const mine = s.reviews.filter((r) => r.lot === i);
+        const avg = mine.length ? mine.reduce((a, r) => a + r.stars, 0) / mine.length : null;
+        stats.setText([
+          `今晚住客 ${tonight} 人`,
+          `房錢營收 ${money(shop.todayRevenue)}`,
+          avg !== null ? `昨晚評價 ${avg.toFixed(1)} ★（${mine.length} 則）` : '昨晚還沒有評價',
+          noisy.length ? `吵鬧鄰居：${noisy.join('、')}` : `昨日租客淨利 ${money(shop.lastProfit)}`,
+        ].join('\n'));
+      } else {
       status.setText(open ? `● 營業中　店內 ${shop.inside}/${capacityAt(def, shop.level)} 人` : `● 休息中（${def.hours[0]}:00–${def.hours[1]}:00）`)
         .setColor(open ? '#8fe0a0' : '#c9a0a0');
       stats.setText([
@@ -653,6 +669,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         `客滿擋掉 ${shop.todayTurnedAway} 人`,
         `昨日租客淨利 ${money(shop.lastProfit)}`,
       ].join('\n'));
+      }
       const lines: string[] = [];
       for (const other of presentTenants(s)) {
         if (other === shop.tenantId) continue;
@@ -741,12 +758,17 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     m.add(this.traitChips(x + 30, iy + 24, prof, true));
     m.add(this.text(x + 30, iy + 90, `經營能力　${'★'.repeat(prof.skill)}${'☆'.repeat(5 - prof.skill)}`, 17, '#c8902a', '700'));
     m.add(this.text(x + 420, iy, '店的資料', 15, '#8a8296', '700'));
-    m.add(this.text(x + 420, iy + 24, [
+    m.add(this.text(x + 420, iy + 24, (def.category === 'stay' ? [
+      `每晚房價　$${def.spend}`,
+      `房間數　${def.capacity} 間（裝修可增加）`,
+      '傍晚入住、隔天早上退房',
+      def.description,
+    ] : [
       `客單價　$${def.spend}`,
       `營業時間　${def.hours[0]}:00–${def.hours[1]}:00`,
       `座位／容量　${def.capacity} 人`,
       def.description,
-    ].join('\n'), 15, '#3a3346').setLineSpacing(5).setWordWrapWidth(370, true));
+    ]).join('\n'), 15, '#3a3346').setLineSpacing(5).setWordWrapWidth(370, true));
     const similar = presentTenants(s).filter((id) => profileOf(s, id)?.shopType === prof.shopType).length;
     if (similar) m.add(this.text(x + 420, iy + 140, `⚠ 街上已經有 ${similar} 家同類店，距離太近會互搶客人`, 14, '#b33a3a', '700'));
 
@@ -992,6 +1014,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (sum.leftShops.length) notes.push(`退租了：${sum.leftShops.join('、')}`);
     if (sum.unhappyShops.length) notes.push(`很不開心、可能退租：${sum.unhappyShops.join('、')}`);
     if (sum.turnedAway > 25) notes.push('很多客人因為客滿進不去，可以補助租客裝修擴店。');
+    if (sum.overnight) notes.push(`今晚住宿 ${sum.overnight} 人${sum.avgStars !== null ? `・住客評價 ${sum.avgStars.toFixed(1)} ★` : ''}（明早退房逛街，不用擠公車）`);
     if (sum.foreign) notes.push(`外國旅客消費 ${sum.foreign} 人次`);
     if (sum.stranded > 20) notes.push(`有 ${sum.stranded} 人卡在山下上不來，可以升級交通。`);
     if (sum.falls) notes.push(`濃霧跌倒 ${sum.falls} 人，救護站處理 ${sum.fallsTreated} 人${sum.falls > sum.fallsTreated ? '，其餘讓名聲受損' : ''}`);

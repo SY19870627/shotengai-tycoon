@@ -1,6 +1,6 @@
 import {
-  DAY_END_MIN, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, rollOrigin, fallChance, registerFall,
-  vanishChance, registerVanish,
+  dayEndMin, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, rollOrigin, fallChance, registerFall,
+  vanishChance, registerVanish, planCheckins, checkInGuest,
 } from './game';
 import type { GameState, Origin } from './types';
 import { SHOP_BY_ID, type Category } from './shops';
@@ -26,19 +26,37 @@ export function passerbyRoute(lots: number, rand: () => number): { start: number
  */
 export function simulateDay(s: GameState, rand: () => number = Math.random, stepMin = 1): void {
   const pending: { lot: number; leaveAt: number; origin: Origin }[] = [];
+  const end = dayEndMin(s);
+  // 昨晚的住客：早上 7:00～9:30 退房，從民宿門口出發逛街（不用擠公車）
+  const morning = s.morning.map((g) => ({ ...g, at: 420 + rand() * 150 })).sort((a, b) => a.at - b.at);
+  let checkedIn = false;
   let carry = 0;
-  while (s.minute < DAY_END_MIN) {
-    carry += tickTraffic(s, stepMin);
+  while (s.minute < end) {
+    if (!checkedIn && s.minute >= 17 * 60) {
+      checkedIn = true;
+      for (const g of planCheckins(s, rand)) checkInGuest(s, g, rand);
+    }
+    const arrivals: { origin: Origin; start?: number }[] = [];
+    if (s.minute < 22.5 * 60) carry += tickTraffic(s, stepMin);
     while (carry >= 1) {
       carry -= 1;
+      arrivals.push({ origin: rollOrigin(s, rand) });
+    }
+    while (morning.length && morning[0].at <= s.minute) {
+      const g = morning.shift()!;
+      arrivals.push({ origin: g.origin, start: g.lot });
+    }
+    for (const a of arrivals) {
       notePasserby(s);
-      const origin = rollOrigin(s, rand);
+      const origin = a.origin;
       // 濃霧跌倒、神隱消失
       if (rand() < fallChance(s)) registerFall(s, rand);
       if (rand() < vanishChance(s) && !registerVanish(s, rand)) continue;
       const fav = CATS[Math.floor(rand() * CATS.length)];
       let visits = 0;
-      const { start, dir, span } = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
+      const route = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
+      const start = a.start ?? route.start;
+      const { dir, span } = route;
       for (let k = 0; k < span; k++) {
         const i = start + dir * k;
         if (i < 0 || i >= s.lots.length) break;

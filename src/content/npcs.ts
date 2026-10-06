@@ -77,6 +77,14 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'krHost', name: '綜藝主持人 敏俊',
     look: L({ skin: 0xf9dcc4, hair: 0xd9a03b, hairStyle: 'spiky', shirt: 0x4f86c6, pants: 0xf0f0f0, accessory: 'none', age: 'young' }),
   },
+  pajama: {
+    id: 'pajama', name: '穿睡衣的住客',
+    look: L({ skin: 0xf5d0b0, hair: 0x4a3324, hairStyle: 'spiky', shirt: 0x9ec3e6, pants: 0x9ec3e6, accessory: 'none', age: 'young' }),
+  },
+  nightOwl: {
+    id: 'nightOwl', name: '夜貓子住客',
+    look: L({ skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0x5b4a8a, pants: 0x2b2b3a, accessory: 'camera', age: 'young' }),
+  },
   kevin: { id: 'kevin', name: '大嘴巴 Kevin', look: INFLUENCERS.find((i) => i.id === 'loud')!.look! },
   cat: {
     id: 'cat', name: '老街貓',

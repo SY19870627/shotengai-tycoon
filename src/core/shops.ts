@@ -1,4 +1,4 @@
-export type Category = 'food' | 'retail' | 'leisure' | 'daily';
+export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
 export type FacadeStyle = 'redbrick' | 'jiufen';
@@ -22,6 +22,8 @@ export interface ShopDef {
   upkeep: number;
   /** 標準日租金 */
   baseRent: number;
+  /** 租客毛利率（不填用預設；住宿沒有食材成本，毛利比較高） */
+  margin?: number;
   /** 營業時間 [開, 關)，24 小時制 */
   hours: [number, number];
   wallColor: number;
@@ -112,6 +114,13 @@ export const SHOPS: ShopDef[] = [
     spend: 320, appeal: 0.042, capacity: 4, stayMinutes: 20, upkeep: 380, baseRent: 1350,
     hours: [10, 21], wallColor: 0xc98a5a, awningColor: 0x3a2a22,
     description: '店門口有人吹奏時，路人會停下來聽。',
+  }),
+  // ---- 住宿 ----
+  S({
+    id: 'minshuku', name: '民宿', short: '民宿', category: 'stay',
+    spend: 1500, appeal: 0, capacity: 4, stayMinutes: 0, upkeep: 500, baseRent: 1000, margin: 0.75,
+    hours: [0, 30], wallColor: 0xe9dcc4, awningColor: 0x6b8f6b,
+    description: '傍晚旅客入住、隔天早上退房逛街，住客不用擠公車上山。怕吵，別跟開到半夜的店當鄰居。',
   }),
 ];
 

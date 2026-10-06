@@ -162,7 +162,7 @@ export interface StoryEvent {
   /** 數字大的先檢查 */
   priority?: number;
   /** 在一天的哪個時間點觸發 */
-  when: 'morning' | 'noon' | 'evening';
+  when: 'morning' | 'noon' | 'evening' | 'night';
   /** 回傳綁定（符合條件）或 null */
   cond: (c: StoryCtx) => Binding | null;
   script: (b: Binding, c: StoryCtx) => Step[];
@@ -269,6 +269,8 @@ export interface StreetDef {
   kamikakushi?: number;
   /** 外國旅客比例 */
   visitors: { jp: number; kr: number };
+  /** 打烊時間（小時，可以超過 24 代表凌晨） */
+  closeHour?: number;
   /** 交通：有設定的老街，人潮會被交通容量卡住 */
   transport?: { base: number; name: string };
   shopTypes: string[];
@@ -324,6 +326,18 @@ export interface Lot {
 export type Weather = 'sunny' | 'rain' | 'fog' | 'heavyFog';
 export type Origin = 'local' | 'jp' | 'kr';
 
+export interface Guest {
+  lot: number;
+  origin: Origin;
+}
+
+export interface Review {
+  lot: number;
+  origin: Origin;
+  stars: number;
+  text: string;
+}
+
 export interface Forecast {
   weather: Weather;
   kami: boolean;
@@ -348,6 +362,7 @@ export interface DayStats {
   vanished: number;
   found: number;
   foreign: number;
+  overnight: number;
 }
 
 export interface DaySummary {
@@ -371,6 +386,8 @@ export interface DaySummary {
   kami: boolean;
   ritual: boolean;
   foreign: number;
+  overnight: number;
+  avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
   reputationAfter: number;
@@ -398,6 +415,14 @@ export interface GameState {
   /** 交通：巴士等級 0 小巴、1 大巴、2 雙層；路線等級 0~2 */
   bus: number;
   route: number;
+  /** 今晚入住的住客 */
+  tonight: Guest[];
+  /** 昨晚住下、今天早上退房的住客 */
+  morning: Guest[];
+  /** 昨晚住客留下的評價（今天早上退房時顯示） */
+  reviews: Review[];
+  /** reviews 是不是今天打烊時新算的（用來只計一次聲望） */
+  reviewsFresh?: boolean;
   lots: Lot[];
   applicants: Applicant[];
   /** 隨機產生的租客資料 */

@@ -6,7 +6,7 @@ import { TRAITS } from './traits';
 import { ACTIVITY_BY_ID, INFLUENCERS, type ActivityDef } from './activities';
 import type {
   GameState, StreetDef, TenantProfile, ShopInstance, DaySummary, DayStats, Effects, Mods, ActivityVariant,
-  Look, TraitId, Weather, Forecast, Origin,
+  Look, TraitId, Weather, Forecast, Origin, Guest, Review,
 } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
@@ -25,8 +25,13 @@ const WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '�
 
 const emptyStats = (): DayStats => ({
   passersby: 0, visitors: 0, revenue: 0, commission: 0, couponCost: 0, turnedAway: 0,
-  stranded: 0, falls: 0, fallsTreated: 0, vanished: 0, found: 0, foreign: 0,
+  stranded: 0, falls: 0, fallsTreated: 0, vanished: 0, found: 0, foreign: 0, overnight: 0,
 });
+
+/** 這條街幾點打烊（遊戲內分鐘） */
+export function dayEndMin(s: GameState): number {
+  return (streetOf(s).closeHour ?? 23) * 60;
+}
 
 // =====================================================================
 // 建立遊戲
@@ -55,6 +60,9 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     ritualDay: 0,
     bus: 0,
     route: 0,
+    tonight: [],
+    morning: [],
+    reviews: [],
     lots: Array.from({ length: lotCount(street) }, (_, i) => ({ unlocked: i < street.startLots, shop: null })),
     applicants: [],
     generated: [],
@@ -224,6 +232,92 @@ export function registerVanish(s: GameState, rand: () => number): boolean {
   const found = rand() < 0.5 * moduleEff(s, 'broadcast');
   if (found) s.today.found += 1;
   return found;
+}
+
+// =====================================================================
+// 民宿
+// =====================================================================
+
+export function isMinshuku(s: GameState, lot: number): boolean {
+  return SHOP_BY_ID[s.lots[lot]?.shop?.defId ?? '']?.category === 'stay';
+}
+
+export function roomsOf(s: GameState, lot: number): number {
+  const shop = s.lots[lot]?.shop;
+  return shop ? capacityAt(SHOP_BY_ID[shop.defId], shop.level) : 0;
+}
+
+/** 隔壁開到晚上 10 點以後的店（會吵到民宿） */
+export function noisyNeighbors(s: GameState, lot: number): string[] {
+  const out: string[] = [];
+  for (const j of [lot - 1, lot + 1]) {
+    const n = s.lots[j]?.shop;
+    if (!n) continue;
+    const def = SHOP_BY_ID[n.defId];
+    if (def.category !== 'stay' && def.hours[1] > 22) out.push(profileOf(s, n.tenantId)?.shopName ?? def.name);
+  }
+  return out;
+}
+
+/** 某間民宿今晚的預期入住率 */
+export function occupancyRate(s: GameState, lot: number): number {
+  const shop = s.lots[lot]?.shop;
+  if (!shop || !isMinshuku(s, lot)) return 0;
+  const p = profileOf(s, shop.tenantId);
+  let r = 0.2 + (s.reputation / 100) * 0.6 + (p?.skill ?? 3) * 0.03 + (shop.level - 1) * 0.05;
+  if (isWeekend(s) || weekdayIndex(s) === 4) r += 0.25;
+  if (s.weather === 'fog' || s.weather === 'heavyFog') r += 0.1; // 想看夜霧
+  r -= noisyNeighbors(s, lot).length * 0.12;
+  if (shop.satisfaction < 25) r -= 0.1;
+  r *= combinedMods(s).appealAll;
+  return Math.max(0.05, Math.min(1, r));
+}
+
+/** 決定今晚每間民宿會有誰來住（還沒入住） */
+export function planCheckins(s: GameState, rand: () => number): Guest[] {
+  const out: Guest[] = [];
+  s.lots.forEach((_, i) => {
+    if (!isMinshuku(s, i)) return;
+    const rooms = roomsOf(s, i);
+    const n = Math.min(rooms, Math.round(rooms * occupancyRate(s, i) * (0.85 + rand() * 0.3)));
+    for (let k = 0; k < n; k++) out.push({ lot: i, origin: rollOrigin(s, rand) });
+  });
+  return out;
+}
+
+/** 住客入住：付房錢（會長抽成） */
+export function checkInGuest(s: GameState, g: Guest, rand: () => number = Math.random): VisitResult {
+  if (!isMinshuku(s, g.lot)) return { revenue: 0, income: 0, coupon: false };
+  s.tonight.push(g);
+  s.today.overnight += 1;
+  return completeVisit(s, g.lot, 0.9 + rand() * 0.2, g.origin);
+}
+
+const REVIEW_TEXT: Record<Origin, { good: string[]; noise: string[]; mid: string[] }> = {
+  local: { good: ['夜景好美！', '老闆好親切', '早餐好吃', '下次還要來'], noise: ['隔壁好吵睡不著', '半夜還有人在唱歌'], mid: ['普通，可以住', '房間有點小'] },
+  jp: { good: ['夜景最高！', '朝ごはん美味しい', 'また来たい！'], noise: ['隣がうるさい…', '眠れなかった'], mid: ['まあまあ', '部屋が狭い'] },
+  kr: { good: ['야경 최고!', '사장님 친절해요', '또 올게요!'], noise: ['옆집 시끄러워요', '잠을 못 잤어요'], mid: ['그냥 그래요', '방이 좀 작아요'] },
+};
+
+/** 今晚住客的評價（打烊時算，隔天早上顯示） */
+export function makeReviews(s: GameState, rand: () => number): Review[] {
+  return s.tonight.map((g) => {
+    const shop = s.lots[g.lot]?.shop;
+    const p = shop ? profileOf(s, shop.tenantId) : undefined;
+    const noise = noisyNeighbors(s, g.lot).length;
+    let x = 2.6 + (p?.skill ?? 3) * 0.25 + ((shop?.level ?? 1) - 1) * 0.4 + rand() * 1.2;
+    if (s.weather === 'fog' || s.weather === 'heavyFog') x += 0.3;
+    x -= noise * 1.1;
+    const stars = Math.max(1, Math.min(5, Math.round(x)));
+    const t = REVIEW_TEXT[g.origin];
+    const pool = noise && stars <= 3 ? t.noise : stars >= 4 ? t.good : t.mid;
+    return { lot: g.lot, origin: g.origin, stars, text: pool[Math.floor(rand() * pool.length)] };
+  });
+}
+
+export function avgStars(reviews: Review[]): number | null {
+  if (!reviews.length) return null;
+  return reviews.reduce((a, r) => a + r.stars, 0) / reviews.length;
 }
 
 // =====================================================================
@@ -596,7 +690,7 @@ export function enterChance(s: GameState, index: number, favorite?: Category, or
   if (!shop) return 0;
   const def = SHOP_BY_ID[shop.defId];
   const h = hourOf(s);
-  if (!isOpen(def, h)) return 0;
+  if (def.category === 'stay' || !isOpen(def, h)) return 0;
   const tr = TRAITS_OF(s, shop.tenantId);
   const p0 = profileOf(s, shop.tenantId);
   const mods = combinedMods(s);
@@ -825,7 +919,7 @@ export function tenantProfit(s: GameState, shop: ShopInstance): number {
   const def = SHOP_BY_ID[shop.defId];
   const street = streetOf(s);
   const rent = rentFor(def, shop.rentTier, street.rentMult);
-  let margin = TENANT_MARGIN;
+  let margin = def.margin ?? TENANT_MARGIN;
   // 削價競爭吃掉毛利
   const i = s.lots.findIndex((l) => l.shop === shop);
   if (neighborEffects(s, i).some((e) => e.label.endsWith('削價競爭'))) margin -= 0.06;
@@ -917,12 +1011,34 @@ export function eventRepDelta(s: GameState): number {
   }
   const fac = facilityOf(s);
   if (fac && fac.f.modules.length && staffRatio(fac.f) >= 1) d += 0.2;
+  // 民宿評價
+  const avg = avgStars(s.reviews.filter((r) => r.lot >= 0));
+  if (avg !== null && s.reviewsFresh) d += (avg - 3.5) * 0.8 * Math.min(1, s.reviews.length / 6);
   return d;
 }
 
 /** 打烊結算 */
-export function endDay(s: GameState): DaySummary {
+export function endDay(s: GameState, rand: () => number = Math.random): DaySummary {
   const street = streetOf(s);
+  // 今晚住客的評價：影響聲望、民宿老闆心情，噪音會讓民宿和吵鬧的鄰居交惡
+  s.reviews = makeReviews(s, rand);
+  s.reviewsFresh = true;
+  s.lots.forEach((l, i) => {
+    if (!l.shop || !isMinshuku(s, i)) return;
+    const mine = s.reviews.filter((r) => r.lot === i);
+    const avg = avgStars(mine);
+    if (avg !== null) adjustSat(s, l.shop, (avg - 3.5) * 4);
+    for (const j of [i - 1, i + 1]) {
+      const n = s.lots[j]?.shop;
+      if (n && SHOP_BY_ID[n.defId].category !== 'stay' && SHOP_BY_ID[n.defId].hours[1] > 22 && mine.length) addRel(s, l.shop.tenantId, n.tenantId, -4);
+    }
+  });
+  // 深夜宵夜車：住客越多，深夜生意越好
+  if (s.flags.includes('nightCart') && s.tonight.length) {
+    const cart = s.tonight.length * 60;
+    s.today.commission += cart;
+    s.money += cart;
+  }
   const rent = rentIncome(s);
   const maintenance = street.maintenance + unlockedCount(s) * 60;
   const wages = facilityWages(s);
@@ -959,6 +1075,8 @@ export function endDay(s: GameState): DaySummary {
     kami: s.kami,
     ritual: s.kami && ritualProtected(s),
     foreign: s.today.foreign,
+    overnight: s.today.overnight,
+    avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,
     reputationAfter: s.reputation,
@@ -982,6 +1100,9 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
   s.today = emptyStats();
   s.weather = s.forecast.weather;
   s.kami = s.forecast.kami;
+  s.morning = s.tonight;
+  s.tonight = [];
+  s.reviewsFresh = false;
   s.forecast = rollForecast(streetOf(s), s.day + 1, rand);
   for (const a of s.activities) a.daysLeft -= 1;
   s.activities = s.activities.filter((a) => a.daysLeft > 0);
@@ -1105,8 +1226,11 @@ export function deserialize(raw: string): GameState | null {
     data.ritualDay ??= 0;
     data.bus ??= 0;
     data.route ??= 0;
+    data.tonight ??= [];
+    data.morning ??= [];
+    data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    if (data.minute >= DAY_END_MIN) {
+    if (data.minute >= (STREETS[data.streetId].closeHour ?? 23) * 60) {
       startNextDay(data);
       return data;
     }

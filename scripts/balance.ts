@@ -22,7 +22,7 @@ const s = createGame(streetId, rand);
 const street = STREETS[streetId];
 const log: string[] = [];
 
-function runStories(when: 'morning' | 'noon' | 'evening') {
+function runStories(when: 'morning' | 'noon' | 'evening' | 'night') {
   const st = pickStory(s, when, rand);
   if (!st) return;
   log.push(`  [劇情] ${st.event.id}`);
@@ -75,6 +75,7 @@ for (let d = 1; d <= 30; d++) {
   s.minute = 7 * 60;
   simulateDay(s, rand);
   runStories('evening');
+  runStories('night');
   const sum = endDay(s);
   const sats = s.lots.filter((l) => l.shop).map((l) => l.shop!.satisfaction).join(',');
   console.log(
@@ -83,7 +84,8 @@ for (let d = 1; d <= 30; d++) {
     ` 淨利${String(sum.net).padStart(6)} 客滿${String(sum.turnedAway).padStart(4)} 聲望${sum.reputationAfter.toFixed(1).padStart(5)}` +
     ` 資金${String(s.money).padStart(7)} 店${presentTenants(s).length} 滿意[${sats}]` + (sum.leftShops.length ? ` 退租:${sum.leftShops}` : '') +
     (sum.stranded ? ` 山下${sum.stranded}` : '') + (sum.falls ? ` 跌倒${sum.falls}(救${sum.fallsTreated})` : '') +
-    (sum.kami ? ` 神隱${sum.vanished}(找回${sum.found})${sum.ritual ? '有儀式' : ''}` : '') + ` 外國${sum.foreign}`,
+    (sum.kami ? ` 神隱${sum.vanished}(找回${sum.found})${sum.ritual ? '有儀式' : ''}` : '') + ` 外國${sum.foreign}` +
+    (sum.overnight ? ` 住宿${sum.overnight}(${sum.avgStars?.toFixed(1)}★)` : ''),
   );
   for (const l of log.splice(0)) console.log(l);
   if (s.chapterComplete) { console.log('*** 過關 ***'); break; }

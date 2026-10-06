@@ -1,6 +1,7 @@
 import type { StreetDef, TenantProfile, StoryEvent, GameState } from '../core/types';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look } from './dsl';
 import { JIUFEN_EVENTS } from './jiufenEvents';
+import { JIUFEN_NIGHT } from './jiufenNight';
 
 const ST = 'jiufen';
 const shops = (s: GameState) => s.lots.filter((l) => l.shop).length;
@@ -151,6 +152,53 @@ const tenants: TenantProfile[] = [
       rival: ['老人家就是跟不上時代！', '你那個芋圓三十年都沒變過！'],
       friend: ['師父～我的芋圓有進步嗎？', '一起拍影片！'],
       refuse: '這個價格，網紅也撐不住啦！',
+    },
+  }),
+  T({
+    id: 'jf-lan', name: '嵐姐', shopName: '山嵐民宿', shopType: 'minshuku',
+    traits: ['friendly', 'hardworking'], skill: 4, maxRentTier: 1,
+    intro: '我們家三樓的窗戶可以看到整片海！早上起來泡杯茶，雲就在腳下。住過的客人都說捨不得走～',
+    look: look({ skin: 0xf2c9a5, hair: 0x4a3324, hairStyle: 'bun', shirt: 0x6b8f6b, pants: 0x54627a, accessory: 'apron', age: 'mid' }),
+    lines: {
+      hello: '房間我已經打掃好了，隨時歡迎！',
+      happy: ['今晚又客滿啦！', '客人說我的早餐比飯店好吃～'],
+      unhappy: ['空房好多……', '昨晚客人說隔壁太吵，唉。'],
+      idle: ['要不要上來看看房間？', '晚上的燈籠從窗戶看出去超美。'],
+      rival: ['你可以小聲一點嗎？我的客人在睡覺！', '半夜還在吵，很沒公德心耶。'],
+      friend: ['我的客人早上都去你那吃早餐喔！', '有空來喝杯茶～'],
+      refuse: '這個租金，我要天天客滿才付得起啦。',
+    },
+  }),
+  T({
+    id: 'jf-wu', name: '霧先生', shopName: '霧宿 Fog Inn', shopType: 'minshuku',
+    traits: ['creative', 'stubborn'], skill: 4, maxRentTier: 2,
+    intro: '我的民宿只有四間房，每一間都是我親手設計的。濃霧的夜晚，窗外什麼都看不見——那才是最美的時候。',
+    look: look({ skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'long', shirt: 0x2b2b2b, pants: 0x3d3a36, accessory: 'glasses', age: 'young' }),
+    arrive: { minRep: 25 },
+    lines: {
+      hello: '請別在我的民宿門口大聲喧嘩。',
+      happy: ['今晚霧很好。', '客人懂我的設計，很欣慰。'],
+      unhappy: ['……太吵了。我需要安靜。', '這不是我想要的九份。'],
+      idle: ['霧，是九份的呼吸。', '入住請脫鞋。'],
+      rival: ['你的燈籠太亮了。', '噪音是一種暴力。'],
+      friend: ['你懂安靜的價值。', '霧大的晚上，來喝一杯。'],
+      refuse: '……不。',
+    },
+  }),
+  T({
+    id: 'jf-ama', name: '阿嬤', shopName: '阿嬤的厝', shopType: 'minshuku',
+    traits: ['veteran', 'gossip'], skill: 3, maxRentTier: 0,
+    intro: '阮厝是礦工時代留落來的老厝啦，房間細細間，毋過阿嬤會煮地瓜稀飯予人客食。',
+    look: look({ skin: 0xe8b48f, hair: 0xd9d4cc, hairStyle: 'bun', shirt: 0xb3262e, pants: 0x3d3a36, accessory: 'none', age: 'old' }),
+    arrive: { minDay: 4 },
+    lines: {
+      hello: '人客來，阿嬤歡迎啦！',
+      happy: ['昨暝的人客講阮厝足有古早味！', '地瓜稀飯攏食了了！'],
+      unhappy: ['人客愈來愈少喔……', '阿嬤老囉，樓梯爬袂起來。'],
+      idle: ['你敢知影以前礦工攏住佇遮？', '半暝毋通烏白走喔，霧內底有物件。'],
+      rival: ['你真正無禮貌！', '少年仔，莫遮爾大聲。'],
+      friend: ['來，食一碗稀飯。', '你是好囡仔。'],
+      refuse: '阿嬤無遐爾濟錢啦。',
     },
   }),
 ];
@@ -478,9 +526,10 @@ export const JIUFEN: StreetDef = {
   kamikakushi: 0.45,
   visitors: { jp: 0.3, kr: 0.2 },
   transport: { base: 50, name: '上山公車' },
-  shopTypes: ['taro', 'teahouse', 'fishball', 'caogui', 'ocarina', 'souvenir', 'cafe', 'grocery'],
+  shopTypes: ['taro', 'teahouse', 'fishball', 'caogui', 'ocarina', 'souvenir', 'cafe', 'grocery', 'minshuku'],
+  closeHour: 25,
   tenants,
-  stories: [...stories, ...JIUFEN_EVENTS],
+  stories: [...stories, ...JIUFEN_EVENTS, ...JIUFEN_NIGHT],
   activities: {
     templeFair: { name: '九份廟會遶境', temple: '山城廟宇' },
     mascots: [

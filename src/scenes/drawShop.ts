@@ -301,6 +301,22 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
         g.fillRect(x - 1, by + bh - 36, 2, 16);
       });
       break;
+    case 'minshuku':
+      // 床鋪、鑰匙、「歡迎入住」
+      g.fillStyle(0xf6f0e0);
+      g.fillRect(bx + 8, by + bh - 34, 54, 14);
+      g.fillStyle(0x6b8f6b);
+      g.fillRect(bx + 8, by + bh - 30, 54, 10);
+      g.fillStyle(0xffffff);
+      g.fillRoundedRect(bx + 10, by + bh - 40, 14, 8, 3);
+      g.fillStyle(0xc8902a);
+      for (let k = 0; k < 4; k++) {
+        g.fillCircle(bx + 80 + k * 11, by + 16, 3);
+        g.fillRect(bx + 79 + k * 11, by + 18, 2, 10);
+      }
+      g.fillStyle(0x6b4a30);
+      g.fillRect(bx + 74, by + 10, 50, 2);
+      break;
     default:
       row(6, (x, i) => {
         g.fillStyle([0xe0473b, 0xf2a93b, 0x7cc35a, 0x4f86c6][i % 4]);

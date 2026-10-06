@@ -19,6 +19,7 @@ export class BootScene extends Phaser.Scene {
     }
     this.makeLantern();
     this.makeUmbrella();
+    this.makeSuitcase();
     this.makeSoftDot();
     this.scene.start('map');
   }
@@ -91,6 +92,21 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xf6e7c1);
     g.fillRect(9, 16, 8, 10);
     g.generateTexture('lantern', 26, 38);
+    g.destroy();
+  }
+
+  private makeSuitcase() {
+    const g = this.add.graphics();
+    g.lineStyle(2, 0x333333);
+    g.strokeRect(5, 0, 8, 7);
+    g.fillStyle(0xd64545);
+    g.fillRoundedRect(0, 6, 18, 20, 3);
+    g.fillStyle(0x9e2f2f);
+    g.fillRect(0, 13, 18, 2);
+    g.fillStyle(0x222222);
+    g.fillCircle(4, 27, 2.5);
+    g.fillCircle(14, 27, 2.5);
+    g.generateTexture('suitcase', 18, 30);
     g.destroy();
   }
 

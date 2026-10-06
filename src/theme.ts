@@ -79,7 +79,7 @@ export function money(n: number): string {
 }
 
 export function clock(minute: number): string {
-  const h = Math.floor(minute / 60);
+  const h = Math.floor(minute / 60) % 24;
   const m = Math.floor(minute % 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
