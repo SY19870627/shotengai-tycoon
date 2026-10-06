@@ -4,18 +4,22 @@ import {
   nextLotCost, streetOf, profileOf, presentTenants, lotOfTenant, getRel, isActive, activityVariant,
   rollOrigin, fallChance, registerFall, vanishChance, registerVanish, strandedPerHour, BUS, ROUTE,
   dayEndMin, planCheckins, checkInGuest, roomsOf, isMinshuku,
-  sightChance, isSunset, registerSightseer, useTelescope,
+  sightChance, isSunset, registerSightseer, useTelescope, shopOpen, lastSpawnMin,
 } from '../core/game';
+import {
+  hasSpring, springSupply, springRatio, protestStage, festivalActive, festivalNight, yokaiChance, rollYokai, paysLeaves,
+  exposeYokai, wrongExpose, YOKAI, fireStopChance, registerFireVisitor, hikeChance, HIKER_SPEND,
+} from '../core/onsen';
 import { MODULES, FACILITY, facilityOf, moduleEff, staffRatio } from '../core/facilities';
 import { pickStory } from '../core/story';
 import { passerbyRoute } from '../core/sim';
 import { SHOP_BY_ID, isOpen, type Category } from '../core/shops';
-import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review } from '../core/types';
+import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review, YokaiKind, FireMode } from '../core/types';
 import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
-import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight } from './drawShop';
-import { drawLandmark, VIEWPOINT } from './drawLandmarks';
+import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
+import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
@@ -26,7 +30,6 @@ import { PED_VARIANTS } from './BootScene';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
 const MINUTES_PER_SEC = 8;
-const LAST_SPAWN_MIN = 22.5 * 60;
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
 const MODULE_COLOR: Record<string, number> = { firstaid: 0xd64545, multilingual: 0x2f6fb0, guide: 0xd9824a, broadcast: 0x7a4a9a };
 /** 角色站的位置（比路人前面一點） */
@@ -42,7 +45,7 @@ interface Ped {
   favorite: Category;
   visits: number;
   doorsLeft: number;
-  state: 'walk' | 'entering' | 'inside' | 'leaving' | 'fallen' | 'sightsee';
+  state: 'walk' | 'entering' | 'inside' | 'leaving' | 'fallen' | 'sightsee' | 'hike' | 'suspect';
   lot: number;
   leaveAt: number;
   animT: number;
@@ -55,9 +58,21 @@ interface Ped {
   /** 已經決定過要不要在觀景台停下來 */
   sightDone?: boolean;
   sight?: Sight;
+  /** 跟著路人移動的小配件（面具、浴衣、泥漿臉、影子…）：相對腳底的位置 */
+  extras?: { img: Phaser.GameObjects.Image; dx: number; dy: number; key: string }[];
+  /** 關子嶺 */
+  hikeDone?: boolean;
+  fireDone?: boolean;
+  hungry?: boolean;
+  yukata?: boolean;
+  /** 祭典夜的真妖怪 */
+  yokai?: { kind: YokaiKind; leaves: boolean; revealed: boolean; tellT: number; tellOn: number };
+  floatY?: number;
+  /** 祭典夜可以點 */
+  tappable?: boolean;
 }
 
-type SightKind = 'view' | 'selfie' | 'telescope' | 'bench';
+type SightKind = 'view' | 'selfie' | 'telescope' | 'bench' | 'fireView' | 'fireSelfie' | 'fireSit' | 'fireBuy';
 interface Sight {
   kind: SightKind;
   phase: 'go' | 'stay' | 'back';
@@ -146,6 +161,19 @@ export class StreetScene extends Phaser.Scene {
   private nightCount = 0;
   private cartTimer = 0;
   private cartX = -1;
+  // ---- 關子嶺 ----
+  private fireView: { container: Phaser.GameObjects.Container; night: Phaser.GameObjects.Container; mode: FireMode } | null = null;
+  private flame: { g: Phaser.GameObjects.Graphics; glow: Phaser.GameObjects.Graphics; t: number } | null = null;
+  private fireSeats: boolean[] = [];
+  private steamTimer = 0;
+  private wellLayer!: Phaser.GameObjects.Container;
+  private wellSig = '';
+  private festGlow!: Phaser.GameObjects.Container;
+  private bells = { morning: false, evening: false };
+  private parades = 0;
+  private exposeCooldown = 0;
+  private exposePrompt?: Phaser.GameObjects.Container;
+  private paradeObjs: { c: Phaser.GameObjects.Container; ev: Phaser.Time.TimerEvent }[] = [];
 
   constructor() {
     super('street');
@@ -164,7 +192,17 @@ export class StreetScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.L.worldW, H);
 
     this.sky = this.add.graphics().setScrollFactor(0).setDepth(0);
-    drawBackdrop(this, this.street.backdrop, this.L.worldW);
+    for (const o of drawBackdrop(this, this.street.backdrop, this.L.worldW)) {
+      // 背景裡寺廟的燈：晚上才亮
+      if (o.getData('night')) this.nightLayer.push({ g: o as Phaser.GameObjects.Graphics });
+    }
+    this.fireView = null;
+    this.flame = null;
+    this.fireSeats = FIRE.sitXs.map(() => false);
+    this.wellSig = '';
+    this.bells = { morning: false, evening: false };
+    this.parades = 0;
+    this.paradeObjs = [];
     this.drawStreetFloor();
     this.vista = null;
     this.lastSkyHour = -1;
@@ -183,6 +221,9 @@ export class StreetScene extends Phaser.Scene {
     }
     if (this.street.facade === 'jiufen') this.drawLanternStrings();
     this.drawStreetSigns();
+    this.wellLayer = this.add.container(0, 0).setDepth(11);
+    this.festGlow = this.add.container(0, 0).setDepth(61);
+    if (this.landmarkBox.has('fire')) this.setupFlame();
 
     this.activityLayer = this.add.container(0, 0).setDepth(44);
     this.nightOverlay = this.add.rectangle(0, 0, W, H, 0x0b0d2a, 0).setOrigin(0).setScrollFactor(0).setDepth(50);
@@ -289,19 +330,41 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private createLandmark(id: string, x: number, width: number) {
-    const art = drawLandmark(this, id, width);
-    this.add.container(x, GROUND_Y, art.objects).setDepth(10);
+    const mode = id === 'fire' ? S().fireMode : undefined;
+    const art = drawLandmark(this, id, width, mode);
+    const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
     art.night.setBlendMode(Phaser.BlendModes.ADD);
     this.nightLayer.push({ g: night });
+    if (id === 'fire' && mode) this.fireView = { container, night, mode };
     this.landmarkStand.set(id, x + art.standX);
     this.landmarkBox.set(id, { x, w: width });
     const zone = this.add.zone(x, GROUND_Y - 360, width, 360).setOrigin(0).setInteractive({ useHandCursor: true });
     zone.on('pointerup', () => {
       if (this.drag.moved || store.storyRunning) return;
+      // 關子嶺：露頭、水火同源可以操作
+      if ((id === 'spring' || id === 'fire') && hasSpring(S()) && !store.waitingNextDay) {
+        bus.emit(Ev.Landmark, id);
+        return;
+      }
       const def = this.street.landmarks.find((l) => l.id === id);
       if (def) bus.emit(Ev.Toast, `${def.name}：${def.description}`);
     });
+  }
+
+  /** 水火同源換了經營模式：重畫地標 */
+  private refreshFireLandmark() {
+    const s = S();
+    const fv = this.fireView;
+    const box = this.landmarkBox.get('fire');
+    if (!fv || !box || fv.mode === s.fireMode) return;
+    fv.container.destroy();
+    const art = drawLandmark(this, 'fire', box.w, s.fireMode);
+    fv.container = this.add.container(box.x, GROUND_Y, art.objects).setDepth(10);
+    art.night.setBlendMode(Phaser.BlendModes.ADD);
+    fv.night.removeAll(true);
+    fv.night.add(art.night);
+    fv.mode = s.fireMode;
   }
 
   // =================================================================== 店面
@@ -347,6 +410,10 @@ export class StreetScene extends Phaser.Scene {
 
     if (!lot.unlocked) {
       view.container.add(drawLockedLot(this, nextLotCost(s), i === firstLocked));
+    } else if (lot.bath) {
+      view.container.add(drawBathhouse(this));
+      view.lights.fillStyle(0xffe2a0, 0.45);
+      view.lights.fillRect(x0 + 28, GROUND_Y - 200, LOT_W - 56, 40);
     } else if (lot.facility) {
       const f = lot.facility;
       const icons = Object.fromEntries(MODULES.map((m) => [m.id, { icon: m.icon, name: m.name, color: MODULE_COLOR[m.id] }]));
@@ -412,6 +479,11 @@ export class StreetScene extends Phaser.Scene {
         fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: '#ffffff', backgroundColor: '#5a5266', padding: { x: 8, y: 3 },
       }).setOrigin(0.5);
       view.shutter.add([sg, label]);
+      // 關子嶺：被靜坐抗議的店
+      if (s.closedToday.includes(i)) {
+        const objs = drawProtest(this);
+        view.container.add(objs);
+      }
       // 心情很差的店：頭上一朵烏雲
       if (lot.shop.satisfaction < 25) {
         const cloud = drawEmote(this, 'sad').setPosition(x0 + LOT_W - 30, GROUND_Y - buildingHeight(lot.shop.level) - 10).setDepth(40);
@@ -441,6 +513,10 @@ export class StreetScene extends Phaser.Scene {
     }
     const h = hourOf(s);
     const full = guests >= rooms;
+    if (s.closedToday.includes(i)) {
+      view.roomTag?.setText('靜坐抗議・暫停營業').setBackgroundColor('#8a3b3b');
+      return;
+    }
     view.roomTag?.setText(h < 17 ? `${rooms} 間房・可訂房` : full ? '今晚客滿' : `空房 ${rooms - guests} 間`)
       .setBackgroundColor(h >= 17 && full ? '#b3262e' : '#6b8f6b');
   }
@@ -456,13 +532,15 @@ export class StreetScene extends Phaser.Scene {
         return;
       }
       const def = SHOP_BY_ID[lot.shop.defId];
-      const open = isOpen(def, hour);
+      const closed = s.closedToday.includes(i);
+      const open = def.category === 'stay' ? !closed && isOpen(def, hour) : shopOpen(s, i, hour);
       if (open !== view.wasOpen) {
         view.wasOpen = open;
-        view.shutter.setVisible(!open);
+        // 被靜坐的店：不拉鐵門，讓抗議的人和布條露出來
+        view.shutter.setVisible(!open && !closed);
         view.shopLight.setVisible(open);
         const label = view.shutter.list[1] as Phaser.GameObjects.Text | undefined;
-        label?.setText(hour < def.hours[0] ? `${def.hours[0]}:00 開店` : '今日打烊');
+        label?.setText(closed ? '抗議靜坐・暫停營業' : hour < def.hours[0] ? `${def.hours[0]}:00 開店` : '今日打烊');
       }
     });
   }
@@ -542,7 +620,7 @@ export class StreetScene extends Phaser.Scene {
       this.checkStories();
       if (!store.storyRunning) {
         s.minute = Math.min(dayEndMin(s), s.minute + dm);
-        if (s.minute < LAST_SPAWN_MIN) {
+        if (s.minute < lastSpawnMin(s)) {
           this.spawnAcc += tickTraffic(s, dm);
           while (this.spawnAcc >= 1) {
             this.spawnAcc -= 1;
@@ -559,6 +637,7 @@ export class StreetScene extends Phaser.Scene {
     this.updateActivities(dt, active, dm);
     this.updateBus(dt, active);
     this.updateQueue(dt);
+    if (hasSpring(s)) this.updateOnsen(dt, active);
     if (active) this.updateAmbient(dt);
 
     if (active) this.updateStay(dt);
@@ -675,7 +754,7 @@ export class StreetScene extends Phaser.Scene {
       this.tweens.add({ targets: sprite, y: baseY, alpha: 1, duration: 300 });
     }
     const ped: Ped = {
-      sprite, umbrella, variant, dir, speed: 70 + Math.random() * 40,
+      sprite, umbrella, variant, dir, speed: (festivalActive(s) && hourOf(s) >= 17 ? 52 : 70) + Math.random() * 40,
       favorite: CATS[Math.floor(Math.random() * CATS.length)],
       visits: 0, doorsLeft: span + (fromBus ? 1 : 0), state: 'walk', lot: -1, leaveAt: 0, animT: 0, baseY,
       origin,
@@ -683,6 +762,7 @@ export class StreetScene extends Phaser.Scene {
       vanishIn: vanish ? 600 + Math.random() * 3000 : -1,
     };
     this.peds.push(ped);
+    if (festivalActive(s)) this.dressForFestival(ped);
     // 沒有翻譯時，外國旅客偶爾會一臉困惑
     if (origin !== 'local' && moduleEff(s, 'multilingual') === 0 && Math.random() < 0.08) {
       this.time.delayedCall(800, () => sprite.active && this.floatText(sprite.x, sprite.y - 70, origin === 'jp' ? 'えっと…？' : '어…?', '#ffffff', 14));
@@ -701,8 +781,8 @@ export class StreetScene extends Phaser.Scene {
         p.sprite.x = nx;
         p.animT += dt * mult;
         const fr = Math.floor(p.animT / 180) % 2;
-        p.sprite.setTexture(`ped${p.variant}_${fr}`);
-        p.sprite.y = p.baseY - fr;
+        if (!p.yokai?.revealed) p.sprite.setTexture(`ped${p.variant}_${fr}`);
+        p.sprite.y = p.baseY - fr - (p.floatY ?? 0);
         if (p.state === 'walk' && mult > 0) {
           if (p.vanishIn > 0 && (p.vanishIn -= dt * mult) <= 0) {
             p.vanishIn = -1;
@@ -716,12 +796,14 @@ export class StreetScene extends Phaser.Scene {
           }
         }
         if (mult > 0 && p.state === 'walk' && !p.sightDone && this.maybeSightsee(p)) continue;
+        if (mult > 0 && p.state === 'walk' && !p.hikeDone && this.maybeHike(p)) continue;
+        if (mult > 0 && p.state === 'walk' && !p.fireDone && this.maybeFireSight(p)) continue;
         if (mult > 0 && p.state === 'walk' && p.doorsLeft > 0 && p.visits < 2) {
           for (let i = 0; i < s.lots.length; i++) {
             const dx = this.L.doorX(i);
             if ((prevX - dx) * (nx - dx) <= 0 && prevX !== nx) {
               p.doorsLeft -= 1;
-              if (Math.random() < enterChance(s, i, p.favorite, p.origin)) this.enterShop(p, i);
+              if (Math.random() < enterChance(s, i, p.favorite, p.origin, p.yokai?.kind)) this.enterShop(p, i);
               break;
             }
           }
@@ -732,7 +814,7 @@ export class StreetScene extends Phaser.Scene {
         }
         if (p.state === 'walk' && (p.doorsLeft <= 0 || p.visits >= 2) && Math.random() < 0.01) this.fadeOutPed(p);
         // 深夜十一點後，一般遊客陸續下山，街上只剩住在九份的夜貓子
-        else if (p.state === 'walk' && !p.suitcase && hourOf(s) >= 23 && Math.random() < 0.03) this.fadeOutPed(p);
+        else if (p.state === 'walk' && !p.suitcase && hourOf(s) >= 23 && !festivalActive(s) && Math.random() < 0.03) this.fadeOutPed(p);
       } else if (p.state === 'inside' && s.minute >= p.leaveAt) {
         this.leaveShop(p);
       } else if (p.state === 'sightsee') {
@@ -740,6 +822,8 @@ export class StreetScene extends Phaser.Scene {
       }
       if (p.umbrella) p.umbrella.setPosition(p.sprite.x + p.dir * 4, p.sprite.y - 56).setAlpha(p.sprite.alpha);
       if (p.suitcase) p.suitcase.setPosition(p.sprite.x - p.dir * 16, p.sprite.y).setAlpha(p.sprite.alpha).setVisible(p.state !== 'inside');
+      if (p.yokai && !p.yokai.revealed && mult > 0) this.updateTell(p, dt * mult);
+      if (p.extras) this.syncExtras(p);
     }
   }
 
@@ -763,8 +847,16 @@ export class StreetScene extends Phaser.Scene {
   private leaveShop(p: Ped) {
     const s = S();
     const i = p.lot;
-    const r = completeVisit(s, i, 0.8 + Math.random() * 0.4, p.origin);
+    const def = SHOP_BY_ID[s.lots[i]?.shop?.defId ?? ''];
+    let spend = 0.8 + Math.random() * 0.4;
+    if (p.hungry && def?.category === 'food') {
+      spend *= HIKER_SPEND;
+      p.hungry = false;
+    }
+    const yk = p.yokai ? { kind: p.yokai.kind, leaves: p.yokai.leaves && !p.yokai.revealed } : undefined;
+    const r = completeVisit(s, i, spend, p.origin, yk);
     if (r.income > 0) this.floatText(this.L.doorX(i), GROUND_Y - 112, `+$${r.income}`, hex(C.gold), 17);
+    if (def) this.afterOnsenVisit(p, def.id, i);
     if (p.origin !== 'local' && Math.random() < 0.35) {
       const words = p.origin === 'jp' ? ['おいしい！', 'すごい！', 'かわいい！', '最高！'] : ['맛있어요!', '대박!', '예뻐요!', '최고!'];
       this.floatText(this.L.doorX(i) + 30, GROUND_Y - 80, Phaser.Utils.Array.GetRandom(words), p.origin === 'jp' ? '#ffd6e0' : '#d6e8ff', 15);
@@ -772,7 +864,7 @@ export class StreetScene extends Phaser.Scene {
     if (r.coupon && Math.random() < 0.4) this.floatText(this.L.doorX(i) - 40, GROUND_Y - 80, '用了消費券', '#f2c14e', 13);
     p.state = 'walk';
     p.lot = -1;
-    p.sprite.setPosition(this.L.doorX(i) + p.dir * 2, p.baseY).setAlpha(0);
+    p.sprite.setPosition(this.L.doorX(i) + p.dir * 2, p.baseY - (p.floatY ?? 0)).setAlpha(0);
     this.tweens.add({ targets: p.sprite, alpha: 1, duration: 260 });
   }
 
@@ -823,6 +915,7 @@ export class StreetScene extends Phaser.Scene {
   private releaseSight(sg: Sight) {
     if (sg.kind === 'telescope') this.telescopeBusy = false;
     if (sg.kind === 'bench' && sg.seat >= 0) this.benchSeats[sg.seat] = false;
+    if (sg.kind === 'fireSit' && sg.seat >= 0) this.fireSeats[sg.seat] = false;
   }
 
   private updateSight(p: Ped, dt: number, mult: number) {
@@ -859,7 +952,7 @@ export class StreetScene extends Phaser.Scene {
       }
       if (sg.t <= 0) {
         sg.phase = 'back';
-        if (sg.kind === 'bench') p.sprite.setCrop().setY(p.sprite.y);
+        if (sg.kind === 'bench' || sg.kind === 'fireSit') p.sprite.setCrop().setY(p.sprite.y);
         this.releaseSight(sg);
       }
     } else if (moveTo(p.sprite.x + p.dir * 30, p.baseY)) {
@@ -897,6 +990,7 @@ export class StreetScene extends Phaser.Scene {
   private sightStart(p: Ped, sg: Sight) {
     const s = S();
     const color = p.origin === 'jp' ? '#ffd6e0' : p.origin === 'kr' ? '#d6e8ff' : '#ffffff';
+    if (sg.kind.startsWith('fire')) return this.fireSightStart(p, sg);
     switch (sg.kind) {
       case 'view':
         this.sightSay(p, this.sightLine(p, this.viewLines()), color);
@@ -921,6 +1015,7 @@ export class StreetScene extends Phaser.Scene {
 
   private sightMid(p: Ped, sg: Sight) {
     const s = S();
+    if (sg.kind.startsWith('fire')) return this.fireSightMid(p, sg);
     const foggy = s.weather === 'fog' || s.weather === 'heavyFog';
     const h = hourOf(s);
     if (sg.kind === 'selfie') {
@@ -956,6 +1051,8 @@ export class StreetScene extends Phaser.Scene {
     p.sprite.destroy();
     p.umbrella?.destroy();
     p.suitcase?.destroy();
+    for (const e of p.extras ?? []) e.img.destroy();
+    if (this.exposePrompt?.getData('ped') === p) this.closeExposePrompt();
     this.peds.splice(k, 1);
   }
 
@@ -1379,6 +1476,54 @@ export class StreetScene extends Phaser.Scene {
     // 網紅
     const inf = s.activities.find((a) => a.id === 'influencer');
     if (inf?.variant) this.spawnWanderer('influencer', 'influencer', inf.variant);
+    // 關子嶺：祭典燈籠、抗議布條
+    this.festGlow.removeAll(true);
+    if (hasSpring(s)) {
+      if (festivalActive(s) || (s.festival && s.festival.day === s.day + 1 && hourOf(s) >= 18)) this.drawFestivalLanterns();
+      const stage = protestStage(s.grievance);
+      if (stage >= 2) this.drawProtestBanners(stage);
+    }
+  }
+
+  /** 妖怪祭：橫跨街道的燈籠串 */
+  private drawFestivalLanterns() {
+    const y = GROUND_Y - 290;
+    const line = this.add.graphics();
+    line.lineStyle(2, 0x2a1d17, 0.8);
+    this.activityLayer.add(line);
+    for (let x = this.L.startX; x < this.L.endX; x += 240) {
+      line.beginPath();
+      line.moveTo(x, y);
+      for (let k = 0; k <= 12; k++) line.lineTo(x + k * 20, y + Math.sin((k / 12) * Math.PI) * 24);
+      line.strokePath();
+      for (let k = 2; k <= 10; k += 4) {
+        const lx = x + k * 20, ly = y + Math.sin((k / 12) * Math.PI) * 24 + 18;
+        this.activityLayer.add(this.add.image(lx, ly, 'lantern').setScale(0.75).setTint(k === 6 ? 0xffffff : 0xffd0e8));
+        this.festGlow.add(this.add.image(lx, ly + 2, 'glow').setScale(2).setAlpha(0.7).setBlendMode(Phaser.BlendModes.ADD));
+      }
+    }
+  }
+
+  /** 抗議布條：「還我溫泉」 */
+  private drawProtestBanners(stage: number) {
+    const texts = ['還我溫泉', '不要再挖了', '山會生氣', '泉脈就是龍脈'];
+    const n = stage >= 3 ? 4 : 2;
+    const span = (this.L.endX - this.L.startX) / (n + 1);
+    for (let k = 0; k < n; k++) {
+      const x = this.L.startX + span * (k + 1);
+      const g = this.add.graphics();
+      g.fillStyle(0x6b4a30);
+      g.fillRect(x - 92, GROUND_Y - 250, 4, 250);
+      g.fillRect(x + 88, GROUND_Y - 250, 4, 250);
+      g.fillStyle(0xf6f3ea);
+      g.fillRect(x - 88, GROUND_Y - 244, 176, 40);
+      g.lineStyle(1, 0xc8c0b0);
+      g.strokeRect(x - 88, GROUND_Y - 244, 176, 40);
+      this.activityLayer.add(g);
+      this.activityLayer.add(this.add.text(x, GROUND_Y - 224, texts[k % texts.length], {
+        fontFamily: FONT, fontSize: '22px', fontStyle: '900', color: k % 2 ? '#222222' : '#c8261e',
+      }).setOrigin(0.5));
+    }
   }
 
   private wanderers = new Map<string, { a: Actor; target: number; pause: number; extra?: Phaser.GameObjects.GameObject[] }>();
@@ -1403,7 +1548,8 @@ export class StreetScene extends Phaser.Scene {
   private updateActivities(dt: number, running: boolean, dm: number) {
     const s = S();
     const cartOn = s.flags.includes('nightCart') && hourOf(s) >= 21;
-    const sig = `${s.activities.map((a) => a.id + a.variant).join(',')}|${isActive(s, 'ritual')}|${cartOn}|${s.mascot}|${s.flags.includes('streetCat')}|${s.lots.map((l) => (l.shop ? 1 : 0)).join('')}`;
+    const fest = hasSpring(s) ? `${festivalActive(s)}${s.festival?.day === s.day + 1 && hourOf(s) >= 18}${protestStage(s.grievance) >= 2 ? protestStage(s.grievance) : 0}` : '';
+    const sig = `${s.activities.map((a) => a.id + a.variant).join(',')}|${isActive(s, 'ritual')}|${cartOn}|${s.mascot}|${s.flags.includes('streetCat')}|${s.lots.map((l) => (l.shop ? 1 : 0)).join('')}|${fest}`;
     if (sig !== this.activitySig) {
       this.activitySig = sig;
       for (const w of this.wanderers.values()) {
@@ -1683,16 +1829,16 @@ export class StreetScene extends Phaser.Scene {
       onComplete: () => {
         if (!sp.active) return finish();
         if (s.forecast.kami && Math.random() < 0.35) say('……是誰在叫我？', '#d6b8ff');
-        else if (kind === 'sleep') say(Phaser.Utils.Array.GetRandom(['芋圓……再一碗……', '媽……我不想上班……', '（夢遊中）']), '#9ec3e6');
+        else if (kind === 'sleep') say(Phaser.Utils.Array.GetRandom(hasSpring(s) ? ['泥湯……再泡一次……', '甕缸雞……一整隻……', '（夢遊中）'] : ['芋圓……再一碗……', '媽……我不想上班……', '（夢遊中）']), '#9ec3e6');
         else if (kind === 'photo') {
           playFx(this, 'flash', sp.x, ACTOR_Y - 40);
-          say(foggy ? '霧裡的燈籠好夢幻！' : '九份夜景拍起來！');
+          say(foggy ? '霧裡的燈籠好夢幻！' : hasSpring(s) ? '水火同源的夜晚好神秘！' : '九份夜景拍起來！');
         } else if (kind === 'snack') {
           if (this.cartX >= 0) {
             say('老闆，一碗魚丸湯！');
             this.time.delayedCall(700, () => sp.active && this.floatText(sp.x, ACTOR_Y - 125, '+$60', hex(C.gold), 15));
           } else say(Phaser.Utils.Array.GetRandom(['有沒有宵夜……', '肚子好餓……都關門了', 'コンビニどこ…？']));
-        } else say(foggy ? '霧好濃……但好有氣氛' : Phaser.Utils.Array.GetRandom(['好多星星！', '海上有漁火耶', '睡不著，出來走走']));
+        } else say(foggy ? '霧好濃……但好有氣氛' : Phaser.Utils.Array.GetRandom(hasSpring(s) ? ['山上的星星好多！', '泡完湯睡不著，出來走走', '好安靜……只聽得到蟲叫'] : ['好多星星！', '海上有漁火耶', '睡不著，出來走走']));
         this.time.delayedCall(1900, () => {
           if (!sp.active) return finish();
           sp.setFlipX(!sp.flipX);
@@ -1865,6 +2011,504 @@ export class StreetScene extends Phaser.Scene {
     }
   }
 
+  // =================================================================== 關子嶺：水火同源、露頭、好漢坡、妖怪祭
+
+  /** 水火同源的火苗（每格重畫，大小跟著火勢） */
+  private setupFlame() {
+    const g = this.add.graphics().setDepth(12);
+    const glow = this.add.graphics().setDepth(61).setBlendMode(Phaser.BlendModes.ADD);
+    this.flame = { g, glow, t: 0 };
+  }
+
+  private drawFlame(dt: number) {
+    const f = this.flame;
+    const box = this.landmarkBox.get('fire');
+    if (!f || !box) return;
+    const s = S();
+    f.t += dt;
+    const x = box.x + FIRE.flameX, y = GROUND_Y + FIRE.flameY;
+    const lvl = s.fireLevel;
+    const h = (34 + 30 * lvl) * (0.9 + 0.12 * Math.sin(f.t / 90) + 0.06 * Math.sin(f.t / 37));
+    const w = 14 + 10 * lvl;
+    const sway = Math.sin(f.t / 140) * 4 * lvl;
+    f.g.clear();
+    const layers: [number, number, number][] = [[0xd8392f, 1, 0.9], [0xf28a2a, 0.75, 0.95], [0xffd34a, 0.48, 1], [0xfff6c0, 0.22, 1]];
+    for (const [col, k, a] of layers) {
+      f.g.fillStyle(col, a);
+      f.g.fillTriangle(x - w * k, y, x + w * k, y, x + sway * k, y - h * k);
+      f.g.fillEllipse(x, y - 3, w * 2 * k, 10 * k);
+    }
+    // 火星
+    if (Math.random() < 0.08 * lvl) {
+      const sp = this.add.circle(x + Phaser.Math.Between(-w, w), y - h * 0.6, 2, 0xffd34a).setDepth(12);
+      this.tweens.add({ targets: sp, y: sp.y - Phaser.Math.Between(30, 70), x: sp.x + Phaser.Math.Between(-20, 20), alpha: 0, duration: 900, onComplete: () => sp.destroy() });
+    }
+    const n = nightness(hourOf(s));
+    f.glow.clear();
+    f.glow.fillStyle(0xff9a40, (0.12 + 0.3 * n) * Math.min(1.4, lvl));
+    f.glow.fillCircle(x, y - h * 0.4, 50 + 40 * lvl);
+    f.glow.fillStyle(0xffd070, 0.2 + 0.3 * n);
+    f.glow.fillCircle(x, y - h * 0.4, 20 + 14 * lvl);
+  }
+
+  /** 露頭冒煙：泉量越多煙越濃 */
+  private updateSteam(dt: number) {
+    const box = this.landmarkBox.get('spring');
+    if (!box) return;
+    this.steamTimer -= dt;
+    if (this.steamTimer > 0) return;
+    const s = S();
+    const supply = springSupply(s);
+    this.steamTimer = 1400 - Math.min(1000, supply * 50);
+    const r = springRatio(s);
+    const x = box.x + SPRING.steamX + Phaser.Math.Between(-16, 16), y = GROUND_Y + SPRING.steamY;
+    const size = 8 + Math.min(16, supply);
+    const puff = this.add.circle(x, y, size, 0xffffff, 0.35 + 0.2 * r).setDepth(12);
+    this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(70, 120), x: x + Phaser.Math.Between(-30, 30), scale: 2.2, alpha: 0, duration: 2200, onComplete: () => puff.destroy() });
+  }
+
+  /** 露頭旁的鑽井架（一口井一座） */
+  private drawWells() {
+    const s = S();
+    const sig = `${s.wells}`;
+    if (sig === this.wellSig) return;
+    this.wellSig = sig;
+    this.wellLayer.removeAll(true);
+    const box = this.landmarkBox.get('spring');
+    if (!box) return;
+    for (let k = 0; k < s.wells; k++) {
+      // 露頭左邊留了一塊碎石地給鑽井架
+      const x = box.x + 14 + k * 16;
+      const g = this.add.graphics();
+      g.lineStyle(3, 0x6b4a30);
+      g.lineBetween(x - 12, GROUND_Y, x, GROUND_Y - 62);
+      g.lineBetween(x + 12, GROUND_Y, x, GROUND_Y - 62);
+      g.lineBetween(x - 8, GROUND_Y - 22, x + 8, GROUND_Y - 22);
+      g.lineBetween(x - 5, GROUND_Y - 42, x + 5, GROUND_Y - 42);
+      g.fillStyle(0x7a7a82);
+      g.fillRect(x - 3, GROUND_Y - 14, 6, 14);
+      g.fillStyle(0x5a5a62);
+      g.fillCircle(x, GROUND_Y - 64, 4);
+      g.fillStyle(0xd64545);
+      g.fillTriangle(x, GROUND_Y - 70, x + 12, GROUND_Y - 66, x, GROUND_Y - 62);
+      this.wellLayer.add(g);
+    }
+  }
+
+  private updateOnsen(dt: number, running: boolean) {
+    const s = S();
+    this.refreshFireLandmark();
+    this.drawFlame(dt * Math.max(1, store.speed));
+    this.drawWells();
+    if (running) this.updateSteam(dt * store.speed);
+    if (this.exposeCooldown > 0) this.exposeCooldown -= dt;
+    if (!running) return;
+    const h = hourOf(s);
+    // 晨鐘暮鼓
+    if (!this.bells.morning && h >= 8) {
+      this.bells.morning = true;
+      this.bell('噹——　噹——　（碧雲寺的晨鐘）', '#fff3c8');
+    }
+    if (!this.bells.evening && h >= 18) {
+      this.bells.evening = true;
+      this.bell(festivalActive(s) ? '咚——　咚——　百鬼夜行，開始！' : '咚——　咚——　（暮鼓）', festivalActive(s) ? '#ffb0e0' : '#e8d8ff');
+    }
+    // 百鬼夜行：18 點、21 點各走一趟
+    if (festivalActive(s) && ((this.parades === 0 && h >= 18.1) || (this.parades === 1 && h >= 21))) {
+      this.parades += 1;
+      this.startYokaiParade();
+    }
+    // 祭典夜：路人可以點
+    if (festivalNight(s)) {
+      for (const p of this.peds) {
+        if (p.tappable || p.state === 'inside') continue;
+        p.tappable = true;
+        p.sprite.setInteractive({ useHandCursor: true }).on('pointerup', () => this.onPedTap(p));
+      }
+    }
+  }
+
+  private bell(text: string, color: string) {
+    const t = this.add.text(W / 2, 128, text, {
+      fontFamily: FONT, fontSize: '22px', fontStyle: '900', color, stroke: '#2a2433', strokeThickness: 5,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(85).setAlpha(0);
+    this.tweens.add({ targets: t, alpha: 1, duration: 500, yoyo: true, hold: 1800, onComplete: () => t.destroy() });
+  }
+
+  // ---------- 路人身上的配件 ----------
+
+  private attach(p: Ped, key: string, dx: number, dy: number, depthOff = 0.0002): Phaser.GameObjects.Image | null {
+    if (!this.textures.exists(key)) return null;
+    const img = this.add.image(p.sprite.x, p.sprite.y + dy, key).setDepth(p.sprite.depth + depthOff);
+    (p.extras ??= []).push({ img, dx, dy, key });
+    this.syncExtras(p);
+    return img;
+  }
+
+  private detach(p: Ped, key: string) {
+    if (!p.extras) return;
+    for (const e of p.extras.filter((x) => x.key === key)) e.img.destroy();
+    p.extras = p.extras.filter((x) => x.key !== key);
+  }
+
+  private syncExtras(p: Ped) {
+    const sign = p.sprite.flipX ? -1 : 1;
+    const visible = p.state !== 'inside' && p.state !== 'entering' && p.sprite.visible;
+    const footY = p.sprite.y;
+    for (const e of p.extras!) {
+      const isShadow = e.key === 'shadow';
+      e.img.setPosition(p.sprite.x + e.dx * sign, (isShadow ? p.baseY : footY) + e.dy)
+        .setFlipX(sign < 0).setVisible(visible && e.img.getData('hidden') !== true)
+        .setAlpha(isShadow ? 0.35 * p.sprite.alpha : p.sprite.alpha)
+        .setDepth(isShadow ? p.sprite.depth - 0.0005 : p.sprite.depth + 0.0002);
+    }
+  }
+
+  /** 妖怪祭：一部分遊客換上妖怪造型，晚上混進真的妖怪 */
+  private dressForFestival(p: Ped) {
+    const s = S();
+    const h = hourOf(s);
+    if (h >= 17) this.attach(p, 'shadow', 0, 0);
+    if (h >= 19 && Math.random() < yokaiChance(s)) {
+      p.yokai = { kind: rollYokai(Math.random), leaves: paysLeaves(s, Math.random), revealed: false, tellT: 1500 + Math.random() * 3000, tellOn: 0 };
+    }
+    if (h < 17 || (!p.yokai && Math.random() > 0.6)) return;
+    // 造型：真妖怪也穿得跟人類 cosplay 一樣
+    const look = Phaser.Utils.Array.GetRandom(['horns', 'oni', 'fox', 'ears', 'lantern', 'tail'] as const);
+    if (look === 'horns') this.attach(p, 'cos-horns', 0, -56);
+    else if (look === 'oni') this.attach(p, 'cos-oni', 3, -47);
+    else if (look === 'fox') this.attach(p, 'cos-fox', 3, -47);
+    else if (look === 'ears') this.attach(p, 'cos-ears', 0, -56);
+    else if (look === 'tail') this.attach(p, 'cos-tail', -13, -19);
+    if (look === 'lantern' || Math.random() < 0.3) this.attach(p, 'cos-lantern', 12, -26);
+  }
+
+  /** 真妖怪的破綻：每 4～6 秒露出來 1.2 秒 */
+  private updateTell(p: Ped, dt: number) {
+    const y = p.yokai!;
+    if (y.tellOn > 0) {
+      y.tellOn -= dt;
+      if (y.tellOn <= 0) {
+        this.endTell(p);
+        y.tellT = 4000 + Math.random() * 2000;
+      }
+      return;
+    }
+    y.tellT -= dt;
+    if (y.tellT > 0 || p.state === 'inside' || p.state === 'entering') return;
+    y.tellOn = 1200;
+    switch (y.kind) {
+      case 'kappa': {
+        this.attach(p, 'tell-plate', 0, -58);
+        for (let k = 0; k < 2; k++) {
+          this.time.delayedCall(k * 400, () => {
+            if (!p.sprite.active) return;
+            const d = this.add.image(p.sprite.x + Phaser.Math.Between(-6, 6), p.sprite.y - 56, this.textures.exists('tell-drop') ? 'tell-drop' : 'glow').setDepth(p.sprite.depth + 0.001).setScale(this.textures.exists('tell-drop') ? 1 : 0.2);
+            this.tweens.add({ targets: d, y: p.baseY, alpha: 0.2, duration: 500, onComplete: () => d.destroy() });
+          });
+        }
+        break;
+      }
+      case 'tanuki': {
+        const tail = this.attach(p, 'tell-tail', -14, -17);
+        if (tail) this.tweens.add({ targets: tail, angle: { from: -15, to: 15 }, yoyo: true, repeat: 2, duration: 180 });
+        break;
+      }
+      case 'kitsune':
+        for (const e of p.extras ?? []) if (e.key === 'shadow') e.img.setData('hidden', true);
+        break;
+      case 'yukionna':
+        p.floatY = 8;
+        for (let k = 0; k < 3; k++) {
+          const fx = this.add.image(p.sprite.x + Phaser.Math.Between(-12, 12), p.baseY - 2, this.textures.exists('tell-frost') ? 'tell-frost' : 'glow').setDepth(p.sprite.depth - 0.001).setAlpha(0.9);
+          this.tweens.add({ targets: fx, alpha: 0, delay: 600 + k * 200, duration: 900, onComplete: () => fx.destroy() });
+        }
+        break;
+    }
+  }
+
+  private endTell(p: Ped) {
+    this.detach(p, 'tell-plate');
+    this.detach(p, 'tell-tail');
+    for (const e of p.extras ?? []) if (e.key === 'shadow') e.img.setData('hidden', false);
+    p.floatY = 0;
+  }
+
+  // ---------- 識破 ----------
+
+  private onPedTap(p: Ped) {
+    const s = S();
+    if (this.drag.moved || store.storyRunning || store.waitingNextDay || !festivalNight(s)) return;
+    if (p.state !== 'walk' || p.yokai?.revealed) return;
+    if (this.exposeCooldown > 0) {
+      bus.emit(Ev.Toast, '剛剛才認錯人……先冷靜一下。');
+      return;
+    }
+    this.closeExposePrompt();
+    p.state = 'suspect';
+    const c = this.add.container(p.sprite.x, p.sprite.y - 100).setDepth(90);
+    c.setData('ped', p);
+    const q = this.add.text(0, -34, '這位是……妖怪嗎？', { fontFamily: FONT, fontSize: '15px', fontStyle: '900', color: '#ffffff', stroke: '#2a2433', strokeThickness: 4 }).setOrigin(0.5);
+    const mk = (x: number, label: string, bg: string, fn: () => void) => {
+      const b = this.add.text(x, 0, label, { fontFamily: FONT, fontSize: '17px', fontStyle: '900', color: '#ffffff', backgroundColor: bg, padding: { x: 10, y: 5 } })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true });
+      b.on('pointerup', () => fn());
+      return b;
+    };
+    c.add([q, mk(-50, '識破！', '#b3262e', () => this.doExpose(p)), mk(50, '算了', '#5a5266', () => this.closeExposePrompt())]);
+    this.exposePrompt = c;
+    this.time.delayedCall(3500, () => { if (this.exposePrompt === c) this.closeExposePrompt(); });
+  }
+
+  private closeExposePrompt() {
+    const c = this.exposePrompt;
+    if (!c) return;
+    const p = c.getData('ped') as Ped | undefined;
+    if (p && p.state === 'suspect') p.state = 'walk';
+    this.exposePrompt = undefined;
+    c.destroy();
+  }
+
+  private doExpose(p: Ped) {
+    const s = S();
+    this.exposePrompt?.setData('ped', null);
+    this.closeExposePrompt();
+    if (!p.sprite.active) return;
+    if (!p.yokai) {
+      wrongExpose(s);
+      this.exposeCooldown = 3000;
+      this.floatText(p.sprite.x, p.sprite.y - 80, Phaser.Utils.Array.GetRandom(['我是人啦！', '這是化妝好嗎！', '很沒禮貌耶！']), '#ff9a8a', 17);
+      this.floatText(p.sprite.x, p.sprite.y - 110, '聲望 -1', '#ff9a8a', 14);
+      p.state = 'walk';
+      p.speed *= 1.6;
+      this.fadeOutPed(p);
+      return;
+    }
+    // 現形
+    const y = p.yokai;
+    y.revealed = true;
+    this.endTell(p);
+    for (const e of p.extras ?? []) if (e.key !== 'shadow') e.img.destroy();
+    p.extras = p.extras?.filter((e) => e.key === 'shadow');
+    playFx(this, 'smoke', p.sprite.x, p.baseY - 20, 91);
+    const key = ensureCharTexture(this, y.kind, NPCS[y.kind].look);
+    p.sprite.setTexture(`${key}_0`).setScale(0.8);
+    const reward = exposeYokai(s, Math.random);
+    this.floatText(p.sprite.x, p.sprite.y - 96, `是${YOKAI[y.kind].name}！`, '#ffe08a', 18);
+    const bubble = drawBubble(this, YOKAI[y.kind].name, YOKAI[y.kind].sorry, 260).setDepth(88).setPosition(p.sprite.x, p.sprite.y - 120);
+    this.time.delayedCall(2600, () => bubble.destroy());
+    this.time.delayedCall(900, () => {
+      if (!p.sprite.active) return;
+      this.floatText(p.sprite.x, p.sprite.y - 80, reward.money ? `謝禮 +$${reward.money}` : '聲望 +1', hex(C.gold), 16);
+      if (reward.favor) this.floatText(p.sprite.x, p.sprite.y - 60, '妖怪好感 +1', '#c8f0c0', 14);
+    });
+    this.time.delayedCall(2800, () => {
+      if (!p.sprite.active) return;
+      p.state = 'walk';
+      this.fadeOutPed(p);
+    });
+  }
+
+  // ---------- 好漢坡 ----------
+
+  private maybeHike(p: Ped): boolean {
+    const box = this.landmarkBox.get('haohan');
+    if (!box) return false;
+    const foot = box.x + HAOHAN.footX;
+    if (Math.abs(p.sprite.x - foot) > 30) return false;
+    p.hikeDone = true;
+    const s = S();
+    if (p.suitcase || festivalNight(s) || Math.random() >= hikeChance(s, p.yukata)) return false;
+    s.today.hikers += 1;
+    p.state = 'hike';
+    const top = { x: box.x + HAOHAN.topX, y: GROUND_Y + HAOHAN.topY };
+    const tired = p.variant % 4 === 3;
+    p.sprite.setFlipX(top.x < p.sprite.x);
+    let frame = 0;
+    const anim = this.time.addEvent({
+      delay: 220, loop: true, callback: () => {
+        frame++;
+        if (p.sprite.active) p.sprite.setTexture(`ped${p.variant}_${frame % 2}`);
+      },
+    });
+    const midX = (foot + top.x) / 2, midY = (GROUND_Y + top.y) / 2;
+    const climb = (x: number, y: number, ms: number) => new Promise<void>((res) =>
+      this.tweens.add({ targets: p.sprite, x, y, duration: ms / Math.max(1, store.speed), onComplete: () => res() }));
+    (async () => {
+      await climb(midX, midY, 2600);
+      if (!p.sprite.active) return anim.remove();
+      if (tired) {
+        this.floatText(p.sprite.x, p.sprite.y - 70, Phaser.Utils.Array.GetRandom(['累……休息一下', '這是好漢坡還是要命坡', '（喘）']), '#d8d2e6', 14);
+        await this.wait(1800 / Math.max(1, store.speed));
+      }
+      if (!p.sprite.active) return anim.remove();
+      await climb(top.x, top.y, 2600);
+      anim.remove();
+      if (!p.sprite.active) return;
+      this.tweens.add({ targets: p.sprite, alpha: 0, duration: 300 });
+      // 在嶺頂逛 30～60 分鐘（遊戲時間）
+      const back = (30 + Math.random() * 30) / MINUTES_PER_SEC * 1000 / Math.max(1, store.speed);
+      await this.wait(back);
+      if (!p.sprite.active) return;
+      p.sprite.setPosition(foot + p.dir * 20, p.baseY).setFlipX(p.dir === -1);
+      this.tweens.add({ targets: p.sprite, alpha: 1, duration: 300 });
+      p.state = 'walk';
+      p.hungry = true;
+      p.favorite = 'food';
+      p.doorsLeft = Math.max(p.doorsLeft, 3);
+      this.floatText(p.sprite.x, p.baseY - 70, Phaser.Utils.Array.GetRandom(['好餓……', '想吃甕缸雞！', '腳好酸，先吃東西']), '#ffd8a0', 15);
+    })();
+    return true;
+  }
+
+  // ---------- 水火同源 ----------
+
+  private maybeFireSight(p: Ped): boolean {
+    const box = this.landmarkBox.get('fire');
+    if (!box) return false;
+    const x = p.sprite.x;
+    if (x < box.x + FIRE.standMin || x > box.x + FIRE.standMax) return false;
+    p.fireDone = true;
+    const s = S();
+    const busy = this.peds.filter((q) => q.state === 'sightsee').length;
+    if (busy >= 8 || p.suitcase || Math.random() >= fireStopChance(s)) return false;
+    const opts: SightKind[] = ['fireView', 'fireView', 'fireSelfie'];
+    if (s.fireMode !== 'protect') opts.push('fireBuy', 'fireBuy', 'fireBuy');
+    const seat = this.fireSeats.findIndex((b) => !b);
+    if (seat >= 0) opts.push('fireSit');
+    const kind = Phaser.Utils.Array.GetRandom(opts) as SightKind;
+    let tx = Phaser.Math.Clamp(x + (Math.random() - 0.5) * 80, box.x + FIRE.standMin, box.x + FIRE.standMax);
+    // 保育模式有圍欄，不能太靠近火
+    if (s.fireMode === 'protect' && Math.abs(tx - (box.x + FIRE.flameX)) < 40) tx += tx < box.x + FIRE.flameX ? -40 : 40;
+    let ty = GROUND_Y + 6 + Math.random() * 10;
+    let seatIdx = -1;
+    if (kind === 'fireSit') {
+      seatIdx = seat;
+      this.fireSeats[seat] = true;
+      tx = box.x + FIRE.sitXs[seat];
+      ty = GROUND_Y + 1;
+    }
+    const dir: 1 | -1 = tx < box.x + FIRE.flameX ? 1 : -1;
+    const total = (kind === 'fireSit' ? 4600 : 2600 + Math.random() * 1400) * (hourOf(s) >= 18.5 ? 1.4 : 1);
+    p.state = 'sightsee';
+    p.sight = { kind, phase: 'go', tx, ty, t: total, total, mid: false, dir, seat: seatIdx };
+    return true;
+  }
+
+  private fireSightStart(p: Ped, sg: Sight) {
+    const s = S();
+    const fee = registerFireVisitor(s);
+    if (fee > 0) this.floatText(sg.tx, GROUND_Y - 80, `+$${fee}`, hex(C.gold), 14);
+    const night = hourOf(s) >= 18.5;
+    switch (sg.kind) {
+      case 'fireView':
+        this.sightSay(p, Phaser.Utils.Array.GetRandom(s.quake && s.fireLevel > 1.5
+          ? ['火變得好大！', '地震以後火更旺了耶', '好像火山喔！']
+          : night ? ['晚上的火好美……', '水上面在燒火耶', '火王爺保佑～'] : ['水裡怎麼會有火？！', '燒了三百年都不會熄？', '好神奇～']));
+        break;
+      case 'fireSelfie':
+        this.sightSay(p, Phaser.Utils.Array.GetRandom(['跟火合照！', '水火同源打卡！', '比個讚～']));
+        break;
+      case 'fireSit':
+        p.sprite.setTexture(`ped${p.variant}_0`).setCrop(0, 0, 30, 46);
+        this.sightSay(p, Phaser.Utils.Array.GetRandom(['坐下來烤一下手', '好溫暖～', '看火看到發呆']), '#ffd8a0');
+        break;
+      case 'fireBuy':
+        this.sightSay(p, s.fireMode === 'full'
+          ? Phaser.Utils.Array.GetRandom(['老闆！五花肉一盤！', '用天然氣烤的肉特別香！', '再來一串香腸！'])
+          : Phaser.Utils.Array.GetRandom(['爆米花一包！', '烤魷魚好香～', '用三百年的火烤的耶！']), '#ffe08a');
+        break;
+    }
+  }
+
+  private fireSightMid(p: Ped, sg: Sight) {
+    const s = S();
+    if (sg.kind === 'fireSelfie') {
+      playFx(this, 'flash', p.sprite.x + p.dir * 10, p.sprite.y - 50);
+    } else if (sg.kind === 'fireBuy' && s.fireMode === 'stall' && this.textures.exists('popcorn')) {
+      for (let k = 0; k < 6; k++) {
+        const pc = this.add.image(p.sprite.x, p.sprite.y - 40, 'popcorn').setDepth(p.sprite.depth + 0.001);
+        this.tweens.add({ targets: pc, x: pc.x + Phaser.Math.Between(-30, 30), y: pc.y - Phaser.Math.Between(20, 50), alpha: 0, duration: 700, delay: k * 60, onComplete: () => pc.destroy() });
+      }
+    } else if (sg.kind === 'fireBuy' && s.fireMode === 'full') {
+      playFx(this, 'smoke', p.sprite.x, p.sprite.y - 40, 45);
+    }
+  }
+
+  /** 逛完溫泉類的店：灰臉、穿浴衣、泡湯泡得臉紅紅 */
+  private afterOnsenVisit(p: Ped, defId: string, lot: number) {
+    if (defId === 'mudspa' && !p.extras?.some((e) => e.key === 'mudface')) {
+      this.attach(p, 'mudface', 2, -47);
+      this.floatText(this.L.doorX(lot), GROUND_Y - 80, '敷臉中～', '#d8d2d0', 14);
+    } else if (defId === 'yukata' && !p.yukata) {
+      p.yukata = true;
+      this.attach(p, 'yukata-robe', 0, -21, 0.0001)?.setScale(1, 1.23);
+      this.floatText(this.L.doorX(lot), GROUND_Y - 80, '換上浴衣了！', '#ffc8e0', 14);
+    } else if (defId === 'bathhouse' && Math.random() < 0.5) {
+      this.floatText(this.L.doorX(lot), GROUND_Y - 80, Phaser.Utils.Array.GetRandom(['♨ 好舒服～', '泥湯好滑！', '整個人都軟了']), '#ffd0c0', 14);
+    } else if (defId === 'claypot' && Math.random() < 0.3) {
+      this.floatText(this.L.doorX(lot), GROUND_Y - 80, '雞皮好脆！', '#ffe08a', 14);
+    }
+  }
+
+  /** 百鬼夜行：大型妖怪操偶＋扮妖怪的人 */
+  private startYokaiParade() {
+    const x0 = this.L.startX - 360;
+    const c = this.add.container(x0, ACTOR_Y).setDepth(47);
+    const flag = drawFlag(this, '百鬼夜行', 0x5a2a7a);
+    flag.setPosition(220, 0);
+    c.add(flag);
+    const people: Phaser.GameObjects.Image[] = [];
+    const puppets: Phaser.GameObjects.Image[] = [];
+    let px = 120;
+    for (const key of ['puppet-kappa', 'puppet-lantern', 'puppet-umbrella', 'puppet-fox']) {
+      if (this.textures.exists(key)) {
+        const img = this.add.image(px, 4, key).setOrigin(0.5, 1);
+        c.add(img);
+        puppets.push(img);
+      }
+      for (const dx of [-26, 26]) {
+        const v = Math.floor(Math.random() * PED_VARIANTS);
+        const img = this.add.image(px + dx, 0, `ped${v}_0`).setOrigin(0.5, 1);
+        c.add(img);
+        people.push(img);
+      }
+      px -= 130;
+    }
+    for (let k = 0; k < 6; k++) {
+      const v = Math.floor(Math.random() * PED_VARIANTS);
+      const img = this.add.image(px - k * 30, 0, `ped${v}_0`).setOrigin(0.5, 1);
+      c.add(img);
+      people.push(img);
+      if (this.textures.exists('cos-lantern')) {
+        const l = this.add.image(px - k * 30 + 12, -26, 'cos-lantern');
+        c.add(l);
+      }
+    }
+    let t = 0;
+    const ev = this.time.addEvent({
+      delay: 70, loop: true, callback: () => {
+        t += 1;
+        people.forEach((p, i) => p.setY(((t + i) % 2) * -2));
+        puppets.forEach((p, i) => p.setY(4 + Math.sin((t + i * 5) / 4) * 6).setAngle(Math.sin((t + i * 3) / 6) * 5));
+        if (t % 40 === 0) this.floatText(c.x + 60, ACTOR_Y - 160, Phaser.Utils.Array.GetRandom(['百鬼夜行～！', '咚咚鏘！', '妖怪來囉！']), '#ffb0e0', 16);
+      },
+    });
+    const entry = { c, ev };
+    this.paradeObjs.push(entry);
+    this.tweens.add({
+      targets: c, x: this.L.endX + 400, duration: ((this.L.endX + 400 - x0) / 50) * 1000,
+      onComplete: () => this.endParade(entry),
+    });
+  }
+
+  private endParade(e: { c: Phaser.GameObjects.Container; ev: Phaser.Time.TimerEvent }) {
+    e.ev.remove();
+    this.tweens.killTweensOf(e.c);
+    e.c.destroy();
+    this.paradeObjs = this.paradeObjs.filter((x) => x !== e);
+  }
+
   // =================================================================== 一天的開始與結束
 
   private closeDay() {
@@ -1898,6 +2542,11 @@ export class StreetScene extends Phaser.Scene {
     this.storyChecks = { morning: false, noon: false, evening: false, night: false };
     this.activitySig = '';
     this.processionTimer = 0;
+    this.bells = { morning: false, evening: false };
+    this.parades = 0;
+    for (const e of [...this.paradeObjs]) this.endParade(e);
+    this.closeExposePrompt();
+    this.fireSeats = FIRE.sitXs.map(() => false);
     this.redrawAllLots();
   }
 }

@@ -27,6 +27,8 @@ export const Ev = {
   StoryDone: 'story-done',
   /** 狀態變了，介面需要刷新 */
   Changed: 'changed',
+  /** 點了可以操作的地標（帶地標 id） */
+  Landmark: 'landmark',
 } as const;
 
 function readJSON<T>(key: string): T | null {

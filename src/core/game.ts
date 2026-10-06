@@ -6,10 +6,15 @@ import { TRAITS } from './traits';
 import { ACTIVITY_BY_ID, INFLUENCERS, type ActivityDef } from './activities';
 import type {
   GameState, StreetDef, TenantProfile, ShopInstance, DaySummary, DayStats, Effects, Mods, ActivityVariant,
-  Look, TraitId, Weather, Forecast, Origin, Guest, Review,
+  Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind,
 } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
+import {
+  hasSpring, springRatio, isSpringShop, protestStage, dailyGrievanceDelta, addGrievance, rollClosures, bathLot, BATH,
+  dailyFireUpdate, fireAccidentChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
+  resolveLeaves, applyQuake, dailyQuakeRecovery, springSupply, springDemand, sealWell,
+} from './onsen';
 
 export const DAY_START_MIN = 7 * 60;
 export const DAY_END_MIN = 23 * 60;
@@ -26,7 +31,7 @@ const WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '�
 const emptyStats = (): DayStats => ({
   passersby: 0, visitors: 0, revenue: 0, commission: 0, couponCost: 0, turnedAway: 0,
   stranded: 0, falls: 0, fallsTreated: 0, vanished: 0, found: 0, foreign: 0, overnight: 0,
-  sightseers: 0, telescope: 0,
+  sightseers: 0, telescope: 0, fireVisitors: 0, fireIncome: 0, hikers: 0, yokai: 0,
 });
 
 // ───────────── 觀景台：路過的人會停下來看風景 ─────────────
@@ -61,9 +66,25 @@ export function useTelescope(s: GameState): number {
   return TELESCOPE_FEE;
 }
 
-/** 這條街幾點打烊（遊戲內分鐘） */
+/** 這條街幾點打烊（遊戲內分鐘）；妖怪祭當天延長 */
 export function dayEndMin(s: GameState): number {
-  return (streetOf(s).closeHour ?? 23) * 60;
+  const street = streetOf(s);
+  const h = festivalActive(s) ? (street.festivalCloseHour ?? street.closeHour ?? 23) : (street.closeHour ?? 23);
+  return h * 60;
+}
+
+/** 幾點以後不再有新的路人上街 */
+export function lastSpawnMin(s: GameState): number {
+  return festivalActive(s) ? dayEndMin(s) - 30 : 22.5 * 60;
+}
+
+/** 店家現在有沒有開（妖怪祭當天大家一起開到半夜；被靜坐的店暫停營業） */
+export function shopOpen(s: GameState, lot: number, hour = hourOf(s)): boolean {
+  const shop = s.lots[lot]?.shop;
+  if (!shop || s.closedToday.includes(lot)) return false;
+  const def = SHOP_BY_ID[shop.defId];
+  if (isOpen(def, hour)) return true;
+  return festivalActive(s) && def.category !== 'stay' && hour >= def.hours[0] && hour * 60 < dayEndMin(s);
 }
 
 // =====================================================================
@@ -116,11 +137,20 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     history: [],
     gameOver: false,
     chapterComplete: false,
+    ...onsenDefaults(),
   };
   // 開局佈告欄先有幾位應徵者
   for (let k = 0; k < 3; k++) addApplicant(s, rand);
   s.forecast = rollForecast(street, 2, rand);
   return s;
+}
+
+/** 關子嶺欄位的預設值（其他老街也帶著，但不會用到） */
+function onsenDefaults(): Pick<GameState, 'wells' | 'wellsEver' | 'lastWellDay' | 'grievance' | 'closedToday' | 'fireMode' | 'fireLevel' | 'fireFullDays' | 'reinforced' | 'quake' | 'springBonus' | 'festival' | 'yokaiFavor'> {
+  return {
+    wells: 0, wellsEver: 0, lastWellDay: 0, grievance: 0, closedToday: [], fireMode: 'protect', fireLevel: 1,
+    fireFullDays: 0, reinforced: false, quake: null, springBonus: 0, festival: null, yokaiFavor: 0,
+  };
 }
 
 // =====================================================================
@@ -310,7 +340,7 @@ export function occupancyRate(s: GameState, lot: number): number {
 export function planCheckins(s: GameState, rand: () => number): Guest[] {
   const out: Guest[] = [];
   s.lots.forEach((_, i) => {
-    if (!isMinshuku(s, i)) return;
+    if (!isMinshuku(s, i) || s.closedToday.includes(i)) return;
     const rooms = roomsOf(s, i);
     const n = Math.min(rooms, Math.round(rooms * occupancyRate(s, i) * (0.85 + rand() * 0.3)));
     for (let k = 0; k < n; k++) out.push({ lot: i, origin: rollOrigin(s, rand) });
@@ -340,7 +370,10 @@ export function makeReviews(s: GameState, rand: () => number): Review[] {
     const noise = noisyNeighbors(s, g.lot).length;
     let x = 2.6 + (p?.skill ?? 3) * 0.25 + ((shop?.level ?? 1) - 1) * 0.4 + rand() * 1.2;
     if (s.weather === 'fog' || s.weather === 'heavyFog') x += 0.3;
-    x -= noise * 1.1;
+    // 祭典夜大家都很吵，但住客玩得很開心，不扣分
+    if (!festivalActive(s)) x -= noise * 1.1;
+    // 泉水不夠：溫泉變溫
+    if (isSpringShop(s, g.lot)) x -= 1.5 * (1 - springRatio(s));
     const stars = Math.max(1, Math.min(5, Math.round(x)));
     const t = REVIEW_TEXT[g.origin];
     const pool = noise && stars <= 3 ? t.noise : stars >= 4 ? t.good : t.mid;
@@ -360,7 +393,7 @@ export function avgStars(reviews: Review[]): number | null {
 export function buildFacility(s: GameState, lotIndex: number): Result {
   const lot = s.lots[lotIndex];
   if (!lot?.unlocked) return { ok: false, reason: '店面還沒整修' };
-  if (lot.shop || lot.facility) return { ok: false, reason: '這裡已經有店了' };
+  if (lot.shop || lot.facility || lot.bath) return { ok: false, reason: '這裡已經有店了' };
   if (facilityOf(s)) return { ok: false, reason: '一條街只能蓋一座服務中心' };
   if (s.money < FACILITY.buildCost) return { ok: false, reason: `資金不足（需要 $${FACILITY.buildCost.toLocaleString('en-US')}）` };
   s.money -= FACILITY.buildCost;
@@ -511,7 +544,7 @@ export function signTenant(s: GameState, lotIndex: number, tenantId: string, tie
   const p = profileOf(s, tenantId);
   if (!lot || !p) return { ok: false, reason: '無效的操作' };
   if (!lot.unlocked) return { ok: false, reason: '這個店面還沒整修' };
-  if (lot.shop || lot.facility) return { ok: false, reason: '這裡已經有租客了' };
+  if (lot.shop || lot.facility || lot.bath) return { ok: false, reason: '這裡已經有租客了' };
   if (tier > p.maxRentTier) return { ok: false, reason: p.lines.refuse, refused: true };
   lot.shop = {
     tenantId, defId: p.shopType, level: 1, rentTier: tier,
@@ -579,6 +612,11 @@ function removeTenant(s: GameState, id: string): void {
   if (i >= 0) s.lots[i].shop = null;
   if (!s.departed.includes(id)) s.departed.push(id);
   for (const k of Object.keys(s.relations)) if (k.split('|').includes(id)) delete s.relations[k];
+}
+
+/** 給其他模組用：調整滿意度（戲精加倍） */
+export function adjustSatOf(s: GameState, shop: ShopInstance, d: number): void {
+  adjustSat(s, shop, d);
 }
 
 function adjustSat(s: GameState, shop: ShopInstance, d: number): void {
@@ -696,6 +734,7 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
     if (v?.mods) all.push(v.mods);
   }
   for (const b of s.buffs) all.push(b.mods);
+  if (festivalActive(s)) all.push(FESTIVAL_MODS);
   const out = {
     traffic: 1, appealAll: 1, repPerDay: 0, transport: 1, foreign: 1,
     appeal: {} as Partial<Record<Category, number>>, shopAppeal: {} as Record<string, number>,
@@ -714,16 +753,17 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
 
 export function isActive(s: GameState, actId: string): boolean {
   if (actId === 'ritual') return ritualProtected(s);
+  if (actId === 'yokaiFest') return festivalActive(s);
   return s.activities.some((a) => a.id === actId);
 }
 
 /** 路人經過時走進這家店的機率 */
-export function enterChance(s: GameState, index: number, favorite?: Category, origin: Origin = 'local'): number {
+export function enterChance(s: GameState, index: number, favorite?: Category, origin: Origin = 'local', yokai?: YokaiKind): number {
   const shop = s.lots[index]?.shop;
   if (!shop) return 0;
   const def = SHOP_BY_ID[shop.defId];
   const h = hourOf(s);
-  if (def.category === 'stay' || !isOpen(def, h)) return 0;
+  if (def.category === 'stay' || !shopOpen(s, index, h)) return 0;
   const tr = TRAITS_OF(s, shop.tenantId);
   const p0 = profileOf(s, shop.tenantId);
   const mods = combinedMods(s);
@@ -742,6 +782,10 @@ export function enterChance(s: GameState, index: number, favorite?: Category, or
   if (s.weather === 'rain' && def.category === 'leisure') p *= 1.4;
   if (s.weather === 'rain' && def.id === 'fishball') p *= 1.3;
   if ((s.weather === 'fog' || s.weather === 'heavyFog') && def.id === 'teahouse') p *= 1.3;
+  if (s.weather === 'rain' && def.id === 'sanchan') p *= 1.2;
+  // 泉水不夠：溫泉變溫，客人不想泡
+  if (def.spring) p *= 0.5 + 0.5 * springRatio(s);
+  if (yokai) p *= YOKAI[yokai].pref[def.id] ?? 1;
   // 外國旅客：有偏好，但沒有多語服務時語言不通
   if (origin !== 'local') {
     p *= ORIGIN_PREF[origin][def.id] ?? 1;
@@ -772,6 +816,12 @@ export function trafficPerHour(s: GameState): number {
   if (s.weather === 'rain') base *= 0.65;
   if (s.weather === 'fog') base *= 0.85 + 0.1 * guide;
   if (s.weather === 'heavyFog') base *= 0.65 + 0.2 * guide;
+  if (hasSpring(s)) {
+    if (s.fireMode === 'full') base *= 1.08;
+    if (protestStage(s.grievance) >= 3) base *= 0.85;
+    // 妖怪祭：傍晚以後人潮湧進來看百鬼夜行
+    if (festivalActive(s) && hourOf(s) >= 17) base *= 1.4;
+  }
   const demand = base * timeCurve(hourOf(s)) * mods.traffic;
   return Math.min(demand, transportCapacity(s));
 }
@@ -823,7 +873,9 @@ export interface VisitResult {
 }
 
 /** 客人消費完離開 */
-export function completeVisit(s: GameState, index: number, spendRoll = 1, origin: Origin = 'local'): VisitResult {
+export function completeVisit(
+  s: GameState, index: number, spendRoll = 1, origin: Origin = 'local', yokai?: { kind: YokaiKind; leaves: boolean },
+): VisitResult {
   const shop = s.lots[index]?.shop;
   if (!shop) return { revenue: 0, income: 0, coupon: false };
   const def = SHOP_BY_ID[shop.defId];
@@ -831,7 +883,9 @@ export function completeVisit(s: GameState, index: number, spendRoll = 1, origin
   // 外國觀光客出手比較大方，有翻譯時更願意多買
   const foreignMult = origin === 'local' ? 1 : 1.15 + 0.15 * moduleEff(s, 'multilingual');
   if (origin !== 'local') s.today.foreign += 1;
-  const revenue = Math.round(def.spend * (1 + (shop.level - 1) * 0.25) * spendRoll * foreignMult);
+  // 妖怪出手特別大方（但可能是樹葉）
+  const yokaiMult = yokai ? 1.6 : 1;
+  const revenue = Math.round(def.spend * (1 + (shop.level - 1) * 0.25) * spendRoll * foreignMult * yokaiMult);
   shop.todayVisitors += 1;
   shop.todayRevenue += revenue;
   shop.totalRevenue += revenue;
@@ -845,6 +899,10 @@ export function completeVisit(s: GameState, index: number, spendRoll = 1, origin
   s.today.commission += commission;
   s.today.couponCost += couponCost;
   s.money += commission - couponCost;
+  if (yokai) {
+    s.today.yokai += 1;
+    if (yokai.leaves) recordLeaves(s, shop.tenantId, revenue, commission);
+  }
   return { revenue, income: commission - couponCost, coupon };
 }
 
@@ -867,6 +925,7 @@ export function canStartActivity(s: GameState, actId: ActivityDef['id'], variant
     return { ok: true };
   }
   if (s.reputation < def.minRep) return { ok: false, reason: `聲望需達 ${def.minRep}` };
+  if (actId === 'yokaiFest' && s.festival) return { ok: false, reason: s.festival.day > s.day ? '明天就是妖怪祭了' : '祭典還沒收尾' };
   if (actId === 'mascot' && s.mascot) return { ok: false, reason: '已經有吉祥物了' };
   if (isActive(s, actId)) return { ok: false, reason: '活動進行中' };
   const cd = s.cooldowns[actId] ?? 0;
@@ -888,6 +947,10 @@ export function startActivity(
   if (actId === 'ritual') {
     // 今天是神隱日就保護今天，否則保護明天
     s.ritualDay = s.kami ? s.day : s.day + 1;
+  } else if (actId === 'yokaiFest') {
+    // 前一晚準備，隔天舉辦
+    scheduleFestival(s);
+    s.cooldowns[actId] = s.day + 1 + def.cooldown;
   } else if (actId === 'mascot') {
     s.mascot = variantId!;
     s.reputation = Math.min(100, s.reputation + 2);
@@ -935,6 +998,21 @@ export function applyEffects(s: GameState, e: Effects, rand: () => number = Math
   }
   for (const id of e.leave ?? []) removeTenant(s, id);
   if (e.ritual) s.ritualDay = s.kami ? s.day : s.day + 1;
+  if (e.grievance) addGrievance(s, e.grievance);
+  if (e.fireMode) {
+    s.fireMode = e.fireMode;
+    if (e.fireMode !== 'full') s.fireFullDays = 0;
+  }
+  if (e.festival && !s.festival) {
+    scheduleFestival(s);
+    s.cooldowns.yokaiFest = s.day + 1 + ACTIVITY_BY_ID.yokaiFest.cooldown;
+  }
+  if (e.reinforce) s.reinforced = true;
+  if (e.quake) applyQuake(s, rand);
+  if (e.leaves) resolveLeaves(s, e.leaves);
+  if (e.sealWell) sealWell(s);
+  if (e.springBonus) s.springBonus += e.springBonus;
+  if (e.yokaiFavor) s.yokaiFavor = Math.max(0, s.yokaiFavor + e.yokaiFavor);
   if (e.chapterComplete) s.chapterComplete = true;
 }
 
@@ -1005,6 +1083,8 @@ function dailyTenantUpdate(s: GameState): { left: string[]; unhappy: string[] } 
       else if (r <= -40) d -= 3;
     }
     if (shop.losingDays >= 3) d -= 3;
+    // 泉水不夠用：溫泉類店家很困擾
+    if (def.spring) d -= 6 * (1 - springRatio(s));
     // 滿意度慢慢回到中間值
     d += (55 - shop.satisfaction) * 0.1;
     adjustSat(s, shop, d);
@@ -1047,6 +1127,13 @@ export function eventRepDelta(s: GameState): number {
   // 民宿評價
   const avg = avgStars(s.reviews.filter((r) => r.lot >= 0));
   if (avg !== null && s.reviewsFresh) d += (avg - 3.5) * 0.8 * Math.min(1, s.reviews.length / 6);
+  // 關子嶺：水火同源、抗議、共同浴場
+  if (hasSpring(s)) {
+    if (s.fireMode === 'protect') d += 0.3;
+    else if (s.fireMode === 'full') d -= 0.3;
+    if (protestStage(s.grievance) >= 2) d -= 0.5;
+    if (bathLot(s) >= 0) d += BATH.rep;
+  }
   return d;
 }
 
@@ -1072,6 +1159,11 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     s.today.commission += cart;
     s.money += cart;
   }
+  // 關子嶺：今天的泉量、民怨、火勢、震後恢復
+  const springToday = hasSpring(s) ? { supply: springSupply(s), demand: springDemand(s) } : undefined;
+  const closed = s.closedToday.map((i) => { const sh = s.lots[i]?.shop; return sh ? (profileOf(s, sh.tenantId)?.shopName ?? SHOP_BY_ID[sh.defId].name) : ''; }).filter(Boolean);
+  const grievanceBefore = s.grievance;
+  const fest = festivalActive(s);
   const rent = rentIncome(s);
   const maintenance = street.maintenance + unlockedCount(s) * 60;
   const wages = facilityWages(s);
@@ -1086,6 +1178,11 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     }
   }
   const { left, unhappy } = dailyTenantUpdate(s);
+  if (hasSpring(s)) {
+    addGrievance(s, dailyGrievanceDelta(s));
+    dailyFireUpdate(s);
+    dailyQuakeRecovery(s);
+  }
 
   const summary: DaySummary = {
     day: s.day,
@@ -1111,6 +1208,14 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     overnight: s.today.overnight,
     sightseers: s.today.sightseers,
     telescope: s.today.telescope,
+    fireVisitors: s.today.fireVisitors,
+    fireIncome: s.today.fireIncome,
+    hikers: s.today.hikers,
+    spring: springToday,
+    grievanceBefore: hasSpring(s) ? grievanceBefore : undefined,
+    grievanceAfter: hasSpring(s) ? s.grievance : undefined,
+    closed,
+    festival: fest,
     avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,
@@ -1144,6 +1249,10 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
   for (const b of s.buffs) b.daysLeft -= 1;
   s.buffs = s.buffs.filter((b) => b.daysLeft > 0);
   s.applicants = s.applicants.filter((a) => a.expiresDay >= s.day);
+  // 關子嶺：靜坐抗議、失火、祭典收尾
+  s.closedToday = rollClosures(s, rand);
+  if (hasSpring(s) && rand() < fireAccidentChance(s) && !s.flags.includes('fireAccident')) s.flags.push('fireAccident');
+  if (s.festival && s.festival.day < s.day && s.festival.leafCommission <= 0 && !Object.keys(s.festival.leafByTenant).length) s.festival = null;
   if (rand() < 0.7) addApplicant(s, rand);
   if (s.applicants.length === 0) addApplicant(s, rand);
   for (const lot of s.lots) {
@@ -1265,7 +1374,8 @@ export function deserialize(raw: string): GameState | null {
     data.morning ??= [];
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    if (data.minute >= (STREETS[data.streetId].closeHour ?? 23) * 60) {
+    for (const [k, v] of Object.entries(onsenDefaults())) (data as unknown as Record<string, unknown>)[k] ??= v;
+    if (data.minute >= dayEndMin(data)) {
       startNextDay(data);
       return data;
     }

@@ -1,7 +1,7 @@
 import type { ActivityVariant, Mods } from './types';
 
 export interface ActivityDef {
-  id: 'coupon' | 'templeFair' | 'mascot' | 'legend' | 'influencer' | 'ritual';
+  id: 'coupon' | 'templeFair' | 'mascot' | 'legend' | 'influencer' | 'ritual' | 'yokaiFest';
   name: string;
   description: string;
   /** 基本花費（變體可以覆寫） */
@@ -52,6 +52,12 @@ export const ACTIVITIES: ActivityDef[] = [
     id: 'ritual', name: '祈神儀式',
     description: '請廟方在霧中設壇祈福，保佑遊客不被「神隱」。只能在神隱日當天，或預報明天是神隱日時舉辦。',
     cost: 6000, days: 1, cooldown: 0, startUnlocked: false, minRep: 0,
+    mods: {}, hasVariants: false,
+  },
+  {
+    id: 'yokaiFest', name: '妖怪祭',
+    description: '關子嶺溫泉美食節！前一晚準備，隔天中午煮「天下第一鼎」、傍晚百鬼夜行，全街營業到凌晨 2 點。聽說真的妖怪會混進來……',
+    cost: 12000, days: 1, cooldown: 6, startUnlocked: false, minRep: 0,
     mods: {}, hasVariants: false,
   },
 ];

@@ -1,8 +1,9 @@
 import {
   dayEndMin, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, rollOrigin, fallChance, registerFall,
-  vanishChance, registerVanish, planCheckins, checkInGuest,
+  vanishChance, registerVanish, planCheckins, checkInGuest, lastSpawnMin, streetOf,
 } from './game';
-import type { GameState, Origin } from './types';
+import { yokaiChance, rollYokai, paysLeaves, fireStopChance, registerFireVisitor, HIKE_CHANCE, HIKER_SPEND } from './onsen';
+import type { GameState, Origin, YokaiKind } from './types';
 import { SHOP_BY_ID, type Category } from './shops';
 
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
@@ -25,7 +26,8 @@ export function passerbyRoute(lots: number, rand: () => number): { start: number
  * 每位路人依 passerbyRoute 逛一段街，最多進 2 家店。
  */
 export function simulateDay(s: GameState, rand: () => number = Math.random, stepMin = 1): void {
-  const pending: { lot: number; leaveAt: number; origin: Origin }[] = [];
+  const pending: { lot: number; leaveAt: number; origin: Origin; spend: number; yokai?: { kind: YokaiKind; leaves: boolean } }[] = [];
+  const landmarks = new Set(streetOf(s).layout.flatMap((l) => (l.kind === 'landmark' ? [l.id] : [])));
   const end = dayEndMin(s);
   // 昨晚的住客：早上 7:00～9:30 退房，從民宿門口出發逛街（不用擠公車）
   const morning = s.morning.map((g) => ({ ...g, at: 420 + rand() * 150 })).sort((a, b) => a.at - b.at);
@@ -37,7 +39,7 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
       for (const g of planCheckins(s, rand)) checkInGuest(s, g, rand);
     }
     const arrivals: { origin: Origin; start?: number }[] = [];
-    if (s.minute < 22.5 * 60) carry += tickTraffic(s, stepMin);
+    if (s.minute < lastSpawnMin(s)) carry += tickTraffic(s, stepMin);
     while (carry >= 1) {
       carry -= 1;
       arrivals.push({ origin: rollOrigin(s, rand) });
@@ -52,7 +54,16 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
       // 濃霧跌倒、神隱消失
       if (rand() < fallChance(s)) registerFall(s, rand);
       if (rand() < vanishChance(s) && !registerVanish(s, rand)) continue;
-      const fav = CATS[Math.floor(rand() * CATS.length)];
+      let fav = CATS[Math.floor(rand() * CATS.length)];
+      // 關子嶺：大約一半的路人會經過水火同源、好漢坡
+      if (landmarks.has('fire') && rand() < 0.5 && rand() < fireStopChance(s)) registerFireVisitor(s);
+      let spend = 1;
+      if (landmarks.has('haohan') && rand() < 0.5 && rand() < HIKE_CHANCE) {
+        s.today.hikers += 1;
+        fav = 'food';
+        spend = HIKER_SPEND;
+      }
+      const yk = rand() < yokaiChance(s) ? { kind: rollYokai(rand), leaves: paysLeaves(s, rand) } : undefined;
       let visits = 0;
       const route = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
       const start = a.start ?? route.start;
@@ -61,10 +72,11 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
         const i = start + dir * k;
         if (i < 0 || i >= s.lots.length) break;
         if (visits >= 2) break;
-        if (rand() < enterChance(s, i, fav, origin)) {
+        if (rand() < enterChance(s, i, fav, origin, yk?.kind)) {
           if (tryEnter(s, i)) {
             const def = SHOP_BY_ID[s.lots[i].shop!.defId];
-            pending.push({ lot: i, leaveAt: s.minute + def.stayMinutes, origin });
+            pending.push({ lot: i, leaveAt: s.minute + def.stayMinutes, origin, spend: def.category === 'food' ? spend : 1, yokai: yk });
+            if (def.category === 'food') spend = 1;
             visits++;
           }
         }
@@ -73,10 +85,11 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
     s.minute += stepMin;
     for (let k = pending.length - 1; k >= 0; k--) {
       if (pending[k].leaveAt <= s.minute) {
-        completeVisit(s, pending[k].lot, 0.8 + rand() * 0.4, pending[k].origin);
+        const p = pending[k];
+        completeVisit(s, p.lot, (0.8 + rand() * 0.4) * p.spend, p.origin, p.yokai);
         pending.splice(k, 1);
       }
     }
   }
-  for (const p of pending) completeVisit(s, p.lot, 1, p.origin);
+  for (const p of pending) completeVisit(s, p.lot, p.spend, p.origin, p.yokai);
 }

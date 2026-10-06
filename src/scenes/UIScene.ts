@@ -5,15 +5,20 @@ import {
   relLabel, presentTenants, lotOfTenant, streetOf, weekdayName, WEATHER_NAME, combinedMods, rentIncome,
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
-  noisyNeighbors,
+  noisyNeighbors, shopOpen,
   MAX_APPLICANTS, goalsDone,
 } from '../core/game';
 import {
-  SHOP_BY_ID, MAX_LEVEL, RENT_TIERS, renovateCost, capacityAt, isOpen, rentFor,
+  hasSpring, springSupply, springDemand, springRatio, springUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
+  drillWell, sealWell, canHoldTownhall, holdTownhall, TOWNHALL, SEAL_CUT, MAX_WELLS, buildBath, demolishBath, bathLot, BATH,
+  FIRE_MODES, fireDowngradeCost, setFireMode, fireAccidentChance, festivalActive, quakeLossPct, dailyGrievanceDelta,
+} from '../core/onsen';
+import {
+  SHOP_BY_ID, MAX_LEVEL, RENT_TIERS, renovateCost, capacityAt, rentFor,
 } from '../core/shops';
 import { TRAITS } from '../core/traits';
 import { ACTIVITIES, INFLUENCERS, type ActivityDef } from '../core/activities';
-import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant } from '../core/types';
+import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant, FireMode } from '../core/types';
 import { store, bus, Ev, save, toast, S, completeChapter } from '../store';
 import { W, H, C, FONT, hex, money, clock } from '../theme';
 import { drawPortrait } from './drawCharacters';
@@ -46,6 +51,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private repText!: Phaser.GameObjects.Text;
   private weatherText!: Phaser.GameObjects.Text;
   private forecastChip!: Phaser.GameObjects.Text;
+  private springText?: Phaser.GameObjects.Text;
+  private grievanceBar?: Phaser.GameObjects.Rectangle;
+  private grievanceText?: Phaser.GameObjects.Text;
   private chips!: Phaser.GameObjects.Container;
   private chipSig = '';
   private speedButtons: Button[] = [];
@@ -93,6 +101,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     on(Ev.Toast, (m: string) => this.showToast(m));
     on(Ev.Story, (steps: Step[]) => this.director.play(steps));
     on(Ev.StoryDone, () => this.afterStory());
+    on(Ev.Landmark, (id: string) => {
+      if (store.storyRunning || store.waitingNextDay) return;
+      if (id === 'spring') this.showSpring();
+      else if (id === 'fire') this.showFire();
+    });
 
     const kb = this.input.keyboard;
     kb?.on('keydown-SPACE', () => {
@@ -200,6 +213,15 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.repBar = this.add.rectangle(613, 34, 0, 12, 0xef8fb1).setOrigin(0, 0.5);
     this.repText = this.text(772, 22, '', 18, '#ffffff', '700');
 
+    if (hasSpring(S())) {
+      // 關子嶺：泉量與民怨
+      this.springText = this.text(826, 6, '', 15, '#9fe0f0', '900');
+      this.text(826, 33, '民怨', 13, '#a49dbb');
+      this.add.rectangle(862, 41, 100, 12, 0x1a1724).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.2);
+      for (const st of PROTEST_STAGES) this.add.rectangle(862 + st.at, 41, 1, 12, 0xffffff, 0.35).setOrigin(0.5);
+      this.grievanceBar = this.add.rectangle(863, 41, 0, 10, 0xe08a5a).setOrigin(0, 0.5);
+      this.grievanceText = this.text(968, 33, '', 13, '#ffffff', '700');
+    }
     ['暫停', '1x', '2x', '3x'].forEach((l, i) => {
       this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x3c3652, 15));
     });
@@ -219,6 +241,14 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.repBar.width = 148 * (s.reputation / 100);
     this.repText.setText(s.reputation.toFixed(1));
     this.speedButtons.forEach((b, i) => b.bg.setStrokeStyle(2, i === store.speed ? C.gold : 0xffffff, i === store.speed ? 1 : 0.15));
+    if (this.springText) {
+      const sup = springSupply(s), dem = springDemand(s);
+      this.springText.setText(`♨ 泉量 ${sup} / ${dem}`).setColor(sup >= dem ? '#9fe0f0' : '#ff9a8a');
+      const g = s.grievance;
+      this.grievanceBar!.width = g;
+      this.grievanceBar!.setFillStyle(g >= 80 ? 0xd64545 : g >= 55 ? 0xe08a5a : g >= 30 ? 0xf2c14e : 0x7cc37a);
+      this.grievanceText!.setText(String(Math.round(g)));
+    }
     const done = streetOf(s).goals.filter((g) => g.check(s)).length;
     this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
 
@@ -241,6 +271,15 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       items.push(`${name}${v ? `「${v.name}」` : ''}・剩 ${a.daysLeft} 天`);
     }
     for (const b of s.buffs) items.push(`${b.name}・剩 ${b.daysLeft} 天`);
+    if (hasSpring(s)) {
+      if (festivalActive(s)) { items.push('妖怪祭・今天營業到凌晨 2 點'); colors[items.length - 1] = '#f0a0d0'; }
+      else if (s.festival && s.festival.day > s.day) { items.push('明天：妖怪祭'); colors[items.length - 1] = '#f0a0d0'; }
+      const stage = protestStage(s.grievance);
+      if (stage) { items.push(`抗議：${PROTEST_STAGES[stage - 1].name}`); colors[items.length - 1] = stage >= 3 ? '#ff9a8a' : '#ffc890'; }
+      if (s.closedToday.length) { items.push(`靜坐：${s.closedToday.length} 家暫停營業`); colors[items.length - 1] = '#ff9a8a'; }
+      if (springRatio(s) < 1) { items.push('泉水不夠：溫泉變溫了'); colors[items.length - 1] = '#9fd0f0'; }
+      if (s.fireMode !== 'protect') items.push(`水火同源：${FIRE_MODES[s.fireMode].name}・火勢 ${s.fireLevel.toFixed(1)}`);
+    }
     if (s.mascot) items.push(`吉祥物：${streetOf(s).activities.mascots.find((m) => m.id === s.mascot)?.name}`);
     const sig = items.join('|');
     if (sig !== this.chipSig) {
@@ -309,6 +348,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const lot = S().lots[i];
     if (!lot.unlocked) this.panelLocked(i);
     else if (lot.facility) this.panelFacility(i);
+    else if (lot.bath) this.panelBath(i);
     else if (!lot.shop) this.panelBoard(i);
     else this.panelTenant(i);
   }
@@ -377,7 +417,19 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     }, 0x7a4a9a, 15);
     p.add(ad.root);
     let fb: Button | null = null;
-    if (!facilityOf(s)) {
+    if (hasSpring(s)) {
+      if (bathLot(s) < 0) {
+        fb = this.button(W - 226, 106, 202, 50, `改建：共同浴場\n${money(BATH.cost)}（不收租金）`, () => {
+          const r = buildBath(s, i);
+          if (!r.ok) return toast(r.reason);
+          bus.emit(Ev.LotRedraw, -1);
+          save();
+          toast('共同浴場落成！里民可以免費泡湯，民怨每天會慢慢下降。');
+          this.rebuildPanel();
+        }, 0x3f6f8f, 13);
+        p.add(fb.root);
+      }
+    } else if (!facilityOf(s)) {
       fb = this.button(W - 226, 106, 202, 50, `改建：遊客服務中心\n${money(FACILITY.buildCost)}（不收租金）`, () => {
         const r = buildFacility(s, i);
         if (!r.ok) return toast(r.reason);
@@ -390,9 +442,160 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     }
     this.liveRefresh = () => {
       ad.setEnabled(s.money >= AD_COST && s.applicants.length < MAX_APPLICANTS);
-      fb?.setEnabled(s.money >= FACILITY.buildCost);
+      fb?.setEnabled(s.money >= (hasSpring(s) ? BATH.cost : FACILITY.buildCost));
     };
     this.liveRefresh();
+  }
+
+  /** 共同浴場 */
+  private panelBath(i: number) {
+    const s = S();
+    const p = this.panel;
+    p.add(this.text(20, 10, '共同浴場', 21, '#ffffff', '900'));
+    p.add(this.text(20, 42, [
+      `給山上的里民免費泡湯。不收租金，每天用掉 ${BATH.spring} 泉量。`,
+      `民怨每天額外 -${BATH.grievance}，聲望每天 +${BATH.rep}。`,
+      '阿公阿嬤每天拿著臉盆毛巾來報到。',
+    ].join('\n'), 15, '#cfc8e0').setLineSpacing(6));
+    let confirmUntil = 0;
+    const del = this.button(W - 226, 60, 202, 50, '拆除（恢復空店面）', () => {
+      if (this.time.now > confirmUntil) {
+        confirmUntil = this.time.now + 2500;
+        del.setText('再點一次確認');
+        this.time.delayedCall(2500, () => del.root.active && del.setText('拆除（恢復空店面）'));
+        return;
+      }
+      demolishBath(s, i);
+      bus.emit(Ev.LotRedraw, -1);
+      save();
+      this.select(i);
+    }, 0x8a3b3b, 14);
+    p.add(del.root);
+  }
+
+  /** 寶泉橋露頭：泉量、開井、民怨 */
+  private showSpring() {
+    const s = S();
+    const MW = 980, MH = 600;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '寶泉橋露頭・泉源管理', 26, hex(C.ink), '900'));
+    const sup = springSupply(s), dem = springDemand(s);
+    const ratio = springRatio(s);
+    const sp = streetOf(s).spring!;
+    // 供需
+    const lines: string[] = [`露頭基本泉量 ${sp.base}`];
+    if (s.wells) lines.push(`泉井 ${s.wells} 口 × ${sp.wellYield} = +${s.wells * sp.wellYield}`);
+    if (s.quake) lines.push(`地震損失 -${s.quake.loss}${s.quake.recovered ? `（已自然恢復 ${Math.round(s.quake.recovered * 10) / 10}）` : ''}`);
+    if (s.springBonus) lines.push(`河童報恩 +${s.springBonus}`);
+    m.add(this.text(x + 30, y + 70, `泉量 ${sup}　／　需求 ${dem}`, 22, ratio >= 1 ? '#2f7d3f' : '#b33a3a', '900'));
+    m.add(this.text(x + 30, y + 104, lines.join('\n'), 14, '#4a4356').setLineSpacing(4));
+    const users: string[] = [];
+    s.lots.forEach((l, i) => {
+      if (l.bath) users.push(`共同浴場 ${BATH.spring}`);
+      if (!l.shop) return;
+      const def = SHOP_BY_ID[l.shop.defId];
+      const u = springUse(def, l.shop.level);
+      if (!u) return;
+      const name = profileOf(s, l.shop.tenantId)?.shopName ?? def.name;
+      users.push(`${name} ${u}${s.closedToday.includes(i) ? '（靜坐暫停）' : ''}`);
+    });
+    m.add(this.text(x + 330, y + 70, '用水的店', 15, '#8a8296', '700'));
+    m.add(this.text(x + 330, y + 94, users.length ? users.join('\n') : '還沒有溫泉類的店', 14, '#3a3346').setLineSpacing(4));
+    m.add(this.text(x + 620, y + 70, ratio >= 1 ? '泉水夠用，溫泉很燙！' : `泉水不夠（${Math.round(ratio * 100)}%）\n溫泉類店家吸引力 ×${(0.5 + 0.5 * ratio).toFixed(2)}\n旅館評價下降、店家不滿`, 15, ratio >= 1 ? '#2f7d3f' : '#b33a3a', '700').setLineSpacing(4));
+    // 民怨
+    const gy = y + 250;
+    m.add(this.text(x + 30, gy, `民怨 ${Math.round(s.grievance)}`, 20, hex(C.ink), '900'));
+    m.add(this.add.rectangle(x + 150, gy + 13, 400, 16, 0xe0d8e8).setOrigin(0, 0.5));
+    m.add(this.add.rectangle(x + 150, gy + 13, 4 * s.grievance, 16, s.grievance >= 80 ? 0xd64545 : s.grievance >= 55 ? 0xe08a5a : s.grievance >= 30 ? 0xf2c14e : 0x7cc37a).setOrigin(0, 0.5));
+    for (const st of PROTEST_STAGES) {
+      m.add(this.add.rectangle(x + 150 + st.at * 4, gy + 13, 2, 22, 0x2a2433).setOrigin(0.5));
+      m.add(this.text(x + 150 + st.at * 4, gy + 26, `${st.at} ${st.name}`, 12, '#6a6378', '700').setOrigin(0.5, 0));
+    }
+    const dd = dailyGrievanceDelta(s);
+    m.add(this.text(x + 580, gy, `每天 ${dd > 0 ? '+' : ''}${dd.toFixed(1)}`, 15, dd > 0 ? '#b33a3a' : '#2f7d3f', '700'));
+    const stage = protestStage(s.grievance);
+    m.add(this.text(x + 30, gy + 50, stage ? `目前：${PROTEST_STAGES[stage - 1].name}。${PROTEST_STAGES[stage - 1].desc}` : '里民還算平靜。民怨每天會自然下降一點；每口泉井、全面開發水火同源會讓它上升。', 14, stage ? '#b33a3a' : '#4a4356').setWordWrapWidth(900, true));
+    // 動作
+    const by = y + 380;
+    const cost = wellCost(s);
+    const card = (cx: number, title: string, desc: string, label: string, enabled: boolean, fn: () => void, color: number = C.red) => {
+      m.add(this.add.rectangle(cx, by, 290, 190, 0xffffff).setOrigin(0).setStrokeStyle(2, 0xd8cfe0));
+      m.add(this.text(cx + 16, by + 14, title, 19, hex(C.ink), '900'));
+      m.add(this.text(cx + 16, by + 46, desc, 13, '#4a4356').setWordWrapWidth(258, true).setLineSpacing(3));
+      const b = this.button(cx + 16, by + 128, 258, 48, label, fn, color, 15);
+      b.setEnabled(enabled);
+      m.add(b.root);
+    };
+    card(x + 30, '開鑿新泉井',
+      `泉量 +${sp.wellYield}。民怨 +${cost !== null ? wellGrievance(s) : 0}（三天內連續開挖、震後開挖會更多）。地震時，開過越多井，泉量損失越大。最多 ${MAX_WELLS} 口。`,
+      cost === null ? '已經到上限' : `開井　${money(cost)}`, cost !== null && s.money >= cost, () => {
+        const r = drillWell(s);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast('咚咚咚——新泉井噴出一柱泥漿！泉量增加了。');
+        this.showSpring();
+      });
+    const th = canHoldTownhall(s);
+    card(x + 345, '在廟口辦說明會',
+      `跟里民好好溝通。民怨 -${TOWNHALL.cut}，每 ${TOWNHALL.cooldown} 天可以辦一次。`,
+      th.ok || th.reason.startsWith('資金') ? `辦說明會　${money(TOWNHALL.cost)}` : th.reason, th.ok, () => {
+        const r = holdTownhall(s);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast('說明會開完了。有人拍桌子，但大家總算坐下來談。');
+        this.showSpring();
+      }, 0x3f6f8f);
+    card(x + 660, '封掉一口泉井',
+      `泉量 -${sp.wellYield}，民怨 -${SEAL_CUT}。開井的錢不會退。另外，空店面可以改建「共同浴場」，讓民怨每天慢慢下降。`,
+      s.wells ? '封井' : '沒有泉井', s.wells > 0, () => {
+        const r = sealWell(s);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast('封井了。里民鬆了一口氣。');
+        this.showSpring();
+      }, 0x6b6280);
+    if (!s.quake && s.day >= (streetOf(s).quakeDay ?? 99) - 3) {
+      m.add(this.text(x + 30, y + MH - 26, `水伯說最近泉水怪怪的……（地震時預估損失 ${Math.round(quakeLossPct(s) * 100)}% 泉量${s.reinforced ? '・管線已加固' : ''}）`, 13, '#b33a3a', '700'));
+    } else if (s.quake) {
+      m.add(this.text(x + 30, y + MH - 26, `震前泉量 ${s.quake.before}，目標恢復到 ${Math.ceil(s.quake.before * 0.8)}。`, 13, '#2f6f8f', '700'));
+    }
+  }
+
+  /** 水火同源：經營模式 */
+  private showFire() {
+    const s = S();
+    const MW = 1000, MH = 520;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '水火同源・要怎麼經營？', 26, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 64, `火勢 ${s.fireLevel.toFixed(2)}${s.quake ? '（地震後地底多了裂縫，火變大了）' : ''}　・　今天停下來看火 ${s.today.fireVisitors} 人，攤販收入 ${money(s.today.fireIncome)}`, 15, '#4a4356'));
+    const acc = fireAccidentChance(s);
+    if (acc > 0) m.add(this.text(x + 30, y + 88, `⚠ 火勢太大，烤肉區每天有 ${Math.round(acc * 100)}% 機率失火`, 14, '#b33a3a', '700'));
+    (['protect', 'stall', 'full'] as FireMode[]).forEach((mode, k) => {
+      const d = FIRE_MODES[mode];
+      const cx = x + 30 + k * 318, cy = y + 120;
+      const cur = s.fireMode === mode;
+      m.add(this.add.rectangle(cx, cy, 302, 370, cur ? 0xfff6dc : 0xffffff).setOrigin(0).setStrokeStyle(cur ? 4 : 2, cur ? C.gold : 0xd8cfe0));
+      m.add(this.text(cx + 18, cy + 16, d.name, 22, hex(C.ink), '900'));
+      m.add(this.text(cx + 18, cy + 56, d.desc, 14, '#4a4356').setWordWrapWidth(266, true).setLineSpacing(4));
+      if (d.fee) m.add(this.text(cx + 18, cy + 230, `目前每人 ${money(Math.round(d.fee * s.fireLevel))}`, 15, '#c8902a', '700'));
+      const cost = fireDowngradeCost(s.fireMode, mode);
+      const label = cur ? '目前的方式' : cost ? `改成${d.name}（復原費 ${money(cost)}）` : `改成${d.name}`;
+      const b = this.button(cx + 18, cy + 300, 266, 52, label, () => {
+        const r = setFireMode(s, mode);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast(mode === 'protect' ? '圍欄架好了。廟公點頭微笑。' : mode === 'stall' ? '爆米花機推上來了！' : '烤肉區開張！煙好大……');
+        this.closeModal();
+      }, cur ? 0x9a94ac : mode === 'full' ? 0xb3262e : 0x3f6f8f, 14);
+      b.setEnabled(!cur && s.money >= cost);
+      m.add(b.root);
+    });
   }
 
   /** 遊客服務中心 */
@@ -645,12 +848,18 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       satBar.width = 158 * (sat / 100);
       satBar.setFillStyle(sat >= 65 ? 0x5bb36a : sat >= 35 ? 0xf2c14e : 0xd64545);
       satText.setText(`${sat}　${sat >= 65 ? '開心' : sat >= 35 ? '普通' : sat >= 20 ? '不滿' : '想退租！'}`);
-      const open = isOpen(def, s.minute / 60);
-      if (def.category === 'stay') {
+      const open = shopOpen(s, i);
+      const closed = s.closedToday.includes(i);
+      const use = springUse(def, shop.level);
+      const water = use ? `・用泉 ${use}${springRatio(s) < 1 ? '（水溫不夠）' : ''}` : '';
+      if (closed) {
+        status.setText('● 抗議靜坐中，今天暫停營業').setColor('#f0a0a0');
+        stats.setText(['門口坐滿了抗議的里民……', `昨日租客淨利 ${money(shop.lastProfit)}`].join('\n'));
+      } else if (def.category === 'stay') {
         const tonight = s.tonight.filter((g) => g.lot === i).length;
         const rooms = capacityAt(def, shop.level);
         const noisy = noisyNeighbors(s, i);
-        status.setText(noisy.length ? `● 今晚 ${tonight}/${rooms} 間・隔壁太吵！` : `● 今晚入住 ${tonight}/${rooms} 間`)
+        status.setText(noisy.length ? `● 今晚 ${tonight}/${rooms} 間・隔壁太吵！${water}` : `● 今晚入住 ${tonight}/${rooms} 間${water}`)
           .setColor(noisy.length ? '#f0a0a0' : '#8fe0a0');
         const mine = s.reviews.filter((r) => r.lot === i);
         const avg = mine.length ? mine.reduce((a, r) => a + r.stars, 0) / mine.length : null;
@@ -661,7 +870,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
           noisy.length ? `吵鬧鄰居：${noisy.join('、')}` : `昨日租客淨利 ${money(shop.lastProfit)}`,
         ].join('\n'));
       } else {
-      status.setText(open ? `● 營業中　店內 ${shop.inside}/${capacityAt(def, shop.level)} 人` : `● 休息中（${def.hours[0]}:00–${def.hours[1]}:00）`)
+      status.setText(open ? `● 營業中　店內 ${shop.inside}/${capacityAt(def, shop.level)} 人${water}` : `● 休息中（${def.hours[0]}:00–${def.hours[1]}:00）${water}`)
         .setColor(open ? '#8fe0a0' : '#c9a0a0');
       stats.setText([
         `來客 ${shop.todayVisitors} 人`,
@@ -815,7 +1024,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (store.storyRunning) return;
     const s = S();
     const street = streetOf(s);
-    const list = ACTIVITIES.filter((a) => a.id !== 'ritual' || s.unlockedActivities.includes('ritual'));
+    const list = ACTIVITIES.filter((a) => (a.id !== 'ritual' && a.id !== 'yokaiFest') || s.unlockedActivities.includes(a.id));
     const MW = 1220;
     const { m, x, y } = this.openModal(MW, 560);
     this.closeButton(m, x + MW - 54, y + 18);
@@ -901,7 +1110,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     save();
     bus.emit(Ev.ActivityStarted, id);
     const name = id === 'templeFair' ? streetOf(s).activities.templeFair.name : ACTIVITIES.find((a) => a.id === id)!.name;
-    toast(`${name}開始了！`);
+    toast(id === 'yokaiFest' ? '妖怪祭預約好了！今晚大家開始準備，明天舉辦。' : `${name}開始了！`);
   }
 
   /** 租客關係圖 */
@@ -960,10 +1169,13 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       m.add(this.text(x + 40, y + 110 + k * 44, `${ok ? '✔' : '□'}　${g.text}`, 20, ok ? '#2f7d3f' : '#3a3346', ok ? '900' : '400'));
     });
     const mods = combinedMods(s);
-    m.add(this.text(x + 30, y + 360, [
+    const extra: string[] = [];
+    if (hasSpring(s)) extra.push(s.quake ? `泉量 ${springSupply(s)}（震前 ${s.quake.before}，目標 ${Math.ceil(s.quake.before * 0.8)}）・民怨 ${Math.round(s.grievance)}` : `泉量 ${springSupply(s)}・民怨 ${Math.round(s.grievance)}`);
+    m.add(this.text(x + 30, y + 340, [
       `目前每日租金收入 ${money(rentIncome(s))}`,
       `累積營收 ${money(s.totalRevenue)}`,
       `活動加成：人潮 ×${mods.traffic.toFixed(2)}、吸引力 ×${mods.appealAll.toFixed(2)}`,
+      ...extra,
     ].join('\n'), 15, '#5a5266').setLineSpacing(6));
     if (goalsDone(s)) m.add(this.text(x + 30, y + 440, '全部達成！明天早上會有好消息……', 16, '#b3262e', '900'));
   }
@@ -1023,8 +1235,17 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (s.forecast.kami) notes.push('明日預報：濃霧，老人家說可能是「神隱日」！可以先辦祈神儀式。');
     else if (s.forecast.weather === 'heavyFog') notes.push('明日預報：濃霧特報，石階濕滑，遊客容易跌倒。');
     if (sum.sightseers) notes.push(`觀景台賞景 ${sum.sightseers} 人${sum.telescope ? `・望遠鏡投幣 $${sum.telescope}` : ''}`);
+    if (sum.spring) {
+      if (sum.spring.supply < sum.spring.demand) notes.push(`泉水不夠用（${sum.spring.supply}／${sum.spring.demand}）：溫泉變溫，溫泉類店家不開心。`);
+      const ga = sum.grievanceAfter ?? 0, gb = sum.grievanceBefore ?? 0;
+      if (Math.round(ga) !== Math.round(gb) || ga >= 30) notes.push(`民怨 ${Math.round(gb)} → ${Math.round(ga)}${ga >= 80 ? '（明天可能有店被靜坐）' : ''}`);
+    }
+    if (sum.closed?.length) notes.push(`抗議靜坐，暫停營業：${sum.closed.join('、')}`);
+    if (sum.fireVisitors) notes.push(`水火同源看火 ${sum.fireVisitors} 人${sum.fireIncome ? `・攤販收入 ${money(sum.fireIncome)}` : ''}`);
+    if (sum.hikers) notes.push(`爬好漢坡 ${sum.hikers} 人（下來又累又餓，吃的店生意變好）`);
+    if (sum.festival) notes.push('妖怪祭辦完了！明天早上……收銀機裡會不會有樹葉？');
     if (s.gameOver) notes.unshift('負債太多……老街撐不下去了。');
-    m.add(this.text(W / 2, y + 382, notes.slice(0, 7).join('\n'), 14, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4).setWordWrapWidth(540, true));
+    m.add(this.text(W / 2, y + 382, notes.slice(0, 9).join('\n'), 14, '#5a3a8a', '700').setOrigin(0.5, 0).setAlign('center').setLineSpacing(4).setWordWrapWidth(540, true));
     const label = s.gameOver ? '重新挑戰' : `開始第 ${s.day + 1} 天`;
     m.add(this.button(W / 2 - 120, y + 660 - 64, 240, 50, label, () => {
       this.closeModal();
@@ -1037,7 +1258,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       save();
       store.waitingNextDay = false;
       bus.emit(Ev.DayStarted);
-      if (s.weather !== 'sunny') toast(`今天${WEATHER_NAME[s.weather]}，${s.weather === 'rain' ? '路人變少，但咖啡廳和熱湯更受歡迎。' : '視線不好，但茶樓特別有氣氛。'}`);
+      if (s.weather !== 'sunny') {
+        const rainTip = hasSpring(s) ? '路人變少，但湯屋和熱湯更受歡迎。' : '路人變少，但咖啡廳和熱湯更受歡迎。';
+        const fogTip = hasSpring(s) ? '視線不好，路人變少。' : '視線不好，但茶樓特別有氣氛。';
+        toast(`今天${WEATHER_NAME[s.weather]}，${s.weather === 'rain' ? rainTip : fogTip}`);
+      }
       this.rebuildPanel();
     }, C.red, 19).root);
   }

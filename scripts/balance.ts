@@ -9,6 +9,9 @@ import {
   upgradeBus, upgradeRoute, BUS, ROUTE, upgradeFacility,
 } from '../src/core/game';
 import { facilityOf, FACILITY } from '../src/core/facilities';
+import {
+  hasSpring, springRatio, springSupply, springDemand, wellCost, drillWell, holdTownhall, canHoldTownhall, buildBath, bathLot, BATH,
+} from '../src/core/onsen';
 import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { SHOP_BY_ID } from '../src/core/shops';
@@ -29,7 +32,7 @@ function runStories(when: 'morning' | 'noon' | 'evening' | 'night') {
   for (const step of flattenEffects(st.steps)) if (step.t === 'effect') applyEffects(s, step.effects, rand);
 }
 
-for (let d = 1; d <= 30; d++) {
+for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   if (process.argv[4] !== 'dumb' && street.transport && !facilityOf(s) && d >= 3 && s.money > 22000) {
     const i = s.lots.findIndex((l) => l.unlocked && !l.shop);
     if (i >= 0 && buildFacility(s, i).ok) { installModule(s, 'firstaid'); setStaff(s, 2); log.push('  [建設] 服務中心＋救護站'); }
@@ -61,11 +64,24 @@ for (let d = 1; d <= 30; d++) {
     else if (s.money > (ROUTE[s.route + 1]?.cost ?? 1e9) + 20000) { upgradeRoute(s); log.push('  [交通] 路線升級'); }
     if (canStartActivity(s, 'ritual').ok) { startActivity(s, 'ritual'); log.push('  [儀式] 祈神'); }
   }
+  // 關子嶺：泉水不夠就開井、民怨高就辦說明會、蓋共同浴場
+  if (smart && hasSpring(s)) {
+    const cost = wellCost(s);
+    if (springRatio(s) < 1 && cost !== null && s.money > cost + 8000 && s.grievance < 40) {
+      drillWell(s);
+      log.push(`  [泉水] 開井（泉量 ${springSupply(s)}／需求 ${springDemand(s)}，民怨 ${s.grievance}）`);
+    }
+    if (s.grievance >= 45 && canHoldTownhall(s).ok) { holdTownhall(s); log.push('  [民怨] 說明會'); }
+    if (s.grievance >= 35 && bathLot(s) < 0 && s.money > BATH.cost + 10000) {
+      const i = s.lots.findIndex((l) => l.unlocked && !l.shop && !l.facility);
+      if (i >= 0 && buildBath(s, i).ok) log.push('  [民怨] 共同浴場');
+    }
+  }
   if (s.money > 25000) {
     const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
     if (i >= 0) renovate(s, i);
   }
-  for (const act of ['coupon', 'templeFair', 'legend', 'influencer', 'mascot'] as const) {
+  for (const act of ['yokaiFest', 'coupon', 'templeFair', 'legend', 'influencer', 'mascot'] as const) {
     const v = act === 'legend' ? street.activities.legends[0].id : act === 'mascot' ? street.activities.mascots[0].id : act === 'influencer' ? 'foodie' : undefined;
     if (canStartActivity(s, act, v).ok && s.money > 15000) { startActivity(s, act, v, rand); log.push(`  [活動] ${act}`); break; }
   }
@@ -85,7 +101,9 @@ for (let d = 1; d <= 30; d++) {
     ` 資金${String(s.money).padStart(7)} 店${presentTenants(s).length} 滿意[${sats}]` + (sum.leftShops.length ? ` 退租:${sum.leftShops}` : '') +
     (sum.stranded ? ` 山下${sum.stranded}` : '') + (sum.falls ? ` 跌倒${sum.falls}(救${sum.fallsTreated})` : '') +
     (sum.kami ? ` 神隱${sum.vanished}(找回${sum.found})${sum.ritual ? '有儀式' : ''}` : '') + ` 外國${sum.foreign}` +
-    (sum.overnight ? ` 住宿${sum.overnight}(${sum.avgStars?.toFixed(1)}★)` : ''),
+    (sum.overnight ? ` 住宿${sum.overnight}(${sum.avgStars?.toFixed(1)}★)` : '') +
+    (sum.spring ? ` 泉${sum.spring.supply}/${sum.spring.demand} 怨${sum.grievanceAfter} 火${s.fireLevel}(${s.fireMode})$${sum.fireIncome}` : '') +
+    (sum.closed?.length ? ` 靜坐:${sum.closed}` : '') + (sum.festival ? ' ★妖怪祭' : '') + (s.festival?.leafCommission ? ` 樹葉$${s.festival.leafCommission}` : ''),
   );
   for (const l of log.splice(0)) console.log(l);
   if (s.chapterComplete) { console.log('*** 過關 ***'); break; }

@@ -6,6 +6,45 @@ export const CHAR_W = 40;
 export const CHAR_H = 78;
 
 const darken = (c: number, p: number) => Phaser.Display.Color.ValueToColor(c).darken(p).color;
+const lighten = (c: number, p: number) => Phaser.Display.Color.ValueToColor(c).lighten(p).color;
+
+/** 雪女：和服白、腰帶淡藍、皮膚很白 */
+const YUKI_ROBE = 0xf2f6fb;
+const YUKI_OBI = 0x9ccbe8;
+const paleSkin = (c: number) => Phaser.Display.Color.Interpolate.ColorWithColor(
+  Phaser.Display.Color.ValueToColor(c), Phaser.Display.Color.ValueToColor(0xf4f8ff), 100, 75,
+);
+const toHex = (o: { r: number; g: number; b: number }) => (o.r << 16) | (o.g << 8) | o.b;
+
+/** 浴衣腰帶：跟衣服顏色對比 */
+function obiColor(shirt: number): number {
+  const c = Phaser.Display.Color.ValueToColor(shirt);
+  const lum = c.red * 0.3 + c.green * 0.59 + c.blue * 0.11;
+  return lum < 110 ? 0xf2c14e : 0xc0392b;
+}
+
+/** 毛茸茸的尾巴（狸貓有條紋，狐狸白尾尖） */
+function fluffyTail(g: Phaser.GameObjects.Graphics, x: number, y: number, kind: 'tanuki' | 'kitsune', frame: number): void {
+  const sway = frame ? 2 : 0;
+  if (kind === 'tanuki') {
+    g.fillStyle(0x8a6040);
+    g.fillEllipse(x - 4, y - 4 - sway, 16, 24);
+    g.fillEllipse(x - 8, y - 14 - sway, 14, 14);
+    g.fillStyle(0x3a2a20);
+    for (let k = 0; k < 3; k++) g.fillRect(x - 11 + k, y - 10 + k * 6 - sway, 14 - k * 2, 3);
+    g.fillStyle(0x2a1d17);
+    g.fillCircle(x - 9, y - 19 - sway, 5);
+  } else {
+    g.fillStyle(0xe0823a);
+    g.fillPoints([
+      { x: x + 2, y: y }, { x: x - 6, y: y - 8 - sway }, { x: x - 12, y: y - 20 - sway },
+      { x: x - 10, y: y - 30 - sway }, { x: x - 3, y: y - 24 - sway }, { x: x + 4, y: y - 10 },
+    ], true);
+    g.fillEllipse(x - 5, y - 14 - sway, 11, 20);
+    g.fillStyle(0xfbf6ec);
+    g.fillEllipse(x - 10, y - 28 - sway, 8, 9);
+  }
+}
 
 /**
  * 畫一個側面 Q 版人物，原點在 (0,0) 左上角，腳底在 CHAR_H。
@@ -22,18 +61,30 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
   const bodyH = kid ? 20 : 26;
   const legTop = bodyTop + bodyH - 2;
   const legH = CHAR_H - 3 - legTop;
+  const acc = look.accessory;
+  const robe = acc === 'yukata' || acc === 'yukionna';
+  const skin = acc === 'yukionna' ? toHex(paleSkin(look.skin)) : look.skin;
+  const shirt = acc === 'yukionna' ? YUKI_ROBE : look.shirt;
 
-  // 腿
+  // 尾巴在最後面
+  if (acc === 'tanuki' || acc === 'kitsune') fluffyTail(g, cx - 8, legTop + 4, acc, frame);
+
+  // 腿（穿浴衣/和服時藏在衣服裡）
   g.fillStyle(look.pants);
-  if (frame === 0) {
+  if (robe) {
+    // 白足袋
+    g.fillStyle(0xf6f4ee);
+    g.fillRect(frame === 0 ? cx - 7 : cx - 10, CHAR_H - 8, 6, 5);
+    g.fillRect(frame === 0 ? cx + 1 : cx + 4, CHAR_H - 8, 6, 5);
+  } else if (frame === 0) {
     g.fillRect(cx - 7, legTop, 6, legH);
     g.fillRect(cx + 1, legTop, 6, legH);
   } else {
     g.fillRect(cx - 10, legTop, 6, legH - 1);
     g.fillRect(cx + 4, legTop, 6, legH - 1);
   }
-  // 鞋
-  g.fillStyle(0x2a2420);
+  // 鞋（木屐）
+  g.fillStyle(robe ? 0x8a5e38 : 0x2a2420);
   if (frame === 0) {
     g.fillRect(cx - 8, CHAR_H - 4, 8, 4);
     g.fillRect(cx + 1, CHAR_H - 4, 9, 4);
@@ -42,8 +93,58 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
     g.fillRect(cx + 4, CHAR_H - 5, 9, 4);
   }
   // 身體
-  g.fillStyle(look.shirt);
-  g.fillRoundedRect(cx - 10, bodyTop, 20, bodyH, 6);
+  g.fillStyle(shirt);
+  if (robe) {
+    // 浴衣/和服：從肩膀一路蓋到腳踝，下襬微開
+    const hem = CHAR_H - 7;
+    const flare = frame === 0 ? 11 : 13;
+    if (acc === 'yukionna') {
+      // 雪女下襬半透明
+      g.fillRoundedRect(cx - 10, bodyTop, 20, bodyH, 6);
+      g.fillStyle(shirt, 0.92);
+      g.fillPoints([{ x: cx - 10, y: bodyTop + bodyH - 6 }, { x: cx + 10, y: bodyTop + bodyH - 6 }, { x: cx + flare, y: hem - 8 }, { x: cx - flare, y: hem - 8 }], true);
+      g.fillStyle(shirt, 0.55);
+      g.fillPoints([{ x: cx - flare, y: hem - 8 }, { x: cx + flare, y: hem - 8 }, { x: cx + flare + 1, y: hem }, { x: cx - flare - 1, y: hem }], true);
+      g.fillStyle(0xcfe4f4, 0.8);
+      g.fillRect(cx - 9, bodyTop + bodyH, 2, hem - bodyTop - bodyH - 2);
+    } else {
+      g.fillRoundedRect(cx - 10, bodyTop, 20, bodyH, 6);
+      g.fillPoints([{ x: cx - 10, y: bodyTop + bodyH - 6 }, { x: cx + 10, y: bodyTop + bodyH - 6 }, { x: cx + flare, y: hem }, { x: cx - flare, y: hem }], true);
+      // 浴衣花紋
+      g.fillStyle(lighten(shirt, 30), 0.85);
+      for (let k = 0; k < 6; k++) g.fillCircle(cx - 6 + (k % 3) * 6 + (k > 2 ? 3 : 0), bodyTop + bodyH + 4 + Math.floor(k / 3) * 9, 1.6);
+      g.fillCircle(cx - 4, bodyTop + 6, 1.6);
+      g.fillCircle(cx + 3, bodyTop + 9, 1.6);
+    }
+    // 下襬的衣縫
+    g.lineStyle(1, darken(shirt, 18));
+    g.lineBetween(cx + 3, bodyTop + bodyH - 4, cx + 5, hem);
+    // 交領
+    g.lineStyle(2, acc === 'yukionna' ? 0xd8e8f4 : 0xfbf6ec);
+    g.lineBetween(cx - 4, bodyTop + 1, cx + 4, bodyTop + 10);
+    g.lineBetween(cx + 5, bodyTop + 1, cx + 3, bodyTop + 8);
+    // 腰帶 + 背後的蝴蝶結
+    const obi = acc === 'yukionna' ? YUKI_OBI : obiColor(shirt);
+    const oy = bodyTop + bodyH * 0.55;
+    g.fillStyle(obi);
+    g.fillRect(cx - 10, oy, 20, 6);
+    g.fillTriangle(cx - 10, oy + 3, cx - 17, oy - 3, cx - 16, oy + 9);
+    g.fillStyle(darken(obi, 20));
+    g.fillRect(cx - 12, oy + 1, 4, 4);
+  } else {
+    g.fillRoundedRect(cx - 10, bodyTop, 20, bodyH, 6);
+  }
+  if (acc === 'kappa') {
+    // 河童：背上的龜殼
+    g.fillStyle(0x5a6a2a);
+    g.fillEllipse(cx - 12, bodyTop + bodyH * 0.5, 10, bodyH + 2);
+    g.fillStyle(0xc8b870);
+    g.fillRect(cx - 8, bodyTop + 2, 2, bodyH - 4);
+    g.lineStyle(1, 0x3a4a1a);
+    g.strokeEllipse(cx - 12, bodyTop + bodyH * 0.5, 10, bodyH + 2);
+    g.lineBetween(cx - 17, bodyTop + bodyH * 0.35, cx - 7, bodyTop + bodyH * 0.35);
+    g.lineBetween(cx - 17, bodyTop + bodyH * 0.65, cx - 7, bodyTop + bodyH * 0.65);
+  }
   if (look.accessory === 'apron') {
     g.fillStyle(0xf6f0e0);
     g.fillRoundedRect(cx - 7, bodyTop + 6, 14, bodyH - 4, 3);
@@ -55,11 +156,12 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
     g.fillRect(cx - 9, bodyTop, 18, 5);
     g.fillRect(cx + 4, bodyTop + 4, 5, 10);
   }
-  // 手
-  g.fillStyle(darken(look.shirt, 12));
-  g.fillRoundedRect(frame === 0 ? cx - 13 : cx - 12, bodyTop + 3, 5, 18, 2);
-  g.fillRoundedRect(frame === 0 ? cx + 8 : cx + 7, bodyTop + 3, 5, 18, 2);
-  g.fillStyle(look.skin);
+  // 手（浴衣袖子寬一點）
+  g.fillStyle(darken(shirt, 12));
+  const sw = robe ? 7 : 5;
+  g.fillRoundedRect(frame === 0 ? cx - 13 : cx - 12, bodyTop + 3, sw, 18, 2);
+  g.fillRoundedRect(frame === 0 ? cx + 8 : cx + 7, bodyTop + 3, sw, 18, 2);
+  g.fillStyle(skin);
   g.fillCircle(frame === 0 ? cx - 10.5 : cx - 9.5, bodyTop + 22, 2.5);
   g.fillCircle(frame === 0 ? cx + 10.5 : cx + 9.5, bodyTop + 22, 2.5);
   if (look.accessory === 'camera') {
@@ -78,7 +180,7 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
   }
 
   // 頭
-  g.fillStyle(look.skin);
+  g.fillStyle(skin);
   g.fillCircle(cx, headY, headR);
   // 耳朵
   g.fillCircle(cx - 3, headY + 1, 3);
@@ -149,6 +251,75 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
       g.fillStyle(0xe8e4dc);
       g.fillTriangle(cx + 1, headY + 5, cx + 11, headY + 4, cx + 6, headY + 15);
       break;
+    case 'kappa':
+      // 頭頂的皿（盤子）+ 水光
+      g.fillStyle(look.hair);
+      g.fillEllipse(cx, headY - headR + 2, headR * 2 + 2, 7);
+      g.fillStyle(0xf4f4f0);
+      g.fillEllipse(cx, headY - headR + 1, headR * 1.6, 5);
+      g.fillStyle(0x9ccbe8);
+      g.fillEllipse(cx + 1, headY - headR + 1, headR * 1.1, 2.5);
+      g.fillStyle(0xffffff);
+      g.fillRect(cx - 2, headY - headR, 3, 1);
+      // 黃色小鳥嘴
+      g.fillStyle(0xf2b83a);
+      g.fillTriangle(cx + 6, headY + 5, cx + 6, headY + 10, cx + 13, headY + 7);
+      g.fillStyle(0xc88a20);
+      g.fillRect(cx + 6, headY + 7, 6, 1);
+      break;
+    case 'tanuki':
+      // 圓耳朵
+      g.fillStyle(0x6a4a30);
+      g.fillCircle(cx - 5, headY - headR + 1, 4);
+      g.fillCircle(cx + 4, headY - headR, 4);
+      g.fillStyle(0x3a2a20);
+      g.fillCircle(cx - 5, headY - headR + 1, 2);
+      g.fillCircle(cx + 4, headY - headR, 2);
+      // 眼睛周圍的黑眼罩
+      g.fillStyle(0x3a2a20, 0.85);
+      g.fillEllipse(cx + 5, headY + 2, 8, 6);
+      g.fillStyle(0xfbf6ec);
+      g.fillCircle(cx + 5.5, headY + 1, 1.2);
+      // 鼻頭
+      g.fillStyle(0x2a1d17);
+      g.fillCircle(cx + headR - 1, headY + 4, 1.6);
+      break;
+    case 'kitsune':
+      // 尖耳朵
+      g.fillStyle(0xe0823a);
+      g.fillTriangle(cx - 8, headY - headR + 4, cx - 5, headY - headR - 8, cx - 1, headY - headR + 2);
+      g.fillTriangle(cx + 1, headY - headR + 2, cx + 6, headY - headR - 9, cx + 8, headY - headR + 4);
+      g.fillStyle(0xfbf6ec);
+      g.fillTriangle(cx + 3, headY - headR + 2, cx + 6, headY - headR - 5, cx + 7, headY - headR + 2);
+      // 白狐面具（側面，鼻尖往前凸）
+      g.fillStyle(0xfdfbf6);
+      g.fillPoints([
+        { x: cx - 2, y: headY - 6 }, { x: cx + 6, y: headY - 7 }, { x: cx + 15, y: headY + 3 },
+        { x: cx + 12, y: headY + 6 }, { x: cx + 3, y: headY + 8 }, { x: cx - 2, y: headY + 4 },
+      ], true);
+      g.lineStyle(1.5, 0xd23a32);
+      g.lineBetween(cx + 2, headY - 2, cx + 8, headY);
+      g.lineBetween(cx + 1, headY - 5, cx + 4, headY - 1);
+      g.fillStyle(0x222222);
+      g.fillRect(cx + 5, headY + 1, 3, 1.5);
+      g.fillStyle(0xd23a32);
+      g.fillCircle(cx + 14, headY + 3, 1.4);
+      g.lineStyle(1, 0xd23a32);
+      g.lineBetween(cx + 9, headY + 5, cx + 13, headY + 5);
+      break;
+    case 'yukionna':
+      // 冰晶閃光
+      g.fillStyle(0xcfeaff, 0.95);
+      for (const [sx, sy, r] of [[cx - 14, headY - 6, 2.5], [cx + 14, bodyTop + 6, 2], [cx - 15, bodyTop + 26, 2.2], [cx + 13, CHAR_H - 18, 1.8]]) {
+        g.fillTriangle(sx - r, sy, sx + r, sy, sx, sy - r * 2.2);
+        g.fillTriangle(sx - r, sy, sx + r, sy, sx, sy + r * 2.2);
+        g.fillTriangle(sx, sy - r, sx, sy + r, sx - r * 2.2, sy);
+        g.fillTriangle(sx, sy - r, sx, sy + r, sx + r * 2.2, sy);
+      }
+      // 淡藍嘴唇
+      g.lineStyle(1.2, 0x7aa8d0);
+      g.lineBetween(cx + 6, headY + 8, cx + 9, headY + 8);
+      break;
   }
   // 老人家拐杖
   if (old) {
@@ -204,9 +375,26 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, look: Look, x: numb
   g.strokeCircle(x, y, r);
   const hr = r * 0.52;
   const hy = y - r * 0.05;
+  const acc = look.accessory;
+  const skin = acc === 'yukionna' ? toHex(paleSkin(look.skin)) : look.skin;
+  const shirt = acc === 'yukionna' ? YUKI_ROBE : look.shirt;
+  // 尾巴從肩後探出來
+  if (acc === 'tanuki' || acc === 'kitsune') fluffyTail(g, x - r * 0.45, y + r * 0.75, acc, 0);
   // 肩膀
-  g.fillStyle(look.shirt);
+  g.fillStyle(shirt);
   g.fillEllipse(x, y + r * 0.85, r * 1.5, r * 0.9);
+  if (acc === 'yukata' || acc === 'yukionna') {
+    // 交領
+    g.lineStyle(Math.max(2, r * 0.07), acc === 'yukionna' ? YUKI_OBI : 0xfbf6ec);
+    g.lineBetween(x - r * 0.3, y + r * 0.45, x + r * 0.08, y + r * 0.8);
+    g.lineBetween(x + r * 0.3, y + r * 0.45, x - r * 0.04, y + r * 0.72);
+  }
+  if (acc === 'kappa') {
+    // 龜殼邊緣從肩後露出
+    g.fillStyle(0x5a6a2a);
+    g.fillEllipse(x - r * 0.62, y + r * 0.62, r * 0.4, r * 0.55);
+    g.fillEllipse(x + r * 0.62, y + r * 0.62, r * 0.4, r * 0.55);
+  }
   if (look.accessory === 'apron') {
     g.fillStyle(0xf6f0e0);
     g.fillRect(x - r * 0.25, y + r * 0.55, r * 0.5, r * 0.4);
@@ -217,7 +405,7 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, look: Look, x: numb
   if (look.hairStyle === 'ponytail') g.fillCircle(x + hr * 1.05, hy - hr * 0.3, hr * 0.45);
   if (look.hairStyle === 'bun') g.fillCircle(x, hy - hr * 1.1, hr * 0.45);
   // 臉
-  g.fillStyle(look.skin);
+  g.fillStyle(skin);
   g.fillCircle(x, hy, hr);
   g.fillCircle(x - hr, hy + 2, hr * 0.22);
   g.fillCircle(x + hr, hy + 2, hr * 0.22);
@@ -293,6 +481,75 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, look: Look, x: numb
     case 'camera':
       g.fillStyle(0x222222);
       g.fillRoundedRect(x + hr * 0.5, y + r * 0.5, hr * 0.8, hr * 0.55, 3);
+      break;
+    case 'kappa':
+      // 頭頂的皿 + 水光
+      g.fillStyle(0xf4f4f0);
+      g.fillEllipse(x, hy - hr * 0.85, hr * 1.3, hr * 0.45);
+      g.fillStyle(0x9ccbe8);
+      g.fillEllipse(x, hy - hr * 0.86, hr * 0.95, hr * 0.25);
+      g.fillStyle(0xffffff);
+      g.fillEllipse(x - hr * 0.2, hy - hr * 0.9, hr * 0.25, hr * 0.08);
+      // 鳥嘴
+      g.fillStyle(0xf2b83a);
+      g.fillTriangle(x - hr * 0.3, ey + hr * 0.3, x + hr * 0.3, ey + hr * 0.3, x, ey + hr * 0.62);
+      g.lineStyle(1.5, 0xc88a20);
+      g.lineBetween(x - hr * 0.28, ey + hr * 0.38, x + hr * 0.28, ey + hr * 0.38);
+      break;
+    case 'tanuki':
+      // 圓耳朵
+      for (const d of [-1, 1]) {
+        g.fillStyle(0x6a4a30);
+        g.fillCircle(x + d * hr * 0.65, hy - hr * 0.8, hr * 0.28);
+        g.fillStyle(0x3a2a20);
+        g.fillCircle(x + d * hr * 0.65, hy - hr * 0.8, hr * 0.14);
+        // 黑眼罩
+        g.fillStyle(0x3a2a20, 0.85);
+        g.fillEllipse(x + d * hr * 0.38, ey + hr * 0.02, hr * 0.5, hr * 0.36);
+        g.fillStyle(0xfbf6ec);
+        g.fillCircle(x + d * hr * 0.35, ey - hr * 0.02, Math.max(1.2, hr * 0.07));
+      }
+      g.fillStyle(0x2a1d17);
+      g.fillEllipse(x, ey + hr * 0.3, hr * 0.22, hr * 0.15);
+      break;
+    case 'kitsune':
+      // 尖耳朵
+      for (const d of [-1, 1]) {
+        g.fillStyle(0xe0823a);
+        g.fillTriangle(x + d * hr * 0.25, hy - hr * 0.8, x + d * hr * 0.95, hy - hr * 0.5, x + d * hr * 0.75, hy - hr * 1.5);
+        g.fillStyle(0xfbf6ec);
+        g.fillTriangle(x + d * hr * 0.45, hy - hr * 0.8, x + d * hr * 0.8, hy - hr * 0.65, x + d * hr * 0.72, hy - hr * 1.2);
+      }
+      // 白狐面具（蓋住上半臉）
+      g.fillStyle(0xfdfbf6);
+      g.fillPoints([
+        { x: x - hr * 0.85, y: hy - hr * 0.45 }, { x: x + hr * 0.85, y: hy - hr * 0.45 },
+        { x: x + hr * 0.75, y: hy + hr * 0.3 }, { x: x + hr * 0.15, y: hy + hr * 0.62 },
+        { x: x - hr * 0.15, y: hy + hr * 0.62 }, { x: x - hr * 0.75, y: hy + hr * 0.3 },
+      ], true);
+      g.lineStyle(2, 0xd23a32);
+      for (const d of [-1, 1]) {
+        g.lineBetween(x + d * hr * 0.2, ey - hr * 0.25, x + d * hr * 0.6, ey - hr * 0.05);
+        g.lineBetween(x + d * hr * 0.25, ey + hr * 0.25, x + d * hr * 0.55, ey + hr * 0.15);
+      }
+      g.lineBetween(x, hy - hr * 0.42, x, hy - hr * 0.2);
+      g.fillStyle(0x222222);
+      g.fillEllipse(x - hr * 0.35, ey + hr * 0.05, hr * 0.25, hr * 0.07);
+      g.fillEllipse(x + hr * 0.35, ey + hr * 0.05, hr * 0.25, hr * 0.07);
+      g.fillStyle(0xd23a32);
+      g.fillCircle(x, hy + hr * 0.55, hr * 0.07);
+      break;
+    case 'yukionna':
+      // 淡藍腰帶露一點 + 冰晶
+      g.fillStyle(YUKI_OBI);
+      g.fillRect(x - r * 0.55, y + r * 0.9, r * 1.1, r * 0.1);
+      g.fillStyle(0xcfeaff, 0.95);
+      for (const [sx, sy, sr] of [[x - r * 0.7, y - r * 0.55, r * 0.06], [x + r * 0.72, y - r * 0.2, r * 0.05], [x + r * 0.6, y + r * 0.5, r * 0.045]]) {
+        g.fillTriangle(sx - sr, sy, sx + sr, sy, sx, sy - sr * 2.4);
+        g.fillTriangle(sx - sr, sy, sx + sr, sy, sx, sy + sr * 2.4);
+        g.fillTriangle(sx, sy - sr, sx, sy + sr, sx - sr * 2.4, sy);
+        g.fillTriangle(sx, sy - sr, sx, sy + sr, sx + sr * 2.4, sy);
+      }
       break;
   }
 }

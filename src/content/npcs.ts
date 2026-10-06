@@ -86,6 +86,47 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0x5b4a8a, pants: 0x2b2b3a, accessory: 'camera', age: 'young' }),
   },
   kevin: { id: 'kevin', name: '大嘴巴 Kevin', look: INFLUENCERS.find((i) => i.id === 'loud')!.look! },
+  // ---- 關子嶺 ----
+  gzChief: {
+    id: 'gzChief', name: '關子嶺協會 陳理事長',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x7a4a2a, pants: 0x3d3a36, accessory: 'glasses', age: 'mid' }),
+  },
+  gzAuntie: {
+    id: 'gzAuntie', name: '里民代表 罔市嬤',
+    look: L({ skin: 0xd9a07a, hair: 0xb7b1a8, hairStyle: 'bun', shirt: 0x8a5a9a, pants: 0x3d3a36, accessory: 'none', age: 'old' }),
+  },
+  activist: {
+    id: 'activist', name: '環保青年 阿哲',
+    look: L({ skin: 0xf2c9a5, hair: 0x111111, hairStyle: 'spiky', shirt: 0x3f8f4f, pants: 0x54627a, accessory: 'headband', age: 'young' }),
+  },
+  gzElder: {
+    id: 'gzElder', name: '老泉工 水伯',
+    look: L({ skin: 0xc98e66, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0x5a6a7a, pants: 0x3d3a36, accessory: 'hat', age: 'old' }),
+  },
+  bbqBoss: {
+    id: 'bbqBoss', name: '外地烤肉業者 黃董',
+    look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xd9a03b, pants: 0x2b2b2b, accessory: 'glasses', age: 'mid' }),
+  },
+  festGuest: {
+    id: 'festGuest', name: '祭典遊客',
+    look: L({ skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0x4f7dc6, pants: 0x4f7dc6, accessory: 'yukata', age: 'young' }),
+  },
+  kappa: {
+    id: 'kappa', name: '河童',
+    look: L({ skin: 0x7fb06a, hair: 0x3f6a3a, hairStyle: 'bob', shirt: 0x5a8a4a, pants: 0x4a7a3a, accessory: 'kappa', age: 'kid' }),
+  },
+  tanuki: {
+    id: 'tanuki', name: '狸貓',
+    look: L({ skin: 0xb88a5a, hair: 0x5a3a20, hairStyle: 'short', shirt: 0x8a6a4a, pants: 0x6a4a2a, accessory: 'tanuki', age: 'mid' }),
+  },
+  kitsune: {
+    id: 'kitsune', name: '狐狸',
+    look: L({ skin: 0xf6e7d0, hair: 0xe9a03b, hairStyle: 'long', shirt: 0xf6f0e0, pants: 0xb3262e, accessory: 'kitsune', age: 'young' }),
+  },
+  yukionna: {
+    id: 'yukionna', name: '雪女',
+    look: L({ skin: 0xf4f6fb, hair: 0x111111, hairStyle: 'long', shirt: 0xf0f4fa, pants: 0xdbe6f4, accessory: 'yukionna', age: 'young' }),
+  },
   cat: {
     id: 'cat', name: '老街貓',
     look: L({ skin: 0xf2a93b, hair: 0xf2a93b, hairStyle: 'short', shirt: 0xf2a93b, pants: 0xf2a93b, accessory: 'none', age: 'kid' }),
