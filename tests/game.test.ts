@@ -494,9 +494,9 @@ describe('關子嶺', () => {
     const s = gz();
     expect(registerFireVisitor(s)).toBe(0);
     expect(setFireMode(s, 'full').ok).toBe(true);
-    expect(registerFireVisitor(s)).toBe(40);
+    expect(registerFireVisitor(s)).toBe(60);
     s.fireLevel = 2;
-    expect(registerFireVisitor(s)).toBe(80);
+    expect(registerFireVisitor(s)).toBe(120);
     const m = s.money;
     expect(setFireMode(s, 'protect').ok).toBe(true);
     expect(s.money).toBe(m - fireDowngradeCost('full', 'protect'));
