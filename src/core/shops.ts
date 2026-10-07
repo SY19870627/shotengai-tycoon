@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown';
 
 export interface ShopDef {
   id: string;
@@ -26,6 +26,8 @@ export interface ShopDef {
   margin?: number;
   /** 每天要用掉的泉量（關子嶺；每升一級 +1） */
   spring?: number;
+  /** 主要客群（東原：居民／遊客；不填代表都有） */
+  audience?: 'resident' | 'tourist';
   /** 營業時間 [開, 關)，24 小時制 */
   hours: [number, number];
   wallColor: number;
@@ -38,19 +40,19 @@ const S = (d: ShopDef) => d;
 export const SHOPS: ShopDef[] = [
   // ---- 通用 ----
   S({
-    id: 'grocery', name: '雜貨店', short: '雜貨', category: 'daily',
+    id: 'grocery', name: '雜貨店', short: '雜貨', category: 'daily', audience: 'resident',
     spend: 60, appeal: 0.072, capacity: 4, stayMinutes: 10, upkeep: 250, baseRent: 600,
     hours: [8, 21], wallColor: 0xe8d5b0, awningColor: 0x3f8f4f,
     description: '什麼都賣一點，來客穩定但不會大紅。',
   }),
   S({
-    id: 'cafe', name: '咖啡廳', short: '咖啡', category: 'leisure',
+    id: 'cafe', name: '咖啡廳', short: '咖啡', category: 'leisure', audience: 'tourist',
     spend: 150, appeal: 0.06, capacity: 6, stayMinutes: 45, upkeep: 500, baseRent: 1050,
     hours: [9, 20], wallColor: 0x6b4a3a, awningColor: 0xe9e2d0,
     description: '客人坐比較久，下雨天特別受歡迎。',
   }),
   S({
-    id: 'souvenir', name: '伴手禮店', short: '伴手禮', category: 'retail',
+    id: 'souvenir', name: '伴手禮店', short: '伴手禮', category: 'retail', audience: 'tourist',
     spend: 280, appeal: 0.048, capacity: 5, stayMinutes: 15, upkeep: 450, baseRent: 1200,
     hours: [10, 21], wallColor: 0xf3e3c2, awningColor: 0xb3262e,
     description: '觀光客多的時候很好賣，平日比較冷清。',
@@ -154,6 +156,67 @@ export const SHOPS: ShopDef[] = [
     hours: [10, 20], wallColor: 0xdfe8cf, awningColor: 0x4a7a3a,
     description: '野菜、香菇雞湯。天下第一鼎的主力。',
   }),
+  // ---- 東原 ----
+  S({
+    id: 'meatball', name: '肉圓店', short: '肉圓', category: 'food',
+    spend: 60, appeal: 0.09, capacity: 6, stayMinutes: 15, upkeep: 200, baseRent: 600,
+    hours: [7, 21], wallColor: 0xe6d8bc, awningColor: 0xc0392b,
+    description: '清蒸的肉圓淋上醬汁，一碗配一碗湯。居民天天吃，遊客也會專程來。',
+  }),
+  S({
+    id: 'barber', name: '理髮店', short: '理髮', category: 'daily', audience: 'resident',
+    spend: 150, appeal: 0.04, capacity: 2, stayMinutes: 35, upkeep: 150, baseRent: 500,
+    hours: [8, 20], wallColor: 0xdfe6ea, awningColor: 0x2f6fb0,
+    description: '老街坊剪頭髮兼聊八卦的地方。遊客幾乎不會進來，但居民的往事都在這裡。',
+  }),
+  S({
+    id: 'pharmacy', name: '藥局', short: '藥局', category: 'daily', audience: 'resident',
+    spend: 120, appeal: 0.045, capacity: 3, stayMinutes: 10, upkeep: 250, baseRent: 700,
+    hours: [8, 21], wallColor: 0xeef0e6, awningColor: 0x3f8f4f,
+    description: '包藥、量血壓、聽街坊說心事。居民很需要，遊客用不到。',
+  }),
+  S({
+    id: 'icepop', name: '糖水冰鋪', short: '冰鋪', category: 'food',
+    spend: 45, appeal: 0.085, capacity: 6, stayMinutes: 12, upkeep: 150, baseRent: 500,
+    hours: [10, 21], wallColor: 0xf3ead6, awningColor: 0x5fa8c9,
+    description: '用黑糖熬的糖水淋在刨冰上。要先找回糖水的作法才能重新開張。',
+  }),
+  S({
+    id: 'platekoe', name: '盤子碗粿', short: '碗粿', category: 'food',
+    spend: 55, appeal: 0.085, capacity: 6, stayMinutes: 15, upkeep: 180, baseRent: 550,
+    hours: [7, 15], wallColor: 0xece0c8, awningColor: 0xb5651d,
+    description: '用盤子蒸的碗粿，配一條花生糯米腸。要先找回作法才能重新開張。',
+  }),
+  S({
+    id: 'mantou', name: '炸饅頭', short: '饅頭', category: 'food',
+    spend: 50, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 500,
+    hours: [7, 18], wallColor: 0xf2e8d2, awningColor: 0xd9a03b,
+    description: '饅頭下鍋炸到金黃酥脆。要先找回作法才能重新開張。',
+  }),
+  S({
+    id: 'baozi', name: '包子店', short: '包子', category: 'food', audience: 'resident',
+    spend: 45, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 500,
+    hours: [6, 17], wallColor: 0xf4ecdc, awningColor: 0xd35454,
+    description: '一大早就冒著蒸氣，居民上班上學前買兩顆。',
+  }),
+  S({
+    id: 'ribsoup', name: '排骨酥湯', short: '排骨酥', category: 'food',
+    spend: 80, appeal: 0.08, capacity: 6, stayMinutes: 20, upkeep: 220, baseRent: 650,
+    hours: [10, 20], wallColor: 0xe9dcc0, awningColor: 0x8a4b2a,
+    description: '燉到軟爛的排骨酥加白蘿蔔，一碗暖到心裡。',
+  }),
+  S({
+    id: 'blacksmith', name: '打鐵舖', short: '打鐵', category: 'retail',
+    spend: 300, appeal: 0.03, capacity: 3, stayMinutes: 20, upkeep: 200, baseRent: 500,
+    hours: [8, 18], wallColor: 0x6e6a66, awningColor: 0x3d3a36,
+    description: '打農具、菜刀。居民買鋤頭，遊客買菜刀。要有人學過打鐵的手藝才能開。',
+  }),
+  S({
+    id: 'longan', name: '龍眼乾舖', short: '龍眼乾', category: 'retail', audience: 'tourist',
+    spend: 220, appeal: 0.055, capacity: 4, stayMinutes: 10, upkeep: 250, baseRent: 700,
+    hours: [9, 19], wallColor: 0x8a5a3a, awningColor: 0xe9cf9a,
+    description: '東山焙灶的柴燒龍眼乾。遊客的伴手禮，居民家裡自己就有。',
+  }),
   // ---- 住宿 ----
   S({
     id: 'minshuku', name: '民宿', short: '民宿', category: 'stay',
@@ -206,6 +269,13 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   onsenegg: { bathhouse: 1.1, claypot: 1.1 },
   claypot: { onsenegg: 1.1, cafe: 1.05 },
   sanchan: { claypot: 1.1, souvenir: 1.05 },
+  meatball: { icepop: 1.15, ribsoup: 1.1 },
+  icepop: { meatball: 1.15, platekoe: 1.1 },
+  platekoe: { icepop: 1.1, meatball: 1.05 },
+  ribsoup: { meatball: 1.1 },
+  barber: { pharmacy: 1.1, grocery: 1.05 },
+  pharmacy: { barber: 1.1, grocery: 1.1 },
+  longan: { cafe: 1.1, blacksmith: 1.05 },
 };
 
 /** 同一種店距離兩格以內會互搶客人 */

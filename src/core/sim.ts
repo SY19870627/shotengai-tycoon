@@ -49,8 +49,8 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
       arrivals.push({ origin: g.origin, start: g.lot });
     }
     for (const a of arrivals) {
-      notePasserby(s);
       const origin = a.origin;
+      notePasserby(s, origin);
       // 濃霧跌倒、神隱消失
       if (rand() < fallChance(s)) registerFall(s, rand);
       if (rand() < vanishChance(s) && !registerVanish(s, rand)) continue;

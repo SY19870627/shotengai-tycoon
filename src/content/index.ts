@@ -2,9 +2,10 @@ import type { StreetDef } from '../core/types';
 import { SHENKENG } from './shenkeng';
 import { JIUFEN } from './jiufen';
 import { GUANZILING } from './guanziling';
+import { DONGYUAN } from './dongyuan';
 
 /** 尚未開放的老街（地圖上先顯示） */
-function comingSoon(id: string, name: string, region: string, difficulty: number, tagline: string, map: { x: number; y: number }): StreetDef {
+export function comingSoon(id: string, name: string, region: string, difficulty: number, tagline: string, map: { x: number; y: number }): StreetDef {
   return {
     id, name, region, difficulty, tagline, map, intro: '', playable: false,
     facade: 'redbrick', backdrop: 'basin-hills', ground: 'brick', layout: [], landmarks: [],
@@ -18,7 +19,7 @@ export const STREETS: Record<string, StreetDef> = {
   shenkeng: SHENKENG,
   jiufen: JIUFEN,
   guanziling: GUANZILING,
-  dongyuan: comingSoon('dongyuan', '東原老街', '台南市東山區', 5, '偏僻沒資源・超高難度', { x: 0.465, y: 0.695 }),
+  dongyuan: DONGYUAN,
 };
 
 /** 劇情模式的順序 */

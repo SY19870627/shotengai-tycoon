@@ -127,8 +127,50 @@ export interface Effects {
   springBonus?: number;
   /** 關子嶺：妖怪好感 */
   yokaiFavor?: number;
+  /** 東原：回憶點數增減 */
+  memory?: Partial<Memories>;
+  /** 東原：鄉親認同增減 */
+  kinship?: number;
+  /** 東原：學會老店的作法（店種 id） */
+  recipe?: string;
   /** 過關 */
   chapterComplete?: boolean;
+}
+
+/** 東原：四種回憶點數 */
+export type MemoryKind = 'past' | 'taste' | 'bond' | 'craft';
+export type Memories = Record<MemoryKind, number>;
+
+/** 東原：空屋的屋主 */
+export interface OwnerDef {
+  /** 稱呼，例如「台北工程師 阿凱」 */
+  name: string;
+  /** 店面上掛的小牌子 */
+  tag: string;
+  /** 想說服他時，他說的話 */
+  pitch: string;
+  /** 談成之後說的話 */
+  thanks: string;
+  cost: Partial<Memories>;
+  money: number;
+  /** 屋主的條件 */
+  rule?: OwnerRule;
+  /** 要先發生某個劇情才談得動 */
+  needFlag?: string;
+  /** 還談不動時的提示 */
+  needText?: string;
+}
+
+/** noRenovate 不能改裝、trusted 只租給信得過的人、flowers 要幫忙澆花（每天的小開銷） */
+export type OwnerRule = 'noRenovate' | 'trusted' | 'flowers';
+
+/** 東原：要先找回作法才能重新開張的老店 */
+export interface RecipeDef {
+  shop: string;
+  name: string;
+  cost: Partial<Memories>;
+  /** 說明：作法從哪裡來 */
+  text: string;
 }
 
 export type Step =
@@ -334,6 +376,14 @@ export interface StreetDef {
   quakeDay?: number;
   /** 妖怪祭當天的打烊時間 */
   festivalCloseHour?: number;
+  /** 東原：用回憶點數經營（居民人潮、屋主、老店作法、一開始就在的店） */
+  memory?: {
+    residents: number;
+    owners: OwnerDef[];
+    recipes: RecipeDef[];
+    startTenants: { lot: number; tenant: string; tier: number }[];
+    startMemories: Partial<Memories>;
+  };
   shopTypes: string[];
   tenants: TenantProfile[];
   stories: StoryEvent[];
@@ -389,7 +439,8 @@ export interface Lot {
 }
 
 export type Weather = 'sunny' | 'rain' | 'fog' | 'heavyFog';
-export type Origin = 'local' | 'jp' | 'kr';
+/** resident：東原的村民（只在東原出現） */
+export type Origin = 'local' | 'jp' | 'kr' | 'resident';
 
 export interface Guest {
   lot: number;
@@ -441,6 +492,10 @@ export interface DayStats {
   /** 旅館方案：泳池泳客、晚餐套餐 */
   swimmers?: number;
   dinners?: number;
+  /** 東原：居民、遊客人次；今天找回的回憶 */
+  residents?: number;
+  tourists?: number;
+  mem?: Memories;
 }
 
 export interface DaySummary {
@@ -479,6 +534,12 @@ export interface DaySummary {
   swimmers?: number;
   dinners?: number;
   fireflies?: boolean;
+  /** 東原 */
+  residents?: number;
+  tourists?: number;
+  mem?: Memories;
+  kinshipBefore?: number;
+  kinshipAfter?: number;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
@@ -560,4 +621,12 @@ export interface GameState {
   festival: Festival | null;
   /** 妖怪好感（累積） */
   yokaiFavor: number;
+  // ---- 東原（其他老街用預設值） ----
+  memories: Memories;
+  /** 還沒滿一點的零頭（居民聊天慢慢累積） */
+  memFrac: Memories;
+  /** 學會的老店作法 */
+  recipes: string[];
+  /** 鄉親認同 0~100 */
+  kinship: number;
 }
