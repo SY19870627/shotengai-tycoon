@@ -43,8 +43,8 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number, var
     case 'spring': standX = drawSpring(ctx); break;
     case 'fire': standX = drawFire(ctx, variant ?? 'protect'); break;
     case 'fireshrine': standX = drawFireShrine(ctx); break;
-    case 'treehouse': standX = drawTreehouse(ctx); break;
-    case 'clinic': standX = drawClinic(ctx); break;
+    case 'treehouse': standX = drawTreehouse(ctx, variant ?? '2016'); break;
+    case 'clinic': standX = drawClinic(ctx, variant ?? '2016'); break;
     case 'kiln': standX = drawKiln(ctx, variant ?? '2016'); break;
     default: standX = drawGenericSign(ctx, id); break;
   }
@@ -1875,63 +1875,91 @@ function drawFireShrine(ctx: Ctx): number {
 
 // ───────────────────────── 東原：老榕樹樹屋 ─────────────────────────
 
-function drawTreehouse(ctx: Ctx): number {
+const BANYAN_GREENS = [0x2a5e34, 0x316c3a, 0x3b7a42, 0x48894c];
+
+/**
+ * 榕樹的後層樹冠 + 主幹 + 氣根。s = 大小（1 = 2016 的老榕樹；越小越年輕）。
+ * 座標以 (cx, 地面) 為原點等比縮放。
+ */
+function banyanBody(g: G, cx: number, w: number, s: number, rootCount = 9): void {
+  const P = (x: number, y: number): Pt => ({ x: cx + x * s, y: y * s });
+  // 樹冠後層（先畫，讓樹幹與氣根在前面）
+  const back: [number, number, number, number, number][] = [
+    [0, -262, w + 10, 150, 0], [-110, -232, 120, 90, 0], [112, -236, 116, 86, 0],
+    [-50, -306, 180, 100, 1], [60, -300, 170, 96, 1],
+  ];
+  for (const [x, y, ew, eh, k] of back) {
+    g.fillStyle(BANYAN_GREENS[k]);
+    g.fillEllipse(cx + x * s, y * s, ew * s, eh * s);
+  }
+  // 粗壯的榕樹主幹（多根纏在一起）
+  const bark = 0x7a6450;
+  g.fillStyle(bark);
+  g.fillPoints(([
+    [-74, 0], [-50, -12], [-40, -70], [-36, -140], [-60, -190], [-120, -222], [-110, -234], [-30, -206],
+    [-8, -246], [12, -246], [26, -204], [110, -238], [120, -224], [44, -186], [34, -130], [42, -60],
+    [56, -12], [84, 0],
+  ] as const).map(([x, y]) => P(x, y)), true);
+  // 纏繞的樹根紋理
+  const ln = (wd: number, col: number, a: number, x0: number, y0: number, x1: number, y1: number) => {
+    g.lineStyle(Math.max(1, wd * s), col, a);
+    const p0 = P(x0, y0), p1 = P(x1, y1);
+    g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+  };
+  ln(5, shade(bark, 0.15), 0.8, -30, -4, -18, -180);
+  ln(5, shade(bark, 0.15), 0.8, 2, -2, 10, -200);
+  ln(5, shade(bark, 0.15), 0.8, 30, -6, 20, -170);
+  ln(2, shade(bark, -0.3), 0.7, -22, -10, -10, -190);
+  ln(2, shade(bark, -0.3), 0.7, 18, -14, 14, -160);
+  ln(2, shade(bark, -0.3), 0.7, -36, -60, -28, -130);
+  // 板根
+  g.fillStyle(shade(bark, -0.08));
+  g.fillTriangle(cx - 100 * s, 0, cx - 40 * s, 0, cx - 44 * s, -40 * s);
+  g.fillTriangle(cx + 44 * s, 0, cx + 110 * s, 0, cx + 46 * s, -36 * s);
+  // 垂下的氣根（細線，有些已經扎進土裡）
+  const roots: [number, number, number][] = [
+    [-130, -224, -60], [-112, -226, -20], [-94, -218, 0], [-70, -210, -90],
+    [70, -214, -70], [92, -222, 0], [116, -228, -40], [134, -226, -110], [-150, -230, -130],
+  ];
+  for (const [x, y0, y1] of roots.slice(0, rootCount)) {
+    const top = P(x, y0), bot = P(x, y1);
+    g.lineStyle(1.5, 0x8a7458, 0.85);
+    g.lineBetween(top.x, top.y, bot.x + 2, bot.y);
+    g.lineStyle(1, 0x9a8468, 0.6);
+    g.lineBetween(top.x + 3, top.y + 4, bot.x + 4, Math.min(-4, bot.y + 20 * s));
+    if (y1 === 0) {
+      g.fillStyle(0x7a6450);
+      g.fillRect(bot.x - 2, -10 * s, 6, 10 * s);
+    }
+  }
+}
+
+/** 榕樹的前層樹冠（蓋在樹幹、樹屋前面） */
+function banyanFront(g: G, cx: number, s: number): void {
+  const front: [number, number, number, number, number][] = [
+    [-130, -258, 90, 56, 2], [126, -262, 96, 56, 2], [40, -324, 110, 44, 3],
+    [-60, -330, 90, 36, 3], [90, -286, 70, 40, 3], [-150, -236, 50, 30, 3],
+  ];
+  for (const [x, y, ew, eh, k] of front) {
+    g.fillStyle(BANYAN_GREENS[k]);
+    g.fillEllipse(cx + x * s, y * s, ew * s, eh * s);
+  }
+  g.fillStyle(0x7cb874, 0.45);
+  for (let i = 0; i < 20; i++) {
+    const a = i * 2.3;
+    g.fillCircle(cx + Math.cos(a) * (50 + (i * 17) % 100) * s, (-282 + Math.sin(a) * 36) * s, (2.5 + (i % 3)) * Math.max(0.7, s));
+  }
+}
+
+function drawTreehouse(ctx: Ctx, variant: string): number {
+  if (variant === '1995') return drawBanyan1995(ctx);
+  if (variant === '1960') return drawBanyan1960(ctx);
   const { g, night, w } = ctx;
   const cx = w / 2 + 10;
   // 地上陰影
   g.fillStyle(0x000000, 0.12);
   g.fillEllipse(cx, -2, w * 0.98, 18);
-
-  // 樹冠後層（先畫，讓樹幹與氣根在前面）
-  const greens = [0x2a5e34, 0x316c3a, 0x3b7a42, 0x48894c];
-  const back: [number, number, number, number, number][] = [
-    [cx, -262, w + 10, 150, 0], [cx - 110, -232, 120, 90, 0], [cx + 112, -236, 116, 86, 0],
-    [cx - 50, -306, 180, 100, 1], [cx + 60, -300, 170, 96, 1],
-  ];
-  for (const [x, y, ew, eh, k] of back) {
-    g.fillStyle(greens[k]);
-    g.fillEllipse(x, y, ew, eh);
-  }
-
-  // 粗壯的榕樹主幹（多根纏在一起）
-  const bark = 0x7a6450;
-  g.fillStyle(bark);
-  g.fillPoints([
-    { x: cx - 74, y: 0 }, { x: cx - 50, y: -12 }, { x: cx - 40, y: -70 }, { x: cx - 36, y: -140 },
-    { x: cx - 60, y: -190 }, { x: cx - 120, y: -222 }, { x: cx - 110, y: -234 }, { x: cx - 30, y: -206 },
-    { x: cx - 8, y: -246 }, { x: cx + 12, y: -246 }, { x: cx + 26, y: -204 }, { x: cx + 110, y: -238 },
-    { x: cx + 120, y: -224 }, { x: cx + 44, y: -186 }, { x: cx + 34, y: -130 }, { x: cx + 42, y: -60 },
-    { x: cx + 56, y: -12 }, { x: cx + 84, y: 0 },
-  ], true);
-  // 纏繞的樹根紋理（淺色）
-  g.lineStyle(5, shade(bark, 0.15), 0.8);
-  g.lineBetween(cx - 30, -4, cx - 18, -180);
-  g.lineBetween(cx + 2, -2, cx + 10, -200);
-  g.lineBetween(cx + 30, -6, cx + 20, -170);
-  g.lineStyle(2, shade(bark, -0.3), 0.7);
-  g.lineBetween(cx - 22, -10, cx - 10, -190);
-  g.lineBetween(cx + 18, -14, cx + 14, -160);
-  g.lineBetween(cx - 36, -60, cx - 28, -130);
-  // 板根
-  g.fillStyle(shade(bark, -0.08));
-  g.fillTriangle(cx - 100, 0, cx - 40, 0, cx - 44, -40);
-  g.fillTriangle(cx + 44, 0, cx + 110, 0, cx + 46, -36);
-
-  // 垂下的氣根（細線，有些已經扎進土裡）
-  const roots: [number, number, number][] = [
-    [cx - 130, -224, -60], [cx - 112, -226, -20], [cx - 94, -218, 0], [cx - 70, -210, -90],
-    [cx + 70, -214, -70], [cx + 92, -222, 0], [cx + 116, -228, -40], [cx + 134, -226, -110], [cx - 150, -230, -130],
-  ];
-  for (const [x, y0, y1] of roots) {
-    g.lineStyle(1.5, 0x8a7458, 0.85);
-    g.lineBetween(x, y0, x + 2, y1);
-    g.lineStyle(1, 0x9a8468, 0.6);
-    g.lineBetween(x + 3, y0 + 4, x + 4, Math.min(-4, y1 + 20));
-    if (y1 === 0) {
-      g.fillStyle(0x7a6450);
-      g.fillRect(x - 2, -10, 6, 10);
-    }
-  }
+  banyanBody(g, cx, w, 1);
 
   // 樹屋平台（架在左右兩根大枝上）
   const px0 = cx - 92, px1 = cx + 60, py = -176;
@@ -1978,19 +2006,7 @@ function drawTreehouse(ctx: Ctx): number {
   night.fillCircle(hx + 18, py - hh / 2 - 2, 26);
 
   // 樹冠前層（蓋住一點屋頂）
-  const front: [number, number, number, number, number][] = [
-    [cx - 130, -258, 90, 56, 2], [cx + 126, -262, 96, 56, 2], [cx + 40, -324, 110, 44, 3],
-    [cx - 60, -330, 90, 36, 3], [cx + 90, -286, 70, 40, 3], [cx - 150, -236, 50, 30, 3],
-  ];
-  for (const [x, y, ew, eh, k] of front) {
-    g.fillStyle(greens[k]);
-    g.fillEllipse(x, y, ew, eh);
-  }
-  g.fillStyle(0x7cb874, 0.45);
-  for (let i = 0; i < 20; i++) {
-    const a = i * 2.3;
-    g.fillCircle(cx + Math.cos(a) * (50 + (i * 17) % 100), -282 + Math.sin(a) * 36, 2.5 + (i % 3));
-  }
+  banyanFront(g, cx, 1);
 
   // 木梯（從地面到平台）
   const lx = px1 - 26;
@@ -2031,19 +2047,27 @@ function drawTreehouse(ctx: Ctx): number {
 
 // ───────────────────────── 東原：街角小診所 ─────────────────────────
 
-function drawClinic(ctx: Ctx): number {
+function drawClinic(ctx: Ctx, variant: string): number {
+  if (variant === '1960') return drawClinic1960(ctx);
+  return drawClinicModern(ctx, variant === '1995');
+}
+
+/** 街角小診所：2016 關著（休診）；1995 = 同一棟，正在看診 */
+function drawClinicModern(ctx: Ctx, open: boolean): number {
   const { g, night, w } = ctx;
   const L = 14, R = w - 14, top = -232;
-  const wall = 0xe6e2d6;
+  const wall = open ? 0xf2efe4 : 0xe6e2d6;
   // 牆面（兩層樓，淡淡的水漬）
   g.fillStyle(wall);
   g.fillRect(L, top, R - L, -top);
   g.fillStyle(shade(wall, -0.08));
   g.fillRect(L - 4, top - 12, R - L + 8, 14);
-  g.fillStyle(0x7fa69a);
+  g.fillStyle(open ? 0x5fb48e : 0x7fa69a);
   g.fillRect(L - 4, top - 4, R - L + 8, 4);
-  g.fillStyle(0x6a6450, 0.12);
-  for (let k = 0; k < 6; k++) g.fillRect(L + 12 + k * 28, top + 2, 4, 26 + (k % 3) * 14);
+  if (!open) {
+    g.fillStyle(0x6a6450, 0.12);
+    for (let k = 0; k < 6; k++) g.fillRect(L + 12 + k * 28, top + 2, 4, 26 + (k % 3) * 14);
+  }
   // 轉角圓弧（街角建築）
   g.fillStyle(shade(wall, -0.06));
   g.fillRect(R - 18, top, 18, -top);
@@ -2055,9 +2079,14 @@ function drawClinic(ctx: Ctx): number {
     g.fillRect(wx - 3, top + 28, 58, 40);
     g.fillStyle(0xb8c8c4);
     g.fillRect(wx, top + 31, 52, 34);
-    g.fillStyle(0xf0ece0, 0.85);
+    g.fillStyle(open ? 0xf6f2e6 : 0xf0ece0, 0.85);
     g.fillRect(wx + 2, top + 33, 22, 30);
-    g.lineStyle(1.5, 0x4a4440, 0.85);
+    if (open) {
+      // 樓上住著醫生一家：亮著的窗
+      night.fillStyle(0xffd27a, 0.7);
+      night.fillRect(wx, top + 31, 52, 34);
+    }
+    g.lineStyle(1.5, open ? 0x3f6a5a : 0x4a4440, 0.85);
     g.strokeRect(wx - 6, top + 25, 64, 46);
     for (let x = wx; x < wx + 56; x += 9) g.lineBetween(x, top + 25, x, top + 71);
   }
@@ -2072,16 +2101,28 @@ function drawClinic(ctx: Ctx): number {
   g.fillStyle(0xd8392f);
   g.fillRect(L + 22, st + 9, 6, 18);
   g.fillRect(L + 16, st + 15, 18, 6);
-  label(ctx, (L + R) / 2 + 14, (st + sb) / 2, '街角診所', 20, 0xb8322a, '900');
-  // 門診時間表（褪色）
-  g.fillStyle(0xf6f0e0);
-  g.fillRect(L + 10, -98, 40, 50);
-  g.lineStyle(1, 0x9a948a);
-  for (let y = -88; y < -50; y += 7) g.lineBetween(L + 14, y, L + 46, y);
-  g.fillStyle(0x3f6f9a);
-  g.fillRect(L + 10, -98, 40, 7);
+  label(ctx, (L + R) / 2 + 14, (st + sb) / 2, '街角診所', 20, open ? 0xd8261c : 0xb8322a, '900');
+  if (open) {
+    // 招牌燈箱亮著
+    g.fillStyle(0xffffff, 0.5);
+    g.fillRect(L + 9, st, R - L - 18, 4);
+    night.fillStyle(0xfff6e0, 0.85);
+    night.fillRect(L + 9, st, R - L - 18, sb - st);
+    night.fillStyle(0xffe8c0, 0.18);
+    night.fillRect(L - 4, st - 12, R - L + 8, sb - st + 24);
+    clinicHoursBoard(ctx, L + 8, -118);
+  } else {
+    // 門診時間表（褪色）
+    g.fillStyle(0xf6f0e0);
+    g.fillRect(L + 10, -98, 40, 50);
+    g.lineStyle(1, 0x9a948a);
+    for (let y = -88; y < -50; y += 7) g.lineBetween(L + 14, y, L + 46, y);
+    g.fillStyle(0x3f6f9a);
+    g.fillRect(L + 10, -98, 40, 7);
+  }
   // 霧面玻璃門（拉門）
   const dl = L + 62, dr = R - 30;
+  if (open) return clinicOpenFront(ctx, L, R, dl, dr);
   g.fillStyle(0x8a8e92);
   g.fillRect(dl - 4, -104, dr - dl + 8, 104);
   g.fillStyle(0xd8dee0);
