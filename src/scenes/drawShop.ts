@@ -782,8 +782,9 @@ function retro95OpenDoor(g: Phaser.GameObjects.Graphics, seed: number): void {
   g.fillRect(dl + 8, dt + 7, dr - dl - 16, 3);
   g.fillStyle(0xffffff, 0.25);
   g.fillRect(dl + 2, dt + 4, dr - dl - 4, 12);
-  // 掛鐘
-  const kx = dl + 14, ky = dt + 26;
+  // 掛鐘（每家掛的位置不同）
+  const flip = seed % 3 === 1;
+  const kx = flip ? dr - 14 : dl + 14, ky = dt + 26;
   g.fillStyle(0x7a4a2a);
   g.fillCircle(kx, ky, 8);
   g.fillStyle(0xfbf8ee);
@@ -792,7 +793,7 @@ function retro95OpenDoor(g: Phaser.GameObjects.Graphics, seed: number): void {
   g.lineBetween(kx, ky, kx, ky - 5);
   g.lineBetween(kx, ky, kx + 3.5, ky + 1);
   // 撕的日曆（紅字大日期）
-  const cx = dr - 16, cy = dt + 16;
+  const cx = flip ? dl + 16 : dr - 16, cy = dt + 16;
   g.fillStyle(0xd8392f);
   g.fillRect(cx - 8, cy, 16, 6);
   g.fillStyle(0xfbf8ee);
@@ -803,10 +804,11 @@ function retro95OpenDoor(g: Phaser.GameObjects.Graphics, seed: number): void {
   g.fillStyle(0xf2c14e);
   g.fillRect(cx - 8, cy + 22, 16, 3);
   // 店裡的木櫃台（一角）
+  const cl = flip ? dr - 30 : dl + 4;
   g.fillStyle(0x9a6a42);
-  g.fillRect(dl + 4, -40, 26, 24);
+  g.fillRect(cl, -40, 26, 24);
   g.fillStyle(0x7a5032);
-  g.fillRect(dl + 2, -42, 30, 4);
+  g.fillRect(cl - 2, -42, 30, 4);
   // 門框（銀色）
   g.fillStyle(0xc8ccce);
   g.fillRect(dl - 2, dt, 3, -dt);
@@ -856,7 +858,7 @@ function scooter(g: Phaser.GameObjects.Graphics, x: number, col: number): void {
   g.fillPoints([{ x: x + 34, y: -11 }, { x: x + 39, y: -11 }, { x: x + 43, y: -38 }, { x: x + 37, y: -40 }], true);
   // 座墊
   g.fillStyle(0x2a2420);
-  g.fillRoundedRect(x + 5, -35, 24, 6, 3);
+  g.fillRoundedRect(x + 5, -33, 24, 6, 3);
   // 龍頭、大燈、後照鏡
   g.fillStyle(col);
   g.fillRect(x + 37, -47, 11, 8);
