@@ -19,8 +19,8 @@ import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review, Y
 import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
-import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
-import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE } from './drawLandmarks';
+import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
+import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { MEMORY_NAME, MEMORY_COLOR } from '../core/memory';
+import { MEMORY_NAME, MEMORY_COLOR, ownerOf } from '../core/memory';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
 const MINUTES_PER_SEC = 8;
@@ -458,7 +458,8 @@ export class StreetScene extends Phaser.Scene {
     const x0 = this.L.lotX(i);
 
     if (!lot.unlocked) {
-      view.container.add(drawLockedLot(this, nextLotCost(s), i === firstLocked));
+      const owner = this.street.memory ? ownerOf(s, i) : undefined;
+      view.container.add(owner ? drawVacantHouse(this, owner.tag, i === firstLocked) : drawLockedLot(this, nextLotCost(s), i === firstLocked));
     } else if (lot.bath) {
       view.container.add(drawBathhouse(this));
       view.lights.fillStyle(0xffe2a0, 0.45);
@@ -2138,6 +2139,19 @@ export class StreetScene extends Phaser.Scene {
     f.glow.fillCircle(x, y - h * 0.4, 20 + 14 * lvl);
   }
 
+  /** 東原：龍眼窯的煙囪冒煙 */
+  private kilnTimer = 0;
+  private updateKilnSmoke(dt: number) {
+    const box = this.landmarkBox.get('kiln');
+    if (!box) return;
+    this.kilnTimer -= dt;
+    if (this.kilnTimer > 0) return;
+    this.kilnTimer = 900 + Math.random() * 600;
+    const x = box.x + KILN.chimneyX + Phaser.Math.Between(-4, 4), y = GROUND_Y + KILN.chimneyY;
+    const puff = this.add.circle(x, y, 7 + Math.random() * 4, 0xd8d0c4, 0.5).setDepth(12);
+    this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(80, 130), x: x + Phaser.Math.Between(10, 50), scale: 2.6, alpha: 0, duration: 2600, onComplete: () => puff.destroy() });
+  }
+
   /** 露頭冒煙：泉量越多煙越濃 */
   private updateSteam(dt: number) {
     const box = this.landmarkBox.get('spring');
@@ -2188,6 +2202,7 @@ export class StreetScene extends Phaser.Scene {
     this.drawFlame(dt * Math.max(1, store.speed));
     this.drawWells();
     if (running) this.updateSteam(dt * store.speed);
+    if (running) this.updateKilnSmoke(dt * store.speed);
     if (this.exposeCooldown > 0) this.exposeCooldown -= dt;
     if (!running) return;
     const h = hourOf(s);

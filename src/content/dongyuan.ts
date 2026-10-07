@@ -222,7 +222,7 @@ const stories: StoryEvent[] = [
     id: 'dy-intro', street: ST, once: true, priority: 99, when: 'morning',
     cond: () => ({}),
     script: () => [
-      narrate('2016 年，台南東山，東原。這條街以前叫「大埔街」，糖廠還在的時候，有戲院、旅社、布莊，熱鬧到半夜。'),
+      narrate('二〇一六年，台南東山，東原。這條街以前叫「大埔街」，糖廠還在的時候，有戲院、旅社、布莊，熱鬧到半夜。'),
       narrate('現在，一半的房子都關著。'),
       focus({ landmark: 'kiln' }),
       appear('dyStudent', { landmark: 'kiln' }),
@@ -658,10 +658,10 @@ export const DONGYUAN: StreetDef = {
       },
     ],
     recipes: [
-      { shop: 'icepop', name: '糖水冰', cost: { taste: 5, past: 1 }, text: '阿蘭的婆婆以前賣過。黑糖要熬到可以拉出絲。' },
+      { shop: 'icepop', name: '糖水冰鋪', cost: { taste: 5, past: 1 }, text: '阿蘭的婆婆以前賣過。黑糖要熬到可以拉出絲。' },
       { shop: 'mantou', name: '炸饅頭', cost: { taste: 4, bond: 1 }, text: '放學的國中生最愛。饅頭要放一天再炸才會酥。' },
       { shop: 'platekoe', name: '盤子碗粿＋花生糯米腸', cost: { taste: 7, bond: 2 }, text: '用盤子蒸，碗粿薄薄的、熟得快。' },
-      { shop: 'blacksmith', name: '打鐵', cost: { craft: 5, past: 1 }, text: '鐵伯的手藝。要有人學過，他才願意再開爐。' },
+      { shop: 'blacksmith', name: '打鐵舖', cost: { craft: 5, past: 1 }, text: '鐵伯的手藝。要有人學過，他才願意再開爐。' },
     ],
   },
   shopTypes: ['meatball', 'grocery', 'barber', 'pharmacy', 'baozi', 'ribsoup', 'longan', 'cafe', 'icepop', 'platekoe', 'mantou', 'blacksmith'],

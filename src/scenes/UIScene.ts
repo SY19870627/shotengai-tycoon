@@ -483,7 +483,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       const cy = y + 124 + n * 74;
       const learned = s.recipes.includes(r.shop);
       m.add(this.add.rectangle(rx, cy, 430, 66, learned ? 0xeaf4e4 : 0xffffff).setOrigin(0).setStrokeStyle(2, 0xd8cfe0));
-      m.add(this.text(rx + 12, cy + 8, `${SHOP_BY_ID[r.shop].name}：${r.name}`, 16, hex(C.ink), '900'));
+      m.add(this.text(rx + 12, cy + 8, r.name, 16, hex(C.ink), '900'));
       m.add(this.text(rx + 12, cy + 34, r.text, 12, '#4a4356').setWordWrapWidth(270, true));
       if (learned) {
         m.add(this.text(rx + 418, cy + 22, '已找回', 15, '#2f7d3f', '900').setOrigin(1, 0));
