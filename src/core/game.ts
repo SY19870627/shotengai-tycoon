@@ -6,7 +6,7 @@ import { TRAITS } from './traits';
 import { ACTIVITY_BY_ID, INFLUENCERS, type ActivityDef } from './activities';
 import type {
   GameState, StreetDef, TenantProfile, ShopInstance, DaySummary, DayStats, Effects, Mods, ActivityVariant,
-  Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind,
+  Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind, MemoryKind,
 } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
@@ -16,6 +16,11 @@ import {
   resolveLeaves, applyQuake, dailyQuakeRecovery, springSupply, springDemand, sealWell,
   planOccupancy, planPriceMult, planReview, poolNoise, poolSwimmers, POOL_TICKET, hasPlan, DINNER_SHARE, firefliesOut,
 } from './onsen';
+import {
+  memoryDefaults, isMemoryStreet, addMemories, residentsPerHour, touristsPerHour, audiencePref, RESIDENT_SPEND, residentChat,
+  ownerRule, trustedTenant, ownerUpkeep, shopTypeOpen, dailyKinshipDelta, addKinship,
+  negotiate, ownerOf,
+} from './memory';
 
 export const DAY_START_MIN = 7 * 60;
 export const DAY_END_MIN = 23 * 60;
@@ -139,7 +144,14 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     gameOver: false,
     chapterComplete: false,
     ...onsenDefaults(),
+    ...memoryDefaults(),
   };
+  // 東原：一開始就在的老店、帶著的回憶
+  if (street.memory) {
+    for (const t of street.memory.startTenants) signTenant(s, t.lot, t.tenant, t.tier);
+    addMemories(s, street.memory.startMemories);
+    s.today = emptyStats();
+  }
   // 開局佈告欄先有幾位應徵者
   for (let k = 0; k < 3; k++) addApplicant(s, rand);
   s.forecast = rollForecast(street, 2, rand);
@@ -203,16 +215,26 @@ export function forecastText(f: Forecast): string {
 // 外國旅客
 // =====================================================================
 
-export const ORIGIN_NAME: Record<Origin, string> = { local: '本地', jp: '日本', kr: '韓國' };
+export const ORIGIN_NAME: Record<Origin, string> = { local: '本地', jp: '日本', kr: '韓國', resident: '居民' };
+
+/** 外國旅客（日本、韓國） */
+export const isForeign = (o: Origin) => o === 'jp' || o === 'kr';
 
 /** 各國旅客偏好（只是輕微傾向） */
 const ORIGIN_PREF: Record<Origin, Record<string, number>> = {
   local: {},
   jp: { teahouse: 1.4, taro: 1.25, ocarina: 1.2, fishball: 1.1, douhua: 1.15 },
   kr: { cafe: 1.35, souvenir: 1.3, caogui: 1.15, tofuice: 1.2, brownsugar: 1.15 },
+  resident: {},
 };
 
 export function rollOrigin(s: GameState, rand: () => number): Origin {
+  // 東原：照現在居民和遊客的人數比例
+  if (isMemoryStreet(s)) {
+    const res = residentsPerHour(s);
+    const total = res + touristsPerHour(s, touristBase(s)) * timeCurveFor(s);
+    return total > 0 && rand() < res / total ? 'resident' : 'local';
+  }
   const v = streetOf(s).visitors;
   const f = combinedMods(s).foreign ?? 1;
   const r = rand();
@@ -386,6 +408,7 @@ const REVIEW_TEXT: Record<Origin, { good: string[]; noise: string[]; mid: string
   local: { good: ['夜景好美！', '老闆好親切', '早餐好吃', '下次還要來'], noise: ['隔壁好吵睡不著', '半夜還有人在唱歌'], mid: ['普通，可以住', '房間有點小'] },
   jp: { good: ['夜景最高！', '朝ごはん美味しい', 'また来たい！'], noise: ['隣がうるさい…', '眠れなかった'], mid: ['まあまあ', '部屋が狭い'] },
   kr: { good: ['야경 최고!', '사장님 친절해요', '또 올게요!'], noise: ['옆집 시끄러워요', '잠을 못 잤어요'], mid: ['그냥 그래요', '방이 좀 작아요'] },
+  resident: { good: ['跟以前一樣', '老闆人很好'], noise: ['隔壁好吵'], mid: ['還可以'] },
 };
 
 /** 今晚住客的評價（打烊時算，隔天早上顯示） */
@@ -503,10 +526,13 @@ export function unlockedCount(s: GameState): number {
 
 export function nextLotCost(s: GameState): number {
   const street = streetOf(s);
+  if (street.memory) return ownerOf(s, s.lots.findIndex((l) => !l.unlocked))?.money ?? 0;
   return street.lotCost + (unlockedCount(s) - street.startLots) * Math.round(street.lotCost * 0.6);
 }
 
 export function unlockLot(s: GameState, index: number): Result {
+  // 東原：不能花錢整修，要說服屋主
+  if (isMemoryStreet(s)) return negotiate(s, index);
   const lot = s.lots[index];
   if (!lot) return { ok: false, reason: '沒有這個店面' };
   if (lot.unlocked) return { ok: false, reason: '已經開放了' };
@@ -532,7 +558,7 @@ export function eligibleProfiles(s: GameState): TenantProfile[] {
     if (a.minDay && s.day < a.minDay) return false;
     if (a.minRep && s.reputation < a.minRep) return false;
     if (a.flag && !s.flags.includes(a.flag)) return false;
-    return true;
+    return shopTypeOpen(s, t.shopType);
   });
 }
 
@@ -572,6 +598,8 @@ export function signTenant(s: GameState, lotIndex: number, tenantId: string, tie
   if (!lot || !p) return { ok: false, reason: '無效的操作' };
   if (!lot.unlocked) return { ok: false, reason: '這個店面還沒整修' };
   if (lot.shop || lot.facility || lot.bath) return { ok: false, reason: '這裡已經有租客了' };
+  if (!shopTypeOpen(s, p.shopType)) return { ok: false, reason: `還不會${SHOP_BY_ID[p.shopType].name}的作法` };
+  if (ownerRule(s, lotIndex) === 'trusted' && !trustedTenant(p)) return { ok: false, reason: '屋主阿嬤搖搖頭：「這個人，我不放心。」' };
   if (tier > p.maxRentTier) return { ok: false, reason: p.lines.refuse, refused: true };
   lot.shop = {
     tenantId, defId: p.shopType, level: 1, rentTier: tier,
@@ -608,6 +636,7 @@ export function renovate(s: GameState, lotIndex: number): Result {
   const shop = s.lots[lotIndex]?.shop;
   if (!shop) return { ok: false, reason: '這裡沒有租客' };
   if (shop.level >= MAX_LEVEL) return { ok: false, reason: '已經裝修到最好了' };
+  if (ownerRule(s, lotIndex) === 'noRenovate') return { ok: false, reason: '屋主說過：房子不能改裝' };
   const cost = renovateCost(SHOP_BY_ID[shop.defId], shop.level);
   if (s.money < cost) return { ok: false, reason: `資金不足（需要 $${cost.toLocaleString('en-US')}）` };
   s.money -= cost;
@@ -830,8 +859,10 @@ export function enterChance(s: GameState, index: number, favorite?: Category, or
   // 泉水不夠：溫泉變溫，客人不想泡
   if (def.spring) p *= 0.5 + 0.5 * springRatio(s);
   if (yokai) p *= YOKAI[yokai].pref[def.id] ?? 1;
+  // 東原：居民去日常的店，遊客去伴手禮和咖啡
+  if (isMemoryStreet(s)) p *= audiencePref(def.id, origin);
   // 外國旅客：有偏好，但沒有多語服務時語言不通
-  if (origin !== 'local') {
+  if (isForeign(origin)) {
     p *= ORIGIN_PREF[origin][def.id] ?? 1;
     p *= 0.8 + 0.3 * moduleEff(s, 'multilingual');
   }
@@ -850,10 +881,25 @@ export function timeCurve(hour: number): number {
 }
 
 /** 每遊戲小時會出現多少路人 */
+/** 東原：遊客的基本人數（聲望、店數、天氣） */
+function touristBase(s: GameState): number {
+  const street = streetOf(s);
+  const shops = s.lots.filter((l) => l.shop).length;
+  let base = street.baseTraffic + shops + s.reputation * street.repTraffic;
+  if (s.weather === 'rain') base *= 0.6;
+  return base;
+}
+
+/** 平日遊客照一般的人潮曲線，週末的波浪已經在 touristsPerHour 裡 */
+function timeCurveFor(s: GameState): number {
+  return isWeekend(s) ? 1 : timeCurve(hourOf(s));
+}
+
 export function trafficPerHour(s: GameState): number {
   const street = streetOf(s);
   const shops = s.lots.filter((l) => l.shop).length;
   const mods = combinedMods(s);
+  if (street.memory) return (residentsPerHour(s) + touristsPerHour(s, touristBase(s)) * timeCurveFor(s)) * mods.traffic;
   let base = street.baseTraffic + shops * 3 + s.reputation * street.repTraffic;
   if (isWeekend(s)) base *= street.weekendMult;
   const guide = moduleEff(s, 'guide');
@@ -892,8 +938,11 @@ export function tickTraffic(s: GameState, dm: number): number {
   return (trafficPerHour(s) * dm) / 60;
 }
 
-export function notePasserby(s: GameState): void {
+export function notePasserby(s: GameState, origin?: Origin): void {
   s.today.passersby += 1;
+  if (!isMemoryStreet(s) || !origin) return;
+  if (origin === 'resident') s.today.residents = (s.today.residents ?? 0) + 1;
+  else s.today.tourists = (s.today.tourists ?? 0) + 1;
 }
 
 export function tryEnter(s: GameState, index: number): boolean {
@@ -914,6 +963,8 @@ export interface VisitResult {
   /** 會長這次的收入（抽成 - 消費券補貼） */
   income: number;
   coupon: boolean;
+  /** 東原：居民聊出的回憶 */
+  memory?: MemoryKind | null;
 }
 
 /** 客人消費完離開 */
@@ -925,8 +976,10 @@ export function completeVisit(
   const def = SHOP_BY_ID[shop.defId];
   shop.inside = Math.max(0, shop.inside - 1);
   // 外國觀光客出手比較大方，有翻譯時更願意多買
-  const foreignMult = origin === 'local' ? 1 : 1.15 + 0.15 * moduleEff(s, 'multilingual');
-  if (origin !== 'local') s.today.foreign += 1;
+  const foreignMult = !isForeign(origin) ? (origin === 'resident' ? RESIDENT_SPEND : 1) : 1.15 + 0.15 * moduleEff(s, 'multilingual');
+  if (isForeign(origin)) s.today.foreign += 1;
+  // 東原：居民邊買邊聊，慢慢說出以前的事
+  const memory = origin === 'resident' ? residentChat(s, def.id) : null;
   // 妖怪出手特別大方（但可能是樹葉）
   const yokaiMult = yokai ? 1.6 : 1;
   const revenue = Math.round(def.spend * (1 + (shop.level - 1) * 0.25) * spendRoll * foreignMult * yokaiMult);
@@ -947,7 +1000,7 @@ export function completeVisit(
     s.today.yokai += 1;
     if (yokai.leaves) recordLeaves(s, shop.tenantId, revenue, commission);
   }
-  return { revenue, income: commission - couponCost, coupon };
+  return { revenue, income: commission - couponCost, coupon, memory };
 }
 
 // =====================================================================
@@ -1058,6 +1111,12 @@ export function applyEffects(s: GameState, e: Effects, rand: () => number = Math
   if (e.sealWell) sealWell(s);
   if (e.springBonus) s.springBonus += e.springBonus;
   if (e.yokaiFavor) s.yokaiFavor = Math.max(0, s.yokaiFavor + e.yokaiFavor);
+  if (e.memory) addMemories(s, e.memory);
+  if (e.kinship) addKinship(s, e.kinship);
+  if (e.recipe && !s.recipes.includes(e.recipe)) {
+    s.recipes.push(e.recipe);
+    if (!s.flags.includes(`recipe-${e.recipe}`)) s.flags.push(`recipe-${e.recipe}`);
+  }
   if (e.chapterComplete) s.chapterComplete = true;
 }
 
@@ -1226,7 +1285,9 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
   const grievanceBefore = s.grievance;
   const fest = festivalActive(s);
   const rent = rentIncome(s);
-  const maintenance = street.maintenance + unlockedCount(s) * 60;
+  const maintenance = street.maintenance + unlockedCount(s) * 60 + ownerUpkeep(s);
+  const kinshipBefore = s.kinship;
+  if (street.memory) addKinship(s, dailyKinshipDelta(s));
   const wages = facilityWages(s);
   s.money += rent - maintenance - wages;
   const before = s.reputation;
@@ -1280,6 +1341,11 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     swimmers: s.today.swimmers,
     dinners: s.today.dinners,
     fireflies: firefliesOut(s),
+    residents: s.today.residents,
+    tourists: s.today.tourists,
+    mem: s.today.mem,
+    kinshipBefore: street.memory ? kinshipBefore : undefined,
+    kinshipAfter: street.memory ? s.kinship : undefined,
     avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,
@@ -1358,7 +1424,8 @@ export function generateTenant(s: GameState, rand: () => number): TenantProfile 
   const sur = pick(SURNAMES, rand);
   const given = pick(GIVEN, rand);
   const name = NICK(sur, given, rand);
-  const shopType = pick(street.shopTypes, rand);
+  const types = street.shopTypes.filter((t) => shopTypeOpen(s, t));
+  const shopType = pick(types.length ? types : street.shopTypes, rand);
   const def = SHOP_BY_ID[shopType];
   const t1 = pick(TRAIT_POOL, rand);
   let t2 = pick(TRAIT_POOL, rand);
@@ -1439,7 +1506,7 @@ export function deserialize(raw: string): GameState | null {
     data.morning ??= [];
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    for (const [k, v] of Object.entries(onsenDefaults())) (data as unknown as Record<string, unknown>)[k] ??= v;
+    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
     if (data.minute >= dayEndMin(data)) {
       startNextDay(data);
       return data;

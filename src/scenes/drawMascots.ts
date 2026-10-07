@@ -4,10 +4,12 @@ import { shade } from '../theme';
 /** 吉祥物貼圖尺寸（腳底在底部，面向右） */
 const MW = 64;
 const MH = 96;
+/** 比較寬的吉祥物（例如騎三輪車的阿伯）另外指定貼圖寬度 */
+const WIDE: Record<string, number> = { tricycle: 112 };
 
 type G = Phaser.GameObjects.Graphics;
 
-/** Generates 2 walking frames as textures `mascot-${id}_0` and `mascot-${id}_1` (size 64x96, feet at bottom, facing right) if not already present, and returns the key prefix `mascot-${id}` */
+/** Generates 2 walking frames as textures `mascot-${id}_0` and `mascot-${id}_1` (size 64x96, or wider per WIDE; feet at bottom, facing right) if not already present, and returns the key prefix `mascot-${id}` */
 export function ensureMascotTexture(scene: Phaser.Scene, id: string): string {
   const prefix = `mascot-${id}`;
   for (const frame of [0, 1]) {
@@ -15,7 +17,7 @@ export function ensureMascotTexture(scene: Phaser.Scene, id: string): string {
     if (scene.textures.exists(key)) continue;
     const g = scene.make.graphics({}, false);
     drawMascot(g, id, frame);
-    g.generateTexture(key, MW, MH);
+    g.generateTexture(key, WIDE[id] ?? MW, MH);
     g.destroy();
   }
   return prefix;
@@ -32,6 +34,9 @@ function drawMascot(g: G, id: string, f: number): void {
     case 'mudboy': drawMudboy(g, f); break;
     case 'chick': drawChick(g, f); break;
     case 'flame': drawFlame(g, f); break;
+    case 'longan': drawLonganKid(g, f); break;
+    case 'sugar': drawBrownSugar(g, f); break;
+    case 'tricycle': drawTricycle(g, f); break;
     default: drawGeneric(g, f); break;
   }
 }
@@ -554,6 +559,190 @@ function drawGoldMouse(g: G, f: number): void {
     g.fillTriangle(gx + 10, gy - 10, gx + 14, gy - 10, gx + 12, gy - 16);
     g.fillTriangle(gx + 10, gy - 10, gx + 14, gy - 10, gx + 12, gy - 4);
   }
+}
+
+// ───────────────────────── 龍眼仔（東原） ─────────────────────────
+
+function drawLonganKid(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  const shell = 0xa8783a;
+  feet(g, cx, 84, 0x7a5228, f, 7, 5);
+  // 圓滾滾的龍眼殼
+  const by = 60 + bob, r = 24;
+  g.fillStyle(shade(shell, -0.25));
+  g.fillCircle(cx + 2, by + 2, r);
+  g.fillStyle(shell);
+  g.fillCircle(cx, by, r);
+  // 殼上的細小斑點
+  g.fillStyle(shade(shell, -0.2), 0.8);
+  for (const [dx, dy] of [[-14, -8], [-8, 10], [6, 16], [-16, 8], [-4, -16], [14, 12]]) g.fillCircle(cx + dx, by + dy, 1.3);
+  // 殼裂開一塊，露出半透明果肉 + 黑褐色籽
+  const ox = cx + 8, oy = by - 8;
+  g.fillStyle(shade(shell, -0.35));
+  g.fillPoints([
+    { x: ox - 14, y: oy - 2 }, { x: ox - 8, y: oy - 10 }, { x: ox - 2, y: oy - 6 }, { x: ox + 4, y: oy - 14 },
+    { x: ox + 12, y: oy - 8 }, { x: ox + 15, y: oy + 2 }, { x: ox + 4, y: oy + 6 }, { x: ox - 6, y: oy + 4 },
+  ], true);
+  g.fillStyle(0xf4f0e2, 0.95);
+  g.fillEllipse(ox + 1, oy - 3, 24, 15);
+  g.fillStyle(0xffffff, 0.8);
+  g.fillEllipse(ox - 4, oy - 6, 8, 4);
+  g.fillStyle(0x3a2016);
+  g.fillCircle(ox + 4, oy - 2, 4);
+  g.fillStyle(0x8a5a3a);
+  g.fillCircle(ox + 3, oy - 3, 1.2);
+  // 頭頂小枝 + 葉子
+  g.lineStyle(2, 0x6a4a2a);
+  g.lineBetween(cx - 4, by - r + 1, cx - 8, by - r - 8);
+  g.fillStyle(0x4f8a3a);
+  g.fillEllipse(cx - 14, by - r - 8, 12, 6);
+  face(g, cx - 8, by + 4, 1, 0xe8806a);
+  arms(g, cx, by + 6, r - 2, 0x7a5228, f);
+}
+
+// ───────────────────────── 黑糖膏（東原） ─────────────────────────
+
+function drawBrownSugar(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  feet(g, cx, 84, 0x8a8e92, f, 8, 5);
+  // 鋼杯（上寬下窄，有把手）
+  const top = 34 + bob, bot = 82;
+  const steel = 0xc4c8cc;
+  // 把手（在後方，左側）
+  g.lineStyle(4, shade(steel, -0.2));
+  g.beginPath();
+  g.arc(cx - 22, top + 22, 9, Phaser.Math.DegToRad(90), Phaser.Math.DegToRad(270), false);
+  g.strokePath();
+  g.fillStyle(shade(steel, -0.22));
+  g.fillPoints([{ x: cx - 20, y: top + 2 }, { x: cx + 24, y: top + 2 }, { x: cx + 18, y: bot }, { x: cx - 14, y: bot }], true);
+  g.fillStyle(steel);
+  g.fillPoints([{ x: cx - 22, y: top }, { x: cx + 22, y: top }, { x: cx + 16, y: bot - 2 }, { x: cx - 16, y: bot - 2 }], true);
+  // 金屬反光
+  g.fillStyle(0xffffff, 0.6);
+  g.fillPoints([{ x: cx - 16, y: top + 4 }, { x: cx - 11, y: top + 4 }, { x: cx - 8, y: bot - 6 }, { x: cx - 12, y: bot - 6 }], true);
+  g.lineStyle(1, shade(steel, -0.3), 0.7);
+  g.lineBetween(cx - 21, top + 10, cx + 21, top + 10);
+  // 杯口滿出來的黑糖膏
+  const sugar = 0x4a2412;
+  g.fillStyle(sugar);
+  g.fillEllipse(cx, top, 48, 12);
+  g.fillEllipse(cx - 6, top - 6, 26, 14);
+  g.fillEllipse(cx + 8, top - 4, 22, 10);
+  g.fillStyle(0x7a3e1c, 0.8);
+  g.fillEllipse(cx - 8, top - 9, 10, 4);
+  // 往下滴的糖膏（走路時多滴一點）
+  for (const [dx, len] of [[-18, 10], [-6, 6], [12, 14], [20, 7]]) {
+    const l = len + (f ? 2 : 0);
+    g.fillStyle(sugar);
+    g.fillRoundedRect(cx + dx - 2.5, top + 2, 5, l, 2.5);
+    g.fillCircle(cx + dx, top + 2 + l, 3);
+  }
+  g.fillStyle(sugar, 0.85);
+  g.fillCircle(cx + 26, top + 30 + (f ? 4 : 0), 2);
+  // 臉在杯身
+  face(g, cx - 4, top + 24, 1, 0xe89a8a);
+  arms(g, cx, top + 26, 18, shade(steel, -0.15), f);
+  // 熱氣
+  g.lineStyle(2, 0xffffff, 0.75);
+  g.beginPath();
+  g.moveTo(cx + 2, top - 12);
+  for (let i = 1; i <= 5; i++) g.lineTo(cx + 2 + Math.sin(i * 1.2 + f) * 3, top - 12 - i * 4);
+  g.strokePath();
+}
+
+// ───────────────────────── 三輪車阿伯（東原，寬貼圖） ─────────────────────────
+
+function drawTricycle(g: G, f: number): void {
+  // 貼圖 112x96，車頭朝右
+  const groundY = MH - 2;
+  const wheel = (x: number, r: number) => {
+    g.fillStyle(0x2a2a2e);
+    g.fillCircle(x, groundY - r, r);
+    g.fillStyle(0x9a9ea2);
+    g.fillCircle(x, groundY - r, r * 0.55);
+    g.fillStyle(0x2a2a2e);
+    g.fillCircle(x, groundY - r, 1.6);
+    // 輪輻隨格數轉動
+    g.lineStyle(1, 0x5a5a60);
+    const a0 = f === 0 ? 0 : Math.PI / 6;
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + (k * Math.PI) / 3;
+      g.lineBetween(x - Math.cos(a) * r * 0.55, groundY - r - Math.sin(a) * r * 0.55, x + Math.cos(a) * r * 0.55, groundY - r + Math.sin(a) * r * 0.55);
+    }
+  };
+  // 後方貨斗（綠色鐵板）
+  const bl = 6, br = 58, bt = 60;
+  g.fillStyle(0x3f7a4a);
+  g.fillRect(bl, bt, br - bl, 18);
+  g.fillStyle(shade(0x3f7a4a, 0.15));
+  g.fillRect(bl, bt, br - bl, 3);
+  g.fillStyle(0x9a5a2a, 0.5);
+  g.fillEllipse(bl + 14, bt + 12, 10, 4);
+  // 載滿甘蔗（斜斜地伸出車外）
+  for (let k = 0; k < 7; k++) {
+    const y = bt - 2 - k * 3;
+    const col = k % 2 ? 0x6a3a5a : 0x7a8a3a;
+    g.lineStyle(3.5, col);
+    g.lineBetween(bl - 4 + (k % 3), y + 4, br + 2 - (k % 2) * 4, y - 6);
+    g.lineStyle(1, shade(col, -0.3));
+    for (let t = 0.2; t < 1; t += 0.25) {
+      const x = bl - 4 + (br + 6 - bl) * t;
+      g.lineBetween(x, y + 4 - 10 * t - 2, x, y + 4 - 10 * t + 2);
+    }
+  }
+  // 甘蔗尾的葉子
+  g.fillStyle(0x6aa04a);
+  g.fillTriangle(br, bt - 26, br + 12, bt - 34, br + 4, bt - 22);
+  g.fillTriangle(br - 2, bt - 24, br + 6, bt - 38, br + 2, bt - 22);
+  wheel(16, 9);
+  wheel(48, 9);
+  // 車架與座墊
+  g.lineStyle(3, 0x3a5a8a);
+  g.lineBetween(58, 72, 80, 72);
+  g.lineBetween(80, 72, 92, 50);
+  g.lineBetween(70, 72, 70, 62);
+  g.fillStyle(0x2a2a2e);
+  g.fillRoundedRect(63, 58, 14, 5, 2);
+  // 前輪 + 把手
+  wheel(94, 10);
+  g.lineStyle(2.5, 0x5a5a60);
+  g.lineBetween(92, 50, 94, groundY - 10);
+  g.lineBetween(88, 48, 98, 46);
+  // 阿伯：斗笠、白汗衫、短褲、踩踏板
+  const ped = f === 0 ? 0 : 4;
+  g.lineStyle(4, 0xd8a880);
+  g.lineBetween(72, 66, 80 + ped, 78);
+  g.lineBetween(80 + ped, 78, 78 + ped, 86 - ped);
+  g.lineBetween(72, 66, 78 - ped, 80);
+  g.fillStyle(0x2a2a2e);
+  g.fillEllipse(80 + ped, 87 - ped, 7, 3);
+  g.fillStyle(0x4a5a7a);
+  g.fillRoundedRect(64, 56, 16, 12, 3);
+  g.fillStyle(0xf6f4ec);
+  g.fillRoundedRect(64, 36, 16, 22, 5);
+  // 手臂伸向把手
+  g.lineStyle(3.5, 0xd8a880);
+  g.lineBetween(76, 42, 90, 48);
+  // 頭（曬黑、白鬍渣）
+  g.fillStyle(0xc89068);
+  g.fillCircle(74, 30, 8);
+  g.fillStyle(0xe8e4dc);
+  g.fillEllipse(77, 35, 8, 4);
+  g.fillStyle(0x2a2024);
+  g.fillCircle(78, 29, 1.2);
+  g.lineStyle(1, 0x5a3a2a);
+  g.lineBetween(76, 26, 80, 26);
+  // 斗笠
+  g.fillStyle(0xd8c088);
+  g.fillTriangle(60, 26, 88, 26, 74, 12);
+  g.lineStyle(1, 0xa8904a);
+  g.lineBetween(60, 26, 88, 26);
+  g.lineBetween(67, 19, 81, 19);
+  // 掛在把手上的毛巾
+  g.fillStyle(0xf6f0e0);
+  g.fillRect(86, 48, 4, 8);
 }
 
 // ───────────────────────── 未知：通用圓滾吉祥物 ─────────────────────────

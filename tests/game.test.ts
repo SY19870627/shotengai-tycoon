@@ -13,6 +13,9 @@ import {
   resolveLeaves, exposeYokai, realPayShare, quakeLossPct, springRecovered, yokaiChance, rollYokai,
   addPlan, canAddPlan, removePlan, planPriceMult, poolNoise, firefliesOut, cleanMountain, inspectionChance, INSPECTION_FINE,
 } from '../src/core/onsen';
+import {
+  negotiate, negotiateBlock, ownerOf, learnRecipe, residentsPerHour, touristsPerHour, dailyKinshipDelta,
+} from '../src/core/memory';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, flattenEffects } from '../src/core/story';
@@ -211,6 +214,9 @@ describe('劇情', () => {
       s.money = 99999;
       s.reputation = 60;
       s.day = 10;
+      // 東原：清掉開局的老店、學會所有作法
+      for (const l of s.lots) l.shop = null;
+      s.recipes = street.memory?.recipes.map((r) => r.shop) ?? [];
       street.tenants.forEach((t, i) => { if (i < s.lots.length) place(s, i, t.id, 0); });
       for (const e of street.stories) {
         const steps = e.script({ a: street.tenants[0].id, b: street.tenants[1].id, g: street.tenants[0].id, t: street.tenants[1].id, v: street.tenants[0].id, o: street.tenants[1].id }, {
@@ -729,5 +735,110 @@ describe('關子嶺', () => {
     }
     expect(s.quake).not.toBeNull();
     expect(s.reputation).toBeGreaterThan(30);
+  });
+});
+
+describe('東原', () => {
+  const dy = () => createGame('dongyuan', seeded(3));
+
+  it('開局：肉圓、雜貨、理髮三間老店已經在營業，空屋要找屋主', () => {
+    const s = dy();
+    expect(presentTenants(s)).toEqual(['dy-meatball', 'dy-lan', 'dy-barber']);
+    expect(s.lots.filter((l) => l.unlocked).length).toBe(4);
+    expect(s.kinship).toBe(50);
+    // 不能花錢整修，要用回憶說服屋主
+    s.money = 999999;
+    expect(unlockLot(s, 4).ok).toBe(false);
+    s.memories.bond = 2;
+    expect(negotiateBlock(s, 5)).toContain('隔壁');
+    expect(unlockLot(s, 4).ok).toBe(true);
+    expect(s.memories.bond).toBe(0);
+    expect(s.money).toBe(999999 - ownerOf(s, 4)!.money + 0);
+  });
+
+  it('屋主的條件：三兄弟要先調解、神明廳阿嬤只租給信得過的人、退休老師不准改裝', () => {
+    const s = dy();
+    s.money = 999999;
+    s.memories = { past: 99, taste: 99, bond: 99, craft: 99 };
+    expect(negotiate(s, 4).ok).toBe(true);
+    expect(negotiate(s, 5).ok).toBe(true);
+    expect(negotiate(s, 6).ok).toBe(false);
+    s.flags.push('brothers-ok');
+    expect(negotiate(s, 6).ok).toBe(true);
+    // 神明廳阿嬤：隨機產生的懶惰租客不行
+    const lazy = generateTenant(s, seeded(1));
+    lazy.traits = ['lazy', 'stingy'];
+    lazy.shopType = 'grocery';
+    expect(signTenant(s, 5, lazy.id, 0).ok).toBe(false);
+    lazy.traits = ['friendly', 'lazy'];
+    expect(signTenant(s, 5, lazy.id, 0).ok).toBe(true);
+    s.flags.push('granddaughter');
+    expect(negotiate(s, 7).ok).toBe(true);
+    expect(negotiate(s, 8).ok).toBe(true);
+    place(s, 8, 'dy-longan');
+    s.money = 999999;
+    expect(renovate(s, 8).ok).toBe(false);
+  });
+
+  it('老店要先找回作法，才會有人來接手', () => {
+    const s = dy();
+    expect(eligibleProfiles(s).some((t) => t.id === 'dy-ice')).toBe(false);
+    for (let k = 0; k < 30; k++) expect(generateTenant(s, seeded(k)).shopType).not.toBe('icepop');
+    expect(learnRecipe(s, 'icepop').ok).toBe(false);
+    s.memories.taste = 5;
+    s.memories.past = 1;
+    expect(learnRecipe(s, 'icepop').ok).toBe(true);
+    expect(eligibleProfiles(s).some((t) => t.id === 'dy-ice')).toBe(true);
+  });
+
+  it('平日幾乎只有居民，週末遊客一波一波來；居民去日常的店', () => {
+    const s = dy();
+    s.day = 4; // 週一
+    s.minute = 8 * 60;
+    expect(residentsPerHour(s)).toBeGreaterThan(touristsPerHour(s, 10) * 2);
+    s.day = 2; // 週六
+    s.minute = 14 * 60;
+    const weekend = trafficPerHour(s);
+    s.day = 4;
+    expect(weekend).toBeGreaterThan(trafficPerHour(s) * 1.5);
+    expect(enterChance(s, 2, undefined, 'resident')).toBeGreaterThan(enterChance(s, 2, undefined, 'local') * 3);
+  });
+
+  it('居民邊買邊聊會累積回憶；給遊客的店太多，鄉親認同下降', () => {
+    const s = dy();
+    for (let k = 0; k < 200; k++) {
+      tryEnter(s, 2);
+      completeVisit(s, 2, 1, 'resident');
+    }
+    expect(s.memories.past).toBeGreaterThan(0);
+    expect(s.today.mem?.past).toBe(s.memories.past);
+    expect(dailyKinshipDelta(s)).toBeGreaterThan(0);
+    s.lots[1].shop = null;
+    s.lots[2].shop = null;
+    for (const [lot, id] of [[1, 'dy-cafe'], [2, 'dy-longan'], [3, 'dy-cafe']] as const) {
+      if (!presentTenants(s).includes(id)) place(s, lot, id);
+    }
+    expect(dailyKinshipDelta(s)).toBeLessThan(0);
+  });
+
+  it('數值模擬：只靠 2016 年的經營也能慢慢說服屋主，不會破產', () => {
+    const s = dy();
+    const rand = seeded(7);
+    for (let d = 1; d <= 28; d++) {
+      for (let i = 0; i < s.lots.length; i++) {
+        if (s.lots[i].unlocked && !s.lots[i].shop && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 0);
+      }
+      unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+      for (const when of ['morning', 'noon', 'evening'] as const) {
+        const st = pickStory(s, when, rand);
+        if (st) for (const step of flattenEffects(st.steps)) if (step.t === 'effect') applyEffects(s, step.effects, rand);
+      }
+      s.minute = DAY_START_MIN;
+      simulateDay(s, rand);
+      endDay(s, rand);
+      expect(s.gameOver).toBe(false);
+      startNextDay(s, rand);
+    }
+    expect(s.lots.filter((l) => l.unlocked).length).toBeGreaterThanOrEqual(7);
   });
 });

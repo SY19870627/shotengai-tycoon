@@ -5,9 +5,13 @@ import {
   relLabel, presentTenants, lotOfTenant, streetOf, weekdayName, WEATHER_NAME, combinedMods, rentIncome,
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
-  noisyNeighbors, shopOpen,
+  noisyNeighbors, shopOpen, isWeekend,
   MAX_APPLICANTS, goalsDone,
 } from '../core/game';
+import {
+  isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
+  kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners,
+} from '../core/memory';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
   canHavePlans, RYOKAN_PLANS, PLAN_IDS, planSlots, canAddPlan, addPlan, removePlan, hasPlan, POOL_TICKET, DINNER_SHARE, type PlanId,
@@ -67,6 +71,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private onModalClose?: () => void;
   private toastText!: Phaser.GameObjects.Text;
   private liveRefresh?: () => void;
+  private memText?: Phaser.GameObjects.Text;
+  private kinBar?: Phaser.GameObjects.Rectangle;
+  private kinText?: Phaser.GameObjects.Text;
   private refreshTimer = 0;
   private cinemaBars!: Phaser.GameObjects.Container;
   private tapLayer!: Phaser.GameObjects.Container;
@@ -86,6 +93,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.springText = undefined;
     this.grievanceBar = undefined;
     this.grievanceText = undefined;
+    this.memText = undefined;
+    this.kinBar = undefined;
+    this.kinText = undefined;
     this.buildTopBar();
     this.buildSideButtons();
     this.panel = this.add.container(0, PANEL_Y).setVisible(false);
@@ -228,6 +238,13 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       for (const st of PROTEST_STAGES) this.add.rectangle(862 + st.at, 41, 1, 12, 0xffffff, 0.35).setOrigin(0.5);
       this.grievanceBar = this.add.rectangle(863, 41, 0, 10, 0xe08a5a).setOrigin(0, 0.5);
       this.grievanceText = this.text(968, 33, '', 13, '#ffffff', '700');
+    } else if (isMemoryStreet(S())) {
+      // 東原：回憶點數與鄉親認同
+      this.memText = this.text(818, 7, '', 13, '#e8c890', '900');
+      this.text(818, 33, '鄉親', 13, '#a49dbb');
+      this.add.rectangle(854, 41, 100, 12, 0x1a1724).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.2);
+      this.kinBar = this.add.rectangle(855, 41, 0, 10, 0x7cc37a).setOrigin(0, 0.5);
+      this.kinText = this.text(960, 33, '', 13, '#ffffff', '700');
     }
     ['暫停', '1x', '2x', '3x'].forEach((l, i) => {
       this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x3c3652, 15));
@@ -255,6 +272,14 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.grievanceBar!.width = g;
       this.grievanceBar!.setFillStyle(g >= 80 ? 0xd64545 : g >= 55 ? 0xe08a5a : g >= 30 ? 0xf2c14e : 0x7cc37a);
       this.grievanceText!.setText(String(Math.round(g)));
+    }
+    if (this.memText) {
+      const m = s.memories;
+      this.memText.setText(`往事${m.past} 味道${m.taste} 人情${m.bond} 手藝${m.craft}`);
+      const k = s.kinship;
+      this.kinBar!.width = k;
+      this.kinBar!.setFillStyle(k >= 75 ? 0x7cc37a : k >= 50 ? 0xa8d080 : k >= 30 ? 0xf2c14e : 0xe08a5a);
+      this.kinText!.setText(String(Math.round(k)));
     }
     const done = streetOf(s).goals.filter((g) => g.check(s)).length;
     this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
@@ -288,6 +313,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (springRatio(s) < 1) { items.push('泉水不夠：溫泉變溫了'); colors[items.length - 1] = '#9fd0f0'; }
       if (s.fireMode !== 'protect') items.push(`水火同源：${FIRE_MODES[s.fireMode].name}・火勢 ${s.fireLevel.toFixed(1)}`);
     }
+    if (isMemoryStreet(s)) {
+      items.push(isWeekend(s) ? '週末：遊客一波一波來' : '平日：街上幾乎都是居民');
+      colors[items.length - 1] = isWeekend(s) ? '#f0c890' : '#b8d8b0';
+      if (s.kinship < 30) { items.push(`鄉親：${kinshipLabel(s.kinship)}`); colors[items.length - 1] = '#ff9a8a'; }
+    }
     if (s.mascot) items.push(`吉祥物：${streetOf(s).activities.mascots.find((m) => m.id === s.mascot)?.name}`);
     const sig = items.join('|');
     if (sig !== this.chipSig) {
@@ -319,6 +349,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     let y = 0;
     mk(y, '活動', 0xb3262e, () => this.showActivities());
     if (streetOf(S()).transport) mk((y += 66), '交通', 0xd9824a, () => this.showTransport());
+    if (isMemoryStreet(S())) mk((y += 66), '回憶', 0x9a6a3a, () => this.showMemories());
     mk((y += 66), '租客\n關係', 0x3f6f8f, () => this.showRelations());
     this.goalButton = mk((y += 66), '目標', 0x3f8f4f, () => this.showGoals());
     mk((y += 66), '地圖', 0x4a4460, () => this.confirmBackToMap());
@@ -362,6 +393,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   }
 
   private panelLocked(i: number) {
+    if (isMemoryStreet(S())) return this.panelOwner(i);
     const s = S();
     const p = this.panel;
     const firstLocked = s.lots.findIndex((l) => !l.unlocked);
@@ -384,12 +416,101 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.liveRefresh();
   }
 
+  /** 東原：空屋要先說服屋主 */
+  private panelOwner(i: number) {
+    const s = S();
+    const p = this.panel;
+    const o = ownerOf(s, i);
+    if (!o) return;
+    const firstLocked = s.lots.findIndex((l) => !l.unlocked);
+    p.add(this.text(24, 14, `第 ${i + 1} 號店面・空屋`, 22, '#ffffff', '900'));
+    p.add(this.text(260, 20, o.name, 17, hex(C.gold), '900'));
+    if (i !== firstLocked) {
+      p.add(this.text(24, 60, '先跟隔壁空屋的屋主談談吧。', 16, '#cfc8e0'));
+      return;
+    }
+    const needFlag = o.needFlag && !s.flags.includes(o.needFlag);
+    p.add(this.text(24, 52, `「${needFlag ? o.needText : o.pitch}」`, 15, '#e9e2d0').setWordWrapWidth(700, true).setLineSpacing(3));
+    if (needFlag) return;
+    const cost = memoryText(o.cost);
+    p.add(this.text(24, 112, `需要：${cost}${o.money ? `・${money(o.money)}` : ''}`, 15, '#f2c14e', '700'));
+    if (o.rule) p.add(this.text(24, 136, OWNER_RULE_TEXT[o.rule], 14, '#ffb0a0', '700'));
+    const b = this.button(W - 300, 52, 260, 56, '帶著回憶去說服屋主', () => {
+      const r = negotiate(s, i);
+      if (!r.ok) return toast(r.reason);
+      bus.emit(Ev.LotRedraw, -1);
+      save();
+      toast(`${o.name}：「${o.thanks}」`);
+      this.rebuildPanel();
+    }, 0x9a6a3a, 17);
+    p.add(b.root);
+    this.liveRefresh = () => b.setEnabled(!negotiateBlock(s, i));
+    this.liveRefresh();
+    p.add(this.text(W - 300, 116, '回憶從哪裡來？點右邊的「回憶」看看', 13, '#a49dbb'));
+  }
+
+  /** 東原：回憶點數、老店作法、屋主 */
+  private showMemories() {
+    const s = S();
+    const MW = 1000, MH = 600;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '回憶', 26, hex(C.ink), '900'));
+    m.add(this.text(x + 110, y + 32, '在東原，錢不是最重要的。找回的回憶，可以說服屋主、讓老店重新開張。', 14, '#6a6378'));
+    const src: Record<string, string> = {
+      past: '老照片、老故事。阿財師的理髮店最多人講古；之後穿越回 1960、1995 年能找回更多。',
+      taste: '老店的味道。居民在吃東西的店聊天時，會想起以前的味道。',
+      bond: '街坊之間的人情。居民在雜貨店、藥局聊天，或在劇情裡幫忙別人。',
+      craft: '老師傅的手藝。很稀少，要跟老師傅學（之後穿越回 1995 年可以拉風箱）。',
+    };
+    MEMORY_KINDS.forEach((k, n) => {
+      const cy = y + 70 + n * 46;
+      m.add(this.text(x + 30, cy, `${MEMORY_NAME[k]}`, 18, '#2a2433', '900').setBackgroundColor(MEMORY_COLOR[k]).setPadding(8, 2, 8, 2));
+      m.add(this.text(x + 100, cy + 2, String(s.memories[k]), 20, hex(C.ink), '900'));
+      m.add(this.text(x + 150, cy + 4, src[k], 13, '#4a4356').setWordWrapWidth(360, true));
+    });
+    m.add(this.text(x + 30, y + 266, `鄉親認同 ${Math.round(s.kinship)}（${kinshipLabel(s.kinship)}）`, 17, hex(C.ink), '900'));
+    const share = residentShare(s);
+    const dd = dailyKinshipDelta(s);
+    m.add(this.text(x + 30, y + 294,
+      `給居民的店越多（雜貨、理髮、藥局、包子），鄉親認同越高：居民會變多，聊天也更容易聊出回憶。只開給遊客的店（咖啡、龍眼乾），居民會覺得老街不是自己的。\n目前給居民的店占 ${share === null ? '-' : Math.round(share * 100) + '%'}，每天 ${dd > 0 ? '+' : ''}${dd.toFixed(1)}。`,
+      13, '#4a4356').setWordWrapWidth(470, true).setLineSpacing(3));
+    // 老店作法
+    const rx = x + 540;
+    m.add(this.text(rx, y + 70, '老店重新開張', 18, hex(C.ink), '900'));
+    m.add(this.text(rx, y + 96, '找回作法後，會有人來應徵接手這間老店。', 13, '#6a6378'));
+    (streetOf(s).memory?.recipes ?? []).forEach((r, n) => {
+      const cy = y + 124 + n * 74;
+      const learned = s.recipes.includes(r.shop);
+      m.add(this.add.rectangle(rx, cy, 430, 66, learned ? 0xeaf4e4 : 0xffffff).setOrigin(0).setStrokeStyle(2, 0xd8cfe0));
+      m.add(this.text(rx + 12, cy + 8, r.name, 16, hex(C.ink), '900'));
+      m.add(this.text(rx + 12, cy + 34, r.text, 12, '#4a4356').setWordWrapWidth(270, true));
+      if (learned) {
+        m.add(this.text(rx + 418, cy + 22, '已找回', 15, '#2f7d3f', '900').setOrigin(1, 0));
+        return;
+      }
+      const b = this.button(rx + 290, cy + 10, 130, 46, memoryText(r.cost), () => {
+        const res = learnRecipe(s, r.shop);
+        if (!res.ok) return toast(res.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast(`找回了${r.name}的作法！`);
+        this.showMemories();
+      }, 0x9a6a3a, 13);
+      b.setEnabled(hasMemories(s, r.cost));
+      m.add(b.root);
+    });
+    const done = returnedOwners(s), all = streetOf(s).memory?.owners.length ?? 0;
+    m.add(this.text(x + 30, y + MH - 40, `已說服的屋主 ${done} / ${all}　・　點選空屋可以跟屋主談`, 14, '#2f6f8f', '700'));
+  }
+
   /** 招租佈告欄 */
   private panelBoard(i: number) {
     const s = S();
     const p = this.panel;
     p.add(this.text(20, 10, `第 ${i + 1} 號店面・招租佈告欄`, 19, '#ffffff', '900'));
-    p.add(this.text(290, 14, '點應徵者進行面試。佈告欄每天會有新的人來，沒人應徵超過 3 天的會離開。', 14, '#a49dbb'));
+    const rule = ownerRule(s, i);
+    p.add(this.text(290, 14, rule ? `屋主的${OWNER_RULE_TEXT[rule]}` : '點應徵者進行面試。佈告欄每天會有新的人來，沒人應徵超過 3 天的會離開。', 14, rule ? '#ffb0a0' : '#a49dbb'));
     const cardW = 236, gap = 10;
     s.applicants.forEach((a, k) => {
       const prof = profileOf(s, a.tenantId);
@@ -1307,6 +1428,13 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (Math.round(ga) !== Math.round(gb) || ga >= 30) notes.push(`民怨 ${Math.round(gb)} → ${Math.round(ga)}${ga >= 80 ? '（明天可能有店被靜坐）' : ''}`);
     }
     if (sum.closed?.length) notes.push(`抗議靜坐，暫停營業：${sum.closed.join('、')}`);
+    if (sum.kinshipAfter !== undefined) {
+      notes.push(`居民 ${sum.residents ?? 0} 人・遊客 ${sum.tourists ?? 0} 人`);
+      const got = sum.mem ? memoryText(sum.mem) : '';
+      notes.push(got ? `今天找回的回憶：${got}` : '今天沒有聊出新的回憶。');
+      const kb = sum.kinshipBefore ?? 0, ka = sum.kinshipAfter;
+      notes.push(`鄉親認同 ${Math.round(kb)} → ${Math.round(ka)}（${kinshipLabel(ka)}）`);
+    }
     if (sum.fireVisitors) notes.push(`水火同源看火 ${sum.fireVisitors} 人${sum.fireIncome ? `・攤販收入 ${money(sum.fireIncome)}` : ''}`);
     if (sum.hikers) notes.push(`爬好漢坡 ${sum.hikers} 人（下來又累又餓，吃的店生意變好）`);
     if (sum.festival) notes.push('妖怪祭辦完了！明天早上……收銀機裡會不會有樹葉？');

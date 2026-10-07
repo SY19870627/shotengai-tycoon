@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import {
-  hourOf, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, endDay,
+  hourOf, isWeekend, tickTraffic, notePasserby, enterChance, tryEnter, completeVisit, endDay,
   nextLotCost, streetOf, profileOf, presentTenants, lotOfTenant, getRel, isActive, activityVariant,
-  rollOrigin, fallChance, registerFall, vanishChance, registerVanish, strandedPerHour, BUS, ROUTE,
+  rollOrigin, isForeign, fallChance, registerFall, vanishChance, registerVanish, strandedPerHour, BUS, ROUTE,
   dayEndMin, planCheckins, checkInGuest, roomsOf, isMinshuku,
   sightChance, isSunset, registerSightseer, useTelescope, shopOpen, lastSpawnMin,
 } from '../core/game';
@@ -19,8 +19,8 @@ import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review, Y
 import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
-import { drawShopFacade, drawEmptyLot, drawLockedLot, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
-import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE } from './drawLandmarks';
+import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
+import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
@@ -28,6 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
+import { MEMORY_NAME, MEMORY_COLOR, ownerOf } from '../core/memory';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
 const MINUTES_PER_SEC = 8;
@@ -48,6 +49,25 @@ const MUD_LOOKS: Look[] = [
   { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xe8d8c8, pants: 0xe8d8c8, accessory: 'mudmask', age: 'mid' },
   { skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'short', shirt: 0xf6e0e6, pants: 0xf6e0e6, accessory: 'mudmask', age: 'young' },
   { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0xdde8f0, pants: 0xdde8f0, accessory: 'mudmask', age: 'old' },
+];
+
+/** 東原的居民：阿公阿嬤、戴斗笠的農婦、穿制服的國中生 */
+const RESIDENT_LOOKS: Look[] = [
+  { skin: 0xc98e66, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'none', age: 'old' },
+  { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'bun', shirt: 0x9b6bc9, pants: 0x3d3a36, accessory: 'none', age: 'old' },
+  { skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'bun', shirt: 0xd9824a, pants: 0x54627a, accessory: 'hat', age: 'mid' },
+  { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'none', age: 'kid' },
+  { skin: 0xd9a27a, hair: 0x111111, hairStyle: 'ponytail', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'none', age: 'kid' },
+  { skin: 0xc98e66, hair: 0x4a4a4a, hairStyle: 'bald', shirt: 0x5b7a5b, pants: 0x3d3a36, accessory: 'cap', age: 'old' },
+  { skin: 0xd9a27a, hair: 0x2a1d17, hairStyle: 'long', shirt: 0xef8fb1, pants: 0x54627a, accessory: 'none', age: 'mid' },
+];
+
+/** 東原週末的遊客：單車隊、拍老屋的攝影團 */
+const TOURIST_LOOKS: Look[] = [
+  { skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' },
+  { skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'ponytail', shirt: 0x3fb2a9, pants: 0x2b2b2b, accessory: 'headband', age: 'young' },
+  { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0x6d5a4a, pants: 0x54627a, accessory: 'camera', age: 'mid' },
+  { skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xf0f0f0, pants: 0x4f86c6, accessory: 'camera', age: 'young' },
 ];
 
 /** 角色站的位置（比路人前面一點） */
@@ -438,7 +458,8 @@ export class StreetScene extends Phaser.Scene {
     const x0 = this.L.lotX(i);
 
     if (!lot.unlocked) {
-      view.container.add(drawLockedLot(this, nextLotCost(s), i === firstLocked));
+      const owner = this.street.memory ? ownerOf(s, i) : undefined;
+      view.container.add(owner ? drawVacantHouse(this, owner.tag, i === firstLocked) : drawLockedLot(this, nextLotCost(s), i === firstLocked));
     } else if (lot.bath) {
       view.container.add(drawBathhouse(this));
       view.lights.fillStyle(0xffe2a0, 0.45);
@@ -756,10 +777,10 @@ export class StreetScene extends Phaser.Scene {
 
   private spawnPed() {
     const s = S();
-    notePasserby(s);
     const open = s.lots.filter((l) => l.unlocked).length;
     const route = passerbyRoute(open, Math.random);
     const origin = rollOrigin(s, Math.random);
+    notePasserby(s, origin);
     const fall = Math.random() < fallChance(s);
     const vanish = Math.random() < vanishChance(s);
     // 有交通問題的老街：一部分遊客是搭公車來的，先在山下排隊
@@ -800,13 +821,22 @@ export class StreetScene extends Phaser.Scene {
     };
     this.peds.push(ped);
     if (festivalActive(s)) this.dressForFestival(ped);
+    // 東原：居民穿得很家常；週末的遊客是單車隊和攝影團
+    else if (this.street.memory) {
+      const looks = origin === 'resident' ? RESIDENT_LOOKS : isWeekend(s) && Math.random() < 0.6 ? TOURIST_LOOKS : null;
+      if (looks) {
+        const k = variant % looks.length;
+        ped.tex = ensureCharTexture(this, `${origin === 'resident' ? 'resident' : 'dyTourist'}${k}`, looks[k]);
+        sprite.setTexture(`${ped.tex}_0`).setScale(61 / CHAR_H);
+      }
+    }
     // 開了浴衣店：街上有一些早上就租好浴衣的遊客
     else if (!fromBus && hourOf(s) >= 9.5 && s.lots.some((l) => l.shop?.defId === 'yukata') && Math.random() < 0.1) {
       this.wearYukata(ped);
       ped.yukata = true;
     }
     // 沒有翻譯時，外國旅客偶爾會一臉困惑
-    if (origin !== 'local' && moduleEff(s, 'multilingual') === 0 && Math.random() < 0.08) {
+    if (isForeign(origin) && moduleEff(s, 'multilingual') === 0 && Math.random() < 0.08) {
       this.time.delayedCall(800, () => sprite.active && this.floatText(sprite.x, sprite.y - 70, origin === 'jp' ? 'えっと…？' : '어…?', '#ffffff', 14));
     }
     return ped;
@@ -906,8 +936,9 @@ export class StreetScene extends Phaser.Scene {
     const yk = p.yokai ? { kind: p.yokai.kind, leaves: p.yokai.leaves && !p.yokai.revealed } : undefined;
     const r = completeVisit(s, i, spend, p.origin, yk);
     if (r.income > 0) this.floatText(this.L.doorX(i), GROUND_Y - 112, `+$${r.income}`, hex(C.gold), 17);
+    if (r.memory) this.floatText(this.L.doorX(i) + 26, GROUND_Y - 138, `+${MEMORY_NAME[r.memory]}`, MEMORY_COLOR[r.memory], 17);
     if (def) this.afterOnsenVisit(p, def.id, i);
-    if (p.origin !== 'local' && Math.random() < 0.35) {
+    if (isForeign(p.origin) && Math.random() < 0.35) {
       const words = p.origin === 'jp' ? ['おいしい！', 'すごい！', 'かわいい！', '最高！'] : ['맛있어요!', '대박!', '예뻐요!', '최고!'];
       this.floatText(this.L.doorX(i) + 30, GROUND_Y - 80, Phaser.Utils.Array.GetRandom(words), p.origin === 'jp' ? '#ffd6e0' : '#d6e8ff', 15);
     }
@@ -932,7 +963,7 @@ export class StreetScene extends Phaser.Scene {
     if (busy >= (isSunset(s) ? 9 : 6) || Math.random() >= sightChance(s)) return false;
 
     const opts: SightKind[] = ['view', 'view', 'view', 'selfie', 'selfie'];
-    if (p.origin !== 'local') opts.push('selfie', 'selfie');
+    if (isForeign(p.origin)) opts.push('selfie', 'selfie');
     if (!this.telescopeBusy) opts.push('telescope', 'telescope');
     const seat = this.benchSeats.findIndex((b) => !b);
     if (seat >= 0 && !p.suitcase) opts.push('bench', 'bench');
@@ -1013,7 +1044,7 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private sightLine(p: Ped, pick: { local: string[]; jp: string[]; kr: string[] }): string {
-    return Phaser.Utils.Array.GetRandom(pick[p.origin]) as string;
+    return Phaser.Utils.Array.GetRandom(pick[p.origin === 'resident' ? 'local' : p.origin]) as string;
   }
 
   /** 觀景台的台詞：依天氣與時段變化 */
@@ -1811,7 +1842,7 @@ export class StreetScene extends Phaser.Scene {
         const s = S();
         const r = checkInGuest(s, g);
         if (r.income > 0) this.floatText(door, GROUND_Y - 112, `+$${r.income} 入住`, hex(C.gold), 16);
-        if (g.origin !== 'local' && Math.random() < 0.5) this.floatText(door + 30, GROUND_Y - 84, g.origin === 'jp' ? 'チェックイン！' : '체크인!', '#ffffff', 13);
+        if (isForeign(g.origin) && Math.random() < 0.5) this.floatText(door + 30, GROUND_Y - 84, g.origin === 'jp' ? 'チェックイン！' : '체크인!', '#ffffff', 13);
         this.paintMinshuku(g.lot);
         this.tweens.add({
           targets: [sprite, bag], alpha: 0, y: GROUND_Y + 2, duration: 300,
@@ -2108,6 +2139,19 @@ export class StreetScene extends Phaser.Scene {
     f.glow.fillCircle(x, y - h * 0.4, 20 + 14 * lvl);
   }
 
+  /** 東原：龍眼窯的煙囪冒煙 */
+  private kilnTimer = 0;
+  private updateKilnSmoke(dt: number) {
+    const box = this.landmarkBox.get('kiln');
+    if (!box) return;
+    this.kilnTimer -= dt;
+    if (this.kilnTimer > 0) return;
+    this.kilnTimer = 900 + Math.random() * 600;
+    const x = box.x + KILN.chimneyX + Phaser.Math.Between(-4, 4), y = GROUND_Y + KILN.chimneyY;
+    const puff = this.add.circle(x, y, 7 + Math.random() * 4, 0xd8d0c4, 0.5).setDepth(12);
+    this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(80, 130), x: x + Phaser.Math.Between(10, 50), scale: 2.6, alpha: 0, duration: 2600, onComplete: () => puff.destroy() });
+  }
+
   /** 露頭冒煙：泉量越多煙越濃 */
   private updateSteam(dt: number) {
     const box = this.landmarkBox.get('spring');
@@ -2158,6 +2202,7 @@ export class StreetScene extends Phaser.Scene {
     this.drawFlame(dt * Math.max(1, store.speed));
     this.drawWells();
     if (running) this.updateSteam(dt * store.speed);
+    if (running) this.updateKilnSmoke(dt * store.speed);
     if (this.exposeCooldown > 0) this.exposeCooldown -= dt;
     if (!running) return;
     const h = hourOf(s);

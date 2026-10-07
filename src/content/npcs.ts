@@ -136,4 +136,53 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xf2a93b, hair: 0xf2a93b, hairStyle: 'short', shirt: 0xf2a93b, pants: 0xf2a93b, accessory: 'none', age: 'kid' }),
     kind: 'cat',
   },
+  // ---- 東原（全部虛構） ----
+  dyStudent: {
+    id: 'dyStudent', name: '小穎（留村的大學生）',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0x6b8f6b, pants: 0x54627a, accessory: 'glasses', age: 'young' }),
+  },
+  dyChief: {
+    id: 'dyChief', name: '村長 阿土叔',
+    look: L({ skin: 0xc98e66, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'cap', age: 'mid' }),
+  },
+  dyResident: {
+    id: 'dyResident', name: '住在巷子裡的阿嬤',
+    look: L({ skin: 0xe8b48f, hair: 0xd9d4cc, hairStyle: 'bun', shirt: 0x9b6bc9, pants: 0x3d3a36, accessory: 'none', age: 'old' }),
+  },
+  dyResident2: {
+    id: 'dyResident2', name: '騎機車的阿伯',
+    look: L({ skin: 0xc98e66, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0x5b7a5b, pants: 0x3d3a36, accessory: 'hat', age: 'old' }),
+  },
+  dyBro1: {
+    id: 'dyBro1', name: '大哥',
+    look: L({ skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'glasses', age: 'old' }),
+  },
+  dyBro2: {
+    id: 'dyBro2', name: '二哥',
+    look: L({ skin: 0xe8b48f, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0xd9824a, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
+  },
+  dyBro3: {
+    id: 'dyBro3', name: '小弟',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'spiky', shirt: 0x4f86c6, pants: 0x2f3550, accessory: 'none', age: 'mid' }),
+  },
+  dyLifter: {
+    id: 'dyLifter', name: '舉重隊的國中生',
+    look: L({ skin: 0xd9a27a, hair: 0x111111, hairStyle: 'short', shirt: 0x2f6fb0, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
+  },
+  dyLifter2: {
+    id: 'dyLifter2', name: '舉重隊的學妹',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'ponytail', shirt: 0x2f6fb0, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
+  },
+  dySmith: {
+    id: 'dySmith', name: '打鐵的鐵伯',
+    look: L({ skin: 0xb07a52, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'old' }),
+  },
+  cyclist: {
+    id: 'cyclist', name: '單車隊隊長',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),
+  },
+  busGuide: {
+    id: 'busGuide', name: '遊覽車導遊',
+    look: L({ skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'bob', shirt: 0xd64545, pants: 0x2b2b3a, accessory: 'hat', age: 'mid' }),
+  },
 };

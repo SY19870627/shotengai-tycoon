@@ -58,7 +58,7 @@ export function drawBackdrop(scene: Phaser.Scene, kind: BackdropKind, worldW: nu
     case 'basin-hills': return basinHills(scene, rng, worldW);
     case 'mountain-sea': return mountainSea(scene, rng, worldW);
     case 'hot-spring': return hotSpring(scene, rng, worldW);
-    case 'orchard': return simpleHills(scene, rng, worldW, [0xb0bf9a, 0x8fae6e, 0x6f9c4e], false);
+    case 'orchard': return orchard(scene, rng, worldW);
     default: return simpleHills(scene, rng, worldW, [0xa8b8b0, 0x88a890, 0x689870], false);
   }
 }
@@ -534,6 +534,196 @@ function hotSpring(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, wo
     }
   }
   return [g1, n1, g2, n2, g3, n3];
+}
+
+// ───────────────────────── 東原：東山龍眼山村 ─────────────────────────
+
+/** 龍眼樹：矮胖、濃綠的圓冠（遠景版只有樹冠） */
+function longanTree(g: Phaser.GameObjects.Graphics, x: number, y: number, s: number, col: number, trunk = true, fruit = false): void {
+  if (trunk) {
+    g.fillStyle(0x5a4434);
+    g.fillRect(x - s * 0.1, y - s * 0.45, s * 0.2, s * 0.45);
+  }
+  g.fillStyle(shade(col, -0.18));
+  g.fillEllipse(x, y - s * 0.62, s * 1.3, s * 0.8);
+  g.fillStyle(col);
+  g.fillEllipse(x - s * 0.18, y - s * 0.75, s * 0.9, s * 0.62);
+  g.fillEllipse(x + s * 0.25, y - s * 0.7, s * 0.8, s * 0.56);
+  g.fillStyle(shade(col, 0.15), 0.7);
+  g.fillEllipse(x - s * 0.25, y - s * 0.88, s * 0.42, s * 0.24);
+  if (fruit) {
+    // 一串串褐黃色的龍眼
+    g.fillStyle(0xb8904a);
+    for (let k = 0; k < 4; k++) g.fillCircle(x - s * 0.4 + k * s * 0.26, y - s * 0.38 - (k % 2) * s * 0.08, Math.max(1.2, s * 0.05));
+  }
+}
+
+/** 檳榔樹：細長樹幹 + 頂端一叢羽葉 */
+function betelPalm(g: Phaser.GameObjects.Graphics, x: number, y: number, h: number, col: number): void {
+  g.lineStyle(2, 0x8a8070);
+  g.lineBetween(x, y, x + 2, y - h);
+  g.fillStyle(col);
+  for (const [dx, dy] of [[-10, 2], [10, 2], [-7, -4], [7, -4], [0, -6]]) {
+    g.fillTriangle(x + 2, y - h, x + 2 + dx * 1.4, y - h + dy + 6, x + 2 + dx * 0.6, y - h + dy + 8);
+  }
+}
+
+/** 遠方的三合院（紅瓦、ㄇ字型） */
+function farmhouse(
+  g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics, x: number, base: number, s: number, tone: number,
+): void {
+  const wall = haze(0xd8c8a8, tone), tile = haze(0xb85a3a, tone), brick = haze(0xb06a4a, tone);
+  // 正身
+  g.fillStyle(wall);
+  g.fillRect(x - 18 * s, base - 12 * s, 36 * s, 12 * s);
+  g.fillStyle(tile);
+  g.fillPoints([
+    { x: x - 22 * s, y: base - 11 * s }, { x: x + 22 * s, y: base - 11 * s }, { x: x + 16 * s, y: base - 18 * s }, { x: x - 16 * s, y: base - 18 * s },
+  ], true);
+  g.fillStyle(haze(0x8a3a2a, tone));
+  g.fillRect(x - 3 * s, base - 8 * s, 6 * s, 8 * s);
+  // 兩側護龍
+  for (const d of [-1, 1]) {
+    const hx = x + d * 26 * s;
+    g.fillStyle(brick);
+    g.fillRect(hx - 7 * s, base - 8 * s, 14 * s, 8 * s);
+    g.fillStyle(tile);
+    g.fillRect(hx - 8 * s, base - 11 * s, 16 * s, 4 * s);
+    n.fillStyle(0xffc070, 0.7);
+    n.fillRect(hx - 2 * s, base - 6 * s, 4 * s, 3 * s);
+  }
+  // 禾埕
+  g.fillStyle(haze(0xc8b898, tone));
+  g.fillRect(x - 20 * s, base, 40 * s, 2 * s);
+  n.fillStyle(0xffb050, 0.85);
+  n.fillRect(x - 3 * s, base - 8 * s, 6 * s, 8 * s);
+}
+
+/** 甘蔗田（一片細長的直條） */
+function caneField(g: Phaser.GameObjects.Graphics, x: number, base: number, w: number, h: number, col: number): void {
+  g.fillStyle(shade(col, -0.12));
+  g.fillRect(x, base - h, w, h);
+  g.lineStyle(1, shade(col, 0.18), 0.8);
+  for (let xx = x + 2; xx < x + w; xx += 3) g.lineBetween(xx, base, xx + 1, base - h);
+  g.fillStyle(shade(col, 0.1));
+  for (let xx = x; xx < x + w; xx += 6) g.fillTriangle(xx, base - h + 2, xx + 7, base - h + 2, xx + 3, base - h - 4);
+}
+
+/** 遠方焙灶冒出的細長炊煙 */
+function thinSmoke(g: Phaser.GameObjects.Graphics, x: number, y: number, n: number, alpha: number): void {
+  for (let k = 0; k < n; k++) {
+    g.fillStyle(0xe8e4dc, alpha * (1 - k / (n + 2)));
+    g.fillCircle(x + k * 3 + Math.sin(k * 0.8) * 3, y - k * 9, 2.5 + k * 1.1);
+  }
+}
+
+function orchard(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, worldW: number): Phaser.GameObjects.GameObject[] {
+  const f1 = 0.1, f2 = 0.25, f3 = 0.45;
+
+  // ── 遠景：層層青山 + 一兩縷焙灶的煙 ──
+  const g1 = layer(scene, f1, 0.5);
+  const w1 = layerWidth(worldW, f1);
+  const far = ridge(g1, rng, -100, w1, GROUND_Y - 190, 70, haze(0x6f8f78, 0.6), 3, 20);
+  for (let x = 0; x < w1; x += rng.between(14, 26)) {
+    g1.fillStyle(haze(0x5f8468, 0.58));
+    g1.fillCircle(x, far(x) + 5, rng.between(4, 8));
+  }
+  const near1 = ridge(g1, rng, -100, w1, GROUND_Y - 140, 46, haze(0x6a9468, 0.48), 3, 20);
+  for (let i = 0, x = rng.between(200, 420); i < 2 && x < w1; i++, x += rng.between(600, 1000)) {
+    thinSmoke(g1, x, near1(x) + 6, 9, 0.35);
+  }
+
+  // ── 中景：一排排龍眼樹的山坡、甘蔗田、三合院 ──
+  const g2 = layer(scene, f2, 1);
+  const n2 = nightLayer(scene, f2, 1);
+  const w2 = layerWidth(worldW, f2);
+  const slope = ridge(g2, rng, -100, w2, GROUND_Y - 110, 44, haze(0x5f9a58, 0.3), 3, 16);
+  // 梯田般的龍眼樹行（沿著稜線往下排）
+  for (let r = 0; r < 4; r++) {
+    const off = 10 + r * 20;
+    const col = haze(rng.pick([0x3a6e3a, 0x40783e, 0x356a38]), 0.3 - r * 0.04);
+    for (let x = -20 + (r % 2) * 9; x < w2; x += rng.between(16, 22)) {
+      const y = slope(x) + off;
+      if (y > GROUND_Y - 30) continue;
+      longanTree(g2, x, y, rng.between(14, 18), col, false);
+    }
+    // 樹行之間的田埂
+    g2.lineStyle(1, haze(0x8aa870, 0.3), 0.6);
+    g2.beginPath();
+    g2.moveTo(-100, slope(-100) + off + 2);
+    for (let x = -100; x <= w2; x += 40) g2.lineTo(x, slope(x) + off + 2);
+    g2.strokePath();
+  }
+  // 甘蔗田與三合院（坐在山腳）
+  g2.fillStyle(haze(0x6a9a5a, 0.28));
+  g2.fillRect(-100, GROUND_Y - 40, w2 + 200, 80);
+  for (let x = rng.between(40, 160); x < w2; x += rng.between(220, 380)) {
+    const base = GROUND_Y - 38;
+    if (rng.frac() < 0.55) {
+      caneField(g2, x, base, rng.between(60, 110), rng.between(14, 20), haze(0x7aaa5a, 0.25));
+    } else {
+      farmhouse(g2, n2, x + 30, base, rng.realInRange(0.9, 1.2), 0.25);
+      longanTree(g2, x - 4, base, 22, haze(0x3a6e3a, 0.25), true);
+    }
+  }
+  // 一座中景的焙灶小屋 + 炊煙
+  {
+    const kx = Math.min(w2 - 120, W * 0.35 + rng.between(-60, 60)), base = GROUND_Y - 38;
+    g2.fillStyle(haze(0xa8603a, 0.25));
+    g2.fillRect(kx - 14, base - 12, 28, 12);
+    g2.fillStyle(haze(0x8a949a, 0.25));
+    g2.fillRect(kx - 18, base - 15, 36, 4);
+    g2.fillStyle(haze(0x8a5038, 0.25));
+    g2.fillRect(kx + 6, base - 28, 5, 14);
+    thinSmoke(g2, kx + 8, base - 32, 8, 0.4);
+  }
+
+  // ── 近景：大棵龍眼樹、檳榔樹、甘蔗、鐵皮農舍 ──
+  const g3 = layer(scene, f3, 1.5);
+  const n3 = nightLayer(scene, f3, 1.5);
+  const w3 = layerWidth(worldW, f3);
+  g3.fillStyle(0x5f8a52);
+  g3.fillRect(-100, GROUND_Y - 20, w3 + 200, 60);
+  let x = -40;
+  while (x < w3) {
+    const kind = rng.between(0, 9);
+    const base = GROUND_Y - 10;
+    if (kind < 4) {
+      // 龍眼樹（成串結果）
+      const s = rng.between(48, 66);
+      longanTree(g3, x + s * 0.6, base + 2, s, rng.pick([0x356e3a, 0x3f7a42, 0x2f6436]), true, rng.frac() < 0.6);
+      x += s + rng.between(0, 20);
+    } else if (kind < 6) {
+      // 鐵皮屋頂的老農舍
+      const hw = rng.between(56, 84), hh = rng.between(30, 42);
+      const wall = rng.pick([0xc8b898, 0xb8a88a, 0xd0c4a8, 0xb07a5a]);
+      g3.fillStyle(wall);
+      g3.fillRect(x, base - hh, hw, hh);
+      g3.fillStyle(rng.pick([0x8a949a, 0x7a8a8e, 0xa0645a]));
+      g3.fillPoints([
+        { x: x - 6, y: base - hh + 2 }, { x: x + hw + 6, y: base - hh - 8 }, { x: x + hw + 6, y: base - hh - 4 }, { x: x - 6, y: base - hh + 6 },
+      ], true);
+      g3.fillStyle(0x9a5a2a, 0.4);
+      g3.fillEllipse(x + hw * 0.4, base - hh - 1, 12, 3);
+      const wx = x + hw / 2 - 7;
+      g3.fillStyle(0x6a7a7a);
+      g3.fillRect(wx, base - hh + 10, 14, 11);
+      n3.fillStyle(0xffc070, 0.75);
+      n3.fillRect(wx, base - hh + 10, 14, 11);
+      x += hw + rng.between(8, 26);
+    } else if (kind < 8) {
+      // 檳榔樹兩三棵
+      const k = rng.between(2, 3);
+      for (let i = 0; i < k; i++) betelPalm(g3, x + i * 12, base, rng.between(70, 96), rng.pick([0x4f8a3a, 0x5f9a44]));
+      x += k * 12 + rng.between(10, 30);
+    } else {
+      // 一小片甘蔗
+      const cw = rng.between(40, 70);
+      caneField(g3, x, base, cw, rng.between(30, 40), 0x7aa85a);
+      x += cw + rng.between(10, 30);
+    }
+  }
+  return [g1, g2, n2, g3, n3];
 }
 
 // ───────────────────────── 佔位：簡單丘陵 ─────────────────────────
