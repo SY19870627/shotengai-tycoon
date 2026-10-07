@@ -29,6 +29,10 @@ export const Ev = {
   Changed: 'changed',
   /** 點了可以操作的地標（帶地標 id） */
   Landmark: 'landmark',
+  /** 東原：回憶時光裡點了店家（帶 index） */
+  PastTap: 'past-tap',
+  /** 東原：回憶時光的時間到了 */
+  TripEnd: 'trip-end',
 } as const;
 
 function readJSON<T>(key: string): T | null {
@@ -57,6 +61,9 @@ export const store = {
   yokaiOnStreet: 0,
   /** 劇情演出中（時間暫停、不能點店面） */
   storyRunning: false,
+  /** 東原：換年代後要淡入、剛穿越要演開場 */
+  eraFade: false,
+  tripIntro: false,
 };
 
 // 測試用：網址加上 ?unlock=all 可以直接解鎖所有能玩的老街

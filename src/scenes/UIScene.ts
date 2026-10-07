@@ -10,7 +10,8 @@ import {
 } from '../core/game';
 import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
-  kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners,
+  kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
+  canTrip, startTrip, endTrip, nextEra, tripOver, pastHelp, passPastTime, emptyMemories, PAST_HOURS, TRIP_HOUR, HELP_MINUTES,
 } from '../core/memory';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
@@ -72,6 +73,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private toastText!: Phaser.GameObjects.Text;
   private liveRefresh?: () => void;
   private memText?: Phaser.GameObjects.Text;
+  private pastBar?: Phaser.GameObjects.Rectangle;
+  /** 回憶時光：剛演完的劇情要讓過去的時鐘往前走幾分鐘、要不要回到 2016 */
+  private pastPending = 0;
+  private pastLot = -1;
+  private returning = false;
   private kinBar?: Phaser.GameObjects.Rectangle;
   private kinText?: Phaser.GameObjects.Text;
   private refreshTimer = 0;
@@ -94,6 +100,10 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.grievanceBar = undefined;
     this.grievanceText = undefined;
     this.memText = undefined;
+    this.pastBar = undefined;
+    this.pastPending = 0;
+    this.pastLot = -1;
+    this.returning = false;
     this.kinBar = undefined;
     this.kinText = undefined;
     this.buildTopBar();
@@ -118,8 +128,12 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     on(Ev.Toast, (m: string) => this.showToast(m));
     on(Ev.Story, (steps: Step[]) => this.director.play(steps));
     on(Ev.StoryDone, () => this.afterStory());
+    on(Ev.PastTap, (i: number) => this.onPastTap(i));
+    on(Ev.TripEnd, () => this.onTripEnd());
     on(Ev.Landmark, (id: string) => {
       if (store.storyRunning || store.waitingNextDay) return;
+      if (S().trip) return this.onPastLandmark(id);
+      if (id === 'kiln') return this.showFilm();
       if (id === 'spring') this.showSpring();
       else if (id === 'fire') this.showFire();
     });
@@ -138,6 +152,18 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     });
 
     this.refreshTop();
+    // 換年代的淡入；剛穿越過去要演開場
+    if (store.eraFade) {
+      store.eraFade = false;
+      const cover = this.add.rectangle(0, 0, W, H, 0xfff4dc, 1).setOrigin(0).setDepth(500);
+      this.tweens.add({ targets: cover, alpha: 0, duration: 900, onComplete: () => cover.destroy() });
+    }
+    const s = S();
+    if (s.trip && store.tripIntro) {
+      store.tripIntro = false;
+      const intro = streetOf(s).memory?.tripIntro?.(s, s.trip.era) ?? [];
+      if (intro.length) this.time.delayedCall(950, () => bus.emit(Ev.Story, intro));
+    }
   }
 
   update(_t: number, dt: number) {
@@ -212,6 +238,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   // =================================================================== 上方資訊列
 
   private buildTopBar() {
+    if (S().trip) return this.buildPastBar();
     const street = streetOf(S());
     this.blocker(0, 0, W, 64, C.panel, 0.94);
     this.add.rectangle(0, 64, W, 3, C.gold, 0.8).setOrigin(0);
@@ -254,6 +281,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private refreshTop() {
     const s = S();
+    if (s.trip) return this.refreshPastBar();
     this.dayText.setText(`第 ${s.day} 天・${weekdayName(s)}`);
     const bad = s.weather === 'heavyFog';
     this.weatherText.setText(s.kami ? '神隱日' : WEATHER_NAME[s.weather])
@@ -317,6 +345,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       items.push(isWeekend(s) ? '週末：遊客一波一波來' : '平日：街上幾乎都是居民');
       colors[items.length - 1] = isWeekend(s) ? '#f0c890' : '#b8d8b0';
       if (s.kinship < 30) { items.push(`鄉親：${kinshipLabel(s.kinship)}`); colors[items.length - 1] = '#ff9a8a'; }
+      if (canTrip(s).ok) { items.push(`龍眼窯：今晚可以放白布電影（回到 ${nextEra(s)} 年）`); colors[items.length - 1] = '#f3e3c2'; }
     }
     if (s.mascot) items.push(`吉祥物：${streetOf(s).activities.mascots.find((m) => m.id === s.mascot)?.name}`);
     const sig = items.join('|');
@@ -341,6 +370,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private buildSideButtons() {
     this.sideButtons = this.add.container(W - 92, 104);
+    if (S().trip) return;
     const mk = (y: number, label: string, color: number, fn: () => void) => {
       const b = this.button(0, y, 80, 58, label, fn, color, 15);
       this.sideButtons.add(b.root);
@@ -359,7 +389,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private buildHint() {
     this.hint = this.add.container(W / 2, H - 30);
-    const t = this.text(0, 0, '點擊店面招租或管理租客　・　拖曳畫面移動街道　・　右邊可以辦活動', 15, '#ffffff').setOrigin(0.5);
+    const msg = S().trip ? '點店家進去幫忙　・　拖曳畫面移動街道　・　時間到了畫面會淡出，回到 2016 年' : '點擊店面招租或管理租客　・　拖曳畫面移動街道　・　右邊可以辦活動';
+    const t = this.text(0, 0, msg, 15, '#ffffff').setOrigin(0.5);
     const bg = this.add.rectangle(0, 0, t.width + 36, 36, 0x2a2433, 0.85).setStrokeStyle(1, 0xffffff, 0.2);
     this.hint.add([bg, t]);
   }
@@ -449,6 +480,142 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     p.add(this.text(W - 300, 116, '回憶從哪裡來？點右邊的「回憶」看看', 13, '#a49dbb'));
   }
 
+  // =================================================================== 東原：白布電影與回憶時光
+
+  /** 回憶時光的上方資訊列：年代、時鐘、剩下的時間、回憶點數 */
+  private buildPastBar() {
+    const s = S();
+    this.blocker(0, 0, W, 64, 0x3a2a1a, 0.94);
+    this.add.rectangle(0, 64, W, 3, 0xe8c890, 0.9).setOrigin(0);
+    this.text(16, 7, `${s.trip!.era} 年`, 22, '#f3e3c2', '900');
+    this.text(16, 37, '回憶時光', 14, '#c8b090', '700');
+    this.dayText = this.text(-100, -100, '', 1);
+    this.weatherText = this.text(-100, -100, '', 1);
+    this.forecastChip = this.text(-100, -100, '', 1);
+    this.clockText = this.text(130, 10, '', 32, '#ffffff', '900');
+    this.text(260, 9, '畫面淡出前', 13, '#c8b090');
+    this.add.rectangle(260, 40, 240, 14, 0x1a1208).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.2);
+    this.pastBar = this.add.rectangle(261, 40, 238, 12, 0xe8c890).setOrigin(0, 0.5);
+    this.memText = this.text(530, 22, '', 16, '#e8c890', '900');
+    this.moneyText = this.text(-100, -100, '', 1);
+    this.todayText = this.text(-100, -100, '', 1);
+    this.repBar = this.add.rectangle(-100, -100, 1, 1);
+    this.repText = this.text(-100, -100, '', 1);
+    ['暫停', '1x', '2x', '3x'].forEach((l, i) => {
+      this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x4a3a2a, 15));
+    });
+    this.chips = this.add.container(16, 72);
+    const chip = this.text(0, 0, '點店家進去幫忙（每次 1 個半小時）・點戲院、老榕樹看看・第一次幫忙的店找回最多回憶', 13, '#2a2433', '700')
+      .setBackgroundColor('#f3e3c2').setPadding(8, 3, 8, 3);
+    this.chips.add(chip);
+    const back = this.button(W - 170, 76, 154, 40, '提早回到 2016', () => {
+      if (store.storyRunning || this.returning) return;
+      this.onTripEnd();
+    }, 0x6b5a4a, 14);
+    back.root.setDepth(5);
+  }
+
+  private refreshPastBar() {
+    const s = S();
+    const [a, b] = PAST_HOURS[s.trip!.era];
+    this.clockText.setText(clock(s.minute));
+    this.pastBar!.width = 238 * Math.max(0, (b * 60 - s.minute) / ((b - a) * 60));
+    const m = s.memories;
+    this.memText!.setText(`往事 ${m.past}　味道 ${m.taste}　人情 ${m.bond}　手藝 ${m.craft}`);
+    this.speedButtons.forEach((bt, i) => bt.bg.setStrokeStyle(2, i === store.speed ? 0xe8c890 : 0xffffff, i === store.speed ? 1 : 0.15));
+  }
+
+  /** 2016 年：點龍眼窯，放白布電影 */
+  private showFilm() {
+    const s = S();
+    const r = canTrip(s);
+    const MW = 640, MH = 330;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '戲院原址・白布電影', 24, hex(C.ink), '900'));
+    if (!s.flags.includes('film')) {
+      m.add(this.text(x + 30, y + 80, '這裡曾經是東原戲院。現在是烘龍眼乾的窯，冒著淡淡的煙。', 16, '#4a4356').setWordWrapWidth(MW - 60, true));
+      return;
+    }
+    const era = nextEra(s);
+    m.add(this.text(x + 30, y + 74,
+      `在窯前的白布上，放一段老膠卷。看著畫面，就會回到 ${era} 年的東原，度過一段回憶時光。\n\n・每天傍晚 ${TRIP_HOUR}:00 以後可以放一次\n・回憶時光期間，2016 年的時間停在今晚\n・在過去幫街坊的忙，找回回憶；時間到了畫面會淡出，回到 2016 年`,
+      15, '#4a4356').setWordWrapWidth(MW - 60, true).setLineSpacing(4));
+    const b = this.button(x + MW / 2 - 140, y + MH - 84, 280, 56, r.ok ? `放映：回到 ${era} 年` : r.reason, () => this.beginTrip(), 0x9a6a3a, r.ok ? 18 : 14);
+    b.setEnabled(r.ok);
+    m.add(b.root);
+  }
+
+  /** 換年代：整個畫面淡成白色，重新建立街景和介面 */
+  private switchEra() {
+    store.speed = 1;
+    store.selected = -1;
+    const cover = this.add.rectangle(0, 0, W, H, 0xfff4dc, 0).setOrigin(0).setDepth(500);
+    cover.setInteractive();
+    this.tweens.add({
+      targets: cover, alpha: 1, duration: 800, onComplete: () => {
+        store.eraFade = true;
+        this.scene.stop('street');
+        this.scene.launch('street');
+        this.scene.restart();
+      },
+    });
+  }
+
+  private beginTrip() {
+    const s = S();
+    const r = startTrip(s);
+    if (!r.ok) return toast(r.reason);
+    this.closeModal();
+    save();
+    store.tripIntro = true;
+    this.switchEra();
+  }
+
+  /** 回憶時光：點了過去的店 */
+  private onPastTap(i: number) {
+    const s = S();
+    if (store.storyRunning || this.returning || !s.trip) return;
+    if (tripOver(s)) return;
+    const steps = pastHelp(s, i);
+    if (!steps) return;
+    this.pastPending = HELP_MINUTES;
+    this.pastLot = i;
+    bus.emit(Ev.Story, steps);
+  }
+
+  private onPastLandmark(id: string) {
+    const s = S();
+    if (this.returning || tripOver(s)) return;
+    const steps = streetOf(s).memory?.pastLandmark?.(s, s.trip!.era, id);
+    if (!steps) {
+      const def = streetOf(s).landmarks.find((l) => l.id === id);
+      if (def) toast(`${def.name}（${s.trip!.era} 年）`);
+      return;
+    }
+    this.pastPending = HELP_MINUTES / 2;
+    bus.emit(Ev.Story, steps);
+  }
+
+  /** 時間到了：演收尾，回到 2016 年 */
+  private onTripEnd() {
+    const s = S();
+    if (this.returning || !s.trip) return;
+    this.returning = true;
+    const gained = emptyMemories();
+    for (const k of MEMORY_KINDS) gained[k] = Math.max(0, s.memories[k] - s.trip.start[k]);
+    const outro = streetOf(s).memory?.tripOutro?.(s, s.trip.era, gained) ?? [];
+    if (outro.length) bus.emit(Ev.Story, outro);
+    else this.finishTrip();
+  }
+
+  private finishTrip() {
+    const s = S();
+    endTrip(s);
+    save();
+    this.switchEra();
+  }
+
   /** 東原：回憶點數、老店作法、屋主 */
   private showMemories() {
     const s = S();
@@ -489,7 +656,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         m.add(this.text(rx + 418, cy + 22, '已找回', 15, '#2f7d3f', '900').setOrigin(1, 0));
         return;
       }
-      const b = this.button(rx + 290, cy + 10, 130, 46, memoryText(r.cost), () => {
+      const b = this.button(rx + 290, cy + 10, 130, 46, memoryText(recipeCost(s, r)), () => {
         const res = learnRecipe(s, r.shop);
         if (!res.ok) return toast(res.reason);
         save();
@@ -497,7 +664,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         toast(`找回了${r.name}的作法！`);
         this.showMemories();
       }, 0x9a6a3a, 13);
-      b.setEnabled(hasMemories(s, r.cost));
+      b.setEnabled(hasMemories(s, recipeCost(s, r)));
       m.add(b.root);
     });
     const done = returnedOwners(s), all = streetOf(s).memory?.owners.length ?? 0;
@@ -1466,6 +1633,23 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private afterStory() {
     const s = S();
+    // 東原：回憶時光
+    if (this.returning) return this.finishTrip();
+    if (this.pastPending) {
+      passPastTime(s, this.pastPending);
+      this.pastPending = 0;
+      if (this.pastLot >= 0) bus.emit(Ev.LotRedraw, this.pastLot);
+      this.pastLot = -1;
+      save();
+      return;
+    }
+    if (s.flags.includes('tripNow')) {
+      s.flags = s.flags.filter((f) => f !== 'tripNow');
+      if (canTrip(s).ok) {
+        this.beginTrip();
+        return;
+      }
+    }
     this.rebuildPanel();
     if (s.chapterComplete && !store.meta.completed.includes(s.streetId)) {
       completeChapter();

@@ -1,5 +1,6 @@
 import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
 import { isWeekend } from '../core/game';
+import { PAST_1995, tripIntro, tripOutro, pastLandmark } from './dongyuan1995';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt, look } from './dsl';
 
 /**
@@ -282,8 +283,8 @@ const stories: StoryEvent[] = [
     ],
   },
   {
-    id: 'dy-kiln', street: ST, once: true, priority: 35, when: 'evening',
-    cond: (c) => (c.s.day >= 4 ? {} : null),
+    id: 'dy-film', street: ST, once: true, priority: 70, when: 'evening',
+    cond: (c) => (c.s.day >= 3 ? {} : null),
     script: () => [
       focus({ landmark: 'kiln' }),
       narrate('傍晚，龍眼窯冒出淡淡的煙，空氣裡都是龍眼木的香味。'),
@@ -295,8 +296,16 @@ const stories: StoryEvent[] = [
       say('dyStudent', '村裡有個傳說：在這座窯前面掛一塊白布，放一卷沒有人看過的老膠卷……'),
       say('dyStudent', '白布上，會出現以前的東原。'),
       emote('me', 'shock'),
-      say('dyStudent', '哈哈，嚇到你了？……不過，我真的在倉庫找到一卷老膠卷。'),
-      narrate('（白布電影的穿越，會在下一階段開放）'),
+      say('dyStudent', '哈哈，嚇到你了？……不過，我真的在倉庫找到一卷老膠卷，還有一台舊放映機。'),
+      say('dyStudent', '標籤上寫著「東原・一九九五」。要不要……今晚就放放看？'),
+      choice('白布、放映機、一卷老膠卷',
+        opt('現在就放', { flag: ['film', 'tripNow'] }, [
+          narrate('舉重隊的孩子幫忙在窯前搭起竹竿，掛上一塊白布。放映機喀啦喀啦地轉了起來……'),
+        ]),
+        opt('改天再說', { flag: ['film'] }, [
+          say('dyStudent', '好，白布我先掛著。每天傍晚以後點龍眼窯，就可以放。'),
+        ]),
+      ),
       leave('dyStudent'), leave('me'),
     ],
   },
@@ -485,13 +494,15 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'dy-granddaughter', street: ST, once: true, priority: 50, when: 'evening',
-    cond: (c) => (c.s.lots[6]?.unlocked && !c.s.lots[7]?.unlocked && c.s.memories.past >= 3 ? {} : null),
-    script: () => [
+    cond: (c) => (c.s.lots[6]?.unlocked && !c.s.lots[7]?.unlocked && (c.s.memories.past >= 3 || c.flag('photo-amy')) ? {} : null),
+    script: (_b, c) => [
       focus({ lot: 7 }),
       appear('dyStudent', { lot: 7 }),
       appear('me', { lot: 7 }, -90),
       say('dyStudent', '這間的屋主是一位在國外工作的孫女。我寫信給她好幾次，她都說「那裡已經沒有我認識的人了」。'),
-      say('dyStudent', '可是……我在老相簿裡，找到這張照片。'),
+      ...(c.flag('photo-amy')
+        ? [say('me', '……我有一張照片。'), narrate('不知道為什麼，你的口袋裡，有一張一九九五年拍的照片。')]
+        : [say('dyStudent', '可是……我在老相簿裡，找到這張照片。')]),
       narrate('照片裡，一個綁辮子的小女孩，站在這間房子門口，手裡拿著一支冰棒。'),
       say('dyStudent', '我傳給她了。'),
       narrate('過了很久，手機亮了起來。'),
@@ -547,6 +558,40 @@ const stories: StoryEvent[] = [
     },
   },
   {
+    id: 'dy-smith-remember', street: ST, once: true, priority: 48, when: 'morning',
+    cond: (c) => (c.flag('p95-blacksmith') && !c.has('dy-smith') && c.has('dy-barber') ? {} : null),
+    script: () => [
+      focus('dy-barber'),
+      appear('dySmith', 'dy-barber', 70),
+      appear('me', 'dy-barber', -100),
+      say('dySmith', '……少年仔，你過來一下。'),
+      say('dySmith', '你怎麼跟我年輕時候，那個來幫我拉風箱的少年仔，長得一模一樣？'),
+      emote('me', 'sweat'),
+      say('dySmith', '那個少年仔手很穩。我還跟他說，以後想學就來找我。……他後來再也沒來過。'),
+      say('dySmith', '你要是想學，我就再開一次爐。'),
+      ...[effect({ memory: { craft: 2 } }), narrate('得到回憶：手藝 2。鐵伯願意教了，打鐵舖需要的回憶也變少了。')],
+      leave('dySmith'), leave('me'),
+    ],
+  },
+  {
+    id: 'dy-ice-remember', street: ST, once: true, priority: 47, when: 'morning',
+    cond: (c) => (c.flag('p95-icepop') && c.has('dy-lan') ? {} : null),
+    script: () => [
+      focus('dy-lan'),
+      appear('dy-lan'),
+      appear('me', 'dy-lan', -100),
+      say('dy-lan', '會長，我昨天晚上夢到婆婆。'),
+      say('dy-lan', '她以前常說，很久以前有個年輕人來冰鋪幫忙熬糖水，熬得很認真。她說：「媳婦要是肯學，我就教她。」'),
+      say('dy-lan', '……可是我嫁過來的時候，冰鋪已經收了。'),
+      emote('dy-lan', 'sad'),
+      say('me', '那個作法，我記得。'),
+      emote('dy-lan', 'shock'),
+      effect({ memory: { bond: 2 }, kinship: 2 }),
+      narrate('得到回憶：人情 2。'),
+      leave('dy-lan'), leave('me'),
+    ],
+  },
+  {
     id: 'dy-wait', street: ST, once: true, priority: 30, when: 'morning',
     cond: (c) => (c.s.day >= 10 ? {} : null),
     script: () => [
@@ -556,7 +601,7 @@ const stories: StoryEvent[] = [
       say('dyStudent', '會長，我做了一張「回憶巡禮地圖」。戲院原址、冰鋪、碗粿店、打鐵舖、老榕樹……'),
       say('dyStudent', '每個地方，都藏著一段以前的故事。要把它們一個一個找回來，才算真的讓東原活過來。'),
       say('dyStudent', '有些回憶，只有回到那個年代才找得到。'),
-      narrate('（回憶巡禮與白布電影的穿越，會在下一階段開放。）'),
+      narrate('（回憶巡禮會在下一階段開放。）'),
       leave('dyStudent'), leave('me'),
     ],
   },
@@ -611,6 +656,10 @@ export const DONGYUAN: StreetDef = {
       { lot: 2, tenant: 'dy-barber', tier: 0 },
     ],
     startMemories: {},
+    past1995: PAST_1995,
+    tripIntro,
+    tripOutro,
+    pastLandmark,
     owners: [
       {
         name: '台北工程師 阿凱', tag: '屋主：台北工程師',
@@ -658,10 +707,10 @@ export const DONGYUAN: StreetDef = {
       },
     ],
     recipes: [
-      { shop: 'icepop', name: '糖水冰鋪', cost: { taste: 5, past: 1 }, text: '阿蘭的婆婆以前賣過。黑糖要熬到可以拉出絲。' },
-      { shop: 'mantou', name: '炸饅頭', cost: { taste: 4, bond: 1 }, text: '放學的國中生最愛。饅頭要放一天再炸才會酥。' },
-      { shop: 'platekoe', name: '盤子碗粿＋花生糯米腸', cost: { taste: 7, bond: 2 }, text: '用盤子蒸，碗粿薄薄的、熟得快。' },
-      { shop: 'blacksmith', name: '打鐵舖', cost: { craft: 5, past: 1 }, text: '鐵伯的手藝。要有人學過，他才願意再開爐。' },
+      { shop: 'icepop', name: '糖水冰鋪', cost: { taste: 5, past: 1 }, discount: { taste: 3 }, text: '阿蘭的婆婆以前賣過。在 1995 年的冰鋪學過的話，需要的回憶會變少。' },
+      { shop: 'mantou', name: '炸饅頭', cost: { taste: 4, bond: 1 }, discount: { taste: 2 }, text: '放學的國中生最愛。在 1995 年的饅頭店學過的話，需要的回憶會變少。' },
+      { shop: 'platekoe', name: '盤子碗粿＋花生糯米腸', cost: { taste: 7, bond: 2 }, discount: { taste: 4 }, text: '用盤子蒸，碗粿薄薄的、熟得快。在 1995 年學過的話，需要的回憶會變少。' },
+      { shop: 'blacksmith', name: '打鐵舖', cost: { craft: 5, past: 1 }, discount: { craft: 2 }, text: '鐵伯的手藝。在 1995 年幫他拉過風箱的話，需要的回憶會變少。' },
     ],
   },
   shopTypes: ['meatball', 'grocery', 'barber', 'pharmacy', 'baozi', 'ribsoup', 'longan', 'cafe', 'icepop', 'platekoe', 'mantou', 'blacksmith'],

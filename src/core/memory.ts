@@ -1,6 +1,6 @@
 import { SHOP_BY_ID } from './shops';
-import type { GameState, Memories, MemoryKind, OwnerDef, RecipeDef, Origin, TenantProfile } from './types';
-import { streetOf, hourOf, isWeekend, unlockedCount, type Result } from './game';
+import type { GameState, Memories, MemoryKind, OwnerDef, RecipeDef, Origin, TenantProfile, Era, PastShop, Step } from './types';
+import { streetOf, hourOf, isWeekend, unlockedCount, dayEndMin, type Result } from './game';
 
 /**
  * 東原的特殊系統：回憶點數、找屋主、老店作法、居民與遊客、鄉親認同。
@@ -117,12 +117,24 @@ export function shopTypeOpen(s: GameState, shop: string): boolean {
   return !recipeOf(s, shop) || s.recipes.includes(shop);
 }
 
+/** 找回作法要付的回憶（在 1995 年親手學過的會比較少） */
+export function recipeCost(s: GameState, r: RecipeDef): Partial<Memories> {
+  if (!r.discount || !s.flags.includes(`p95-${r.shop}`)) return r.cost;
+  const c: Partial<Memories> = {};
+  for (const k of MEMORY_KINDS) {
+    const v = Math.max(0, (r.cost[k] ?? 0) - (r.discount[k] ?? 0));
+    if (v) c[k] = v;
+  }
+  return c;
+}
+
 export function learnRecipe(s: GameState, shop: string): Result {
   const r = recipeOf(s, shop);
   if (!r) return { ok: false, reason: '沒有這個作法' };
   if (s.recipes.includes(shop)) return { ok: false, reason: '已經學會了' };
-  if (!hasMemories(s, r.cost)) return { ok: false, reason: `回憶不夠（需要 ${memoryText(r.cost)}）` };
-  payMemories(s, r.cost);
+  const cost = recipeCost(s, r);
+  if (!hasMemories(s, cost)) return { ok: false, reason: `回憶不夠（需要 ${memoryText(cost)}）` };
+  payMemories(s, cost);
   s.recipes.push(shop);
   s.flags.push(`recipe-${shop}`);
   return { ok: true };
@@ -223,7 +235,130 @@ export function kinshipLabel(v: number): string {
   return v >= 75 ? '像一家人' : v >= 50 ? '熟悉' : v >= 30 ? '有點陌生' : '不像我們的街了';
 }
 
-export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship'> {
-  return { memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50 };
+export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship' | 'trip' | 'trips' | 'lastTripDay' | 'pastDone'> {
+  return { memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50, trip: null, trips: 0, lastTripDay: 0, pastDone: [] };
 }
 
+// =====================================================================
+// 白布電影：回憶時光
+// =====================================================================
+
+/** 1960 年的回憶時光還沒做好之前，每次都回到 1995 年 */
+export const ERA_1960_READY = false;
+/** 2016 年傍晚幾點以後可以放白布電影 */
+export const TRIP_HOUR = 18;
+/** 回憶時光在過去的時鐘：幾點開始、幾點畫面淡出 */
+export const PAST_HOURS: Record<Era, [number, number]> = { 1995: [13, 19], 1960: [15, 21] };
+/** 幫一次忙要花多少時間（分鐘） */
+export const HELP_MINUTES = 90;
+
+/** 現在是哪一年 */
+export function eraOf(s: GameState): 2016 | Era {
+  return s.trip?.era ?? 2016;
+}
+
+/** 下一次白布電影會回到哪一年：1995 → 1960 → 1995…… */
+export function nextEra(s: GameState): Era {
+  return !ERA_1960_READY || s.trips % 2 === 0 ? 1995 : 1960;
+}
+
+export function canTrip(s: GameState): Result {
+  if (!isMemoryStreet(s)) return { ok: false, reason: '這條街沒有白布電影' };
+  if (s.trip) return { ok: false, reason: '已經在回憶時光裡了' };
+  if (!s.flags.includes('film')) return { ok: false, reason: '還沒找到老膠卷' };
+  if (s.lastTripDay >= s.day) return { ok: false, reason: '今晚已經放過了，明天傍晚再來' };
+  if (hourOf(s) < TRIP_HOUR) return { ok: false, reason: `白布電影要等天黑（${TRIP_HOUR}:00 以後）才看得清楚` };
+  if (s.minute > dayEndMin(s) - 30) return { ok: false, reason: '太晚了，大家都回家了' };
+  return { ok: true };
+}
+
+/** 開始回憶時光：2016 年的時間停在當晚，時鐘換成過去的時鐘 */
+export function startTrip(s: GameState): Result {
+  const r = canTrip(s);
+  if (!r.ok) return r;
+  const era = nextEra(s);
+  s.trip = { era, returnMinute: s.minute, weather: s.weather, start: { ...s.memories } };
+  s.minute = PAST_HOURS[era][0] * 60;
+  s.weather = 'sunny';
+  return { ok: true };
+}
+
+export function tripOver(s: GameState): boolean {
+  return !!s.trip && s.minute >= PAST_HOURS[s.trip.era][1] * 60;
+}
+
+/** 回到 2016 年，回傳這一趟找回的回憶 */
+export function endTrip(s: GameState): Memories {
+  const t = s.trip;
+  if (!t) return emptyMemories();
+  const gained = emptyMemories();
+  for (const k of MEMORY_KINDS) gained[k] = Math.max(0, s.memories[k] - t.start[k]);
+  s.minute = t.returnMinute;
+  s.weather = t.weather;
+  s.trip = null;
+  s.trips += 1;
+  s.lastTripDay = s.day;
+  return gained;
+}
+
+/** 過去的老街上有哪些店 */
+export function pastShops(s: GameState): PastShop[] {
+  const m = streetOf(s).memory;
+  if (!m || !s.trip) return [];
+  return s.trip.era === 1995 ? m.past1995 ?? [] : [];
+}
+
+export function pastShopAt(s: GameState, lot: number): PastShop | undefined {
+  return pastShops(s).find((p) => p.lot === lot);
+}
+
+/** 在過去的店幫忙：第一次是完整的故事，之後是短短的閒聊 */
+export function pastHelp(s: GameState, lot: number): Step[] | null {
+  const p = pastShopAt(s, lot);
+  if (!p || !s.trip) return null;
+  if (s.pastDone.includes(p.id)) return p.again(s);
+  s.pastDone.push(p.id);
+  return p.first(s);
+}
+
+/** 幫完忙，過去的時鐘往前走 */
+export function passPastTime(s: GameState, minutes = HELP_MINUTES): void {
+  if (!s.trip) return;
+  s.minute = Math.min(PAST_HOURS[s.trip.era][1] * 60, s.minute + minutes);
+}
+
+
+/**
+ * 不靠畫面跑完一趟回憶時光（給測試與平衡用）：
+ * 先幫還沒幫過的店，再去戲院、老榕樹，時間到就回來。劇情的效果直接套用（選第一個選項）。
+ */
+export function simulateTrip(s: GameState, apply: (steps: Step[]) => void): Memories | null {
+  const back = s.minute;
+  s.minute = Math.max(s.minute, TRIP_HOUR * 60);
+  if (!startTrip(s).ok) {
+    s.minute = back;
+    return null;
+  }
+  const m = streetOf(s).memory!;
+  const shops = pastShops(s);
+  const order = [...shops.filter((p) => !s.pastDone.includes(p.id)), ...shops];
+  const lms = ['kiln', 'treehouse'];
+  let k = 0;
+  while (!tripOver(s) && k < 30) {
+    const lm = lms.find((id) => !s.pastDone.includes(id === 'kiln' ? '95-snake' : '95-banyan'));
+    if (lm && k % 3 === 1) {
+      const steps = m.pastLandmark?.(s, s.trip!.era, lm);
+      if (steps) apply(steps);
+      passPastTime(s, HELP_MINUTES / 2);
+    } else {
+      const p = order[k % order.length];
+      const steps = pastHelp(s, p.lot);
+      if (steps) apply(steps);
+      passPastTime(s);
+    }
+    k++;
+  }
+  const gained = endTrip(s);
+  s.minute = back;
+  return gained;
+}
