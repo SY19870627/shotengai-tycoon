@@ -1507,6 +1507,13 @@ export function deserialize(raw: string): GameState | null {
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
     for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
+    // 東原：在回憶時光裡關掉遊戲，回到 2016 年的當晚（這一晚不能再放）
+    if (data.trip) {
+      data.minute = data.trip.returnMinute;
+      data.weather = data.trip.weather;
+      data.trip = null;
+      data.lastTripDay = data.day;
+    }
     if (data.minute >= dayEndMin(data)) {
       startNextDay(data);
       return data;

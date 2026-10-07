@@ -177,6 +177,79 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'dySmith', name: '打鐵的鐵伯',
     look: L({ skin: 0xb07a52, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'old' }),
   },
+  // ---- 東原 1995（全部虛構） ----
+  p95Meatball: {
+    id: 'p95Meatball', name: '肉圓伯（1995 年，四十幾歲）',
+    look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Grocer: {
+    id: 'p95Grocer', name: '雜貨店的春嬸',
+    look: L({ skin: 0xe8b48f, hair: 0x4a3324, hairStyle: 'bun', shirt: 0x6abf69, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Barber: {
+    id: 'p95Barber', name: '阿財師（1995 年）',
+    look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
+  },
+  p95Ice: {
+    id: 'p95Ice', name: '冰鋪的秋月姨',
+    look: L({ skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0x5fa8c9, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Pharm: {
+    id: 'p95Pharm', name: '陳老藥師',
+    look: L({ skin: 0xf5d0b0, hair: 0x7a7a7a, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x54627a, accessory: 'glasses', age: 'old' }),
+  },
+  p95PharmKid: {
+    id: 'p95PharmKid', name: '藥局的小兒子',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'glasses', age: 'kid' }),
+  },
+  p95Koe: {
+    id: 'p95Koe', name: '碗粿店的罔市姨',
+    look: L({ skin: 0xe8b48f, hair: 0x4a4a4a, hairStyle: 'bun', shirt: 0xd9a03b, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Barber2: {
+    id: 'p95Barber2', name: '街尾理髮店的阿珠姐',
+    look: L({ skin: 0xf9dcc4, hair: 0x7a5232, hairStyle: 'long', shirt: 0xef8fb1, pants: 0x2b2b3a, accessory: 'none', age: 'mid' }),
+  },
+  p95Mantou: {
+    id: 'p95Mantou', name: '饅頭店的阿公',
+    look: L({ skin: 0xe8b48f, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0xf2e8d2, pants: 0x3d3a36, accessory: 'apron', age: 'old' }),
+  },
+  p95Amy: {
+    id: 'p95Amy', name: '綁辮子的小女孩',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0xf2b84b, pants: 0xd35454, accessory: 'none', age: 'kid' }),
+  },
+  p95Baozi: {
+    id: 'p95Baozi', name: '包子嬸',
+    look: L({ skin: 0xe8b48f, hair: 0x4a4a4a, hairStyle: 'bun', shirt: 0xd35454, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Xiuzhi: {
+    id: 'p95Xiuzhi', name: '包子店的女兒 秀枝',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'young' }),
+  },
+  p95Smith: {
+    id: 'p95Smith', name: '鐵伯（1995 年）',
+    look: L({ skin: 0xb07a52, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p95Soup: {
+    id: 'p95Soup', name: '排骨酥湯的水伯',
+    look: L({ skin: 0xc98e66, hair: 0x7a7a7a, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'headband', age: 'old' }),
+  },
+  p95Hao: {
+    id: 'p95Hao', name: '喝湯的小男孩',
+    look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'spiky', shirt: 0x4f86c6, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
+  },
+  p95Kid: {
+    id: 'p95Kid', name: '孩子王 阿龍',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'cap', age: 'kid' }),
+  },
+  p95Kid2: {
+    id: 'p95Kid2', name: '膽小的阿弟',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x6abf69, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
+  },
+  p95Adult: {
+    id: 'p95Adult', name: '路過的阿伯',
+    look: L({ skin: 0xc98e66, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0x5b7a5b, pants: 0x3d3a36, accessory: 'hat', age: 'mid' }),
+  },
   cyclist: {
     id: 'cyclist', name: '單車隊隊長',
     look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),

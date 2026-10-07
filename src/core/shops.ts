@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95';
 
 export interface ShopDef {
   id: string;

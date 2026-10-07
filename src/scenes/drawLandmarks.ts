@@ -43,8 +43,8 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number, var
     case 'spring': standX = drawSpring(ctx); break;
     case 'fire': standX = drawFire(ctx, variant ?? 'protect'); break;
     case 'fireshrine': standX = drawFireShrine(ctx); break;
-    case 'treehouse': standX = drawTreehouse(ctx); break;
-    case 'clinic': standX = drawClinic(ctx); break;
+    case 'treehouse': standX = drawTreehouse(ctx, variant ?? '2016'); break;
+    case 'clinic': standX = drawClinic(ctx, variant ?? '2016'); break;
     case 'kiln': standX = drawKiln(ctx, variant ?? '2016'); break;
     default: standX = drawGenericSign(ctx, id); break;
   }
@@ -1875,63 +1875,91 @@ function drawFireShrine(ctx: Ctx): number {
 
 // ───────────────────────── 東原：老榕樹樹屋 ─────────────────────────
 
-function drawTreehouse(ctx: Ctx): number {
+const BANYAN_GREENS = [0x2a5e34, 0x316c3a, 0x3b7a42, 0x48894c];
+
+/**
+ * 榕樹的後層樹冠 + 主幹 + 氣根。s = 大小（1 = 2016 的老榕樹；越小越年輕）。
+ * 座標以 (cx, 地面) 為原點等比縮放。
+ */
+function banyanBody(g: G, cx: number, w: number, s: number, rootCount = 9): void {
+  const P = (x: number, y: number): Pt => ({ x: cx + x * s, y: y * s });
+  // 樹冠後層（先畫，讓樹幹與氣根在前面）
+  const back: [number, number, number, number, number][] = [
+    [0, -262, w + 10, 150, 0], [-110, -232, 120, 90, 0], [112, -236, 116, 86, 0],
+    [-50, -306, 180, 100, 1], [60, -300, 170, 96, 1],
+  ];
+  for (const [x, y, ew, eh, k] of back) {
+    g.fillStyle(BANYAN_GREENS[k]);
+    g.fillEllipse(cx + x * s, y * s, ew * s, eh * s);
+  }
+  // 粗壯的榕樹主幹（多根纏在一起）
+  const bark = 0x7a6450;
+  g.fillStyle(bark);
+  g.fillPoints(([
+    [-74, 0], [-50, -12], [-40, -70], [-36, -140], [-60, -190], [-120, -222], [-110, -234], [-30, -206],
+    [-8, -246], [12, -246], [26, -204], [110, -238], [120, -224], [44, -186], [34, -130], [42, -60],
+    [56, -12], [84, 0],
+  ] as const).map(([x, y]) => P(x, y)), true);
+  // 纏繞的樹根紋理
+  const ln = (wd: number, col: number, a: number, x0: number, y0: number, x1: number, y1: number) => {
+    g.lineStyle(Math.max(1, wd * s), col, a);
+    const p0 = P(x0, y0), p1 = P(x1, y1);
+    g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+  };
+  ln(5, shade(bark, 0.15), 0.8, -30, -4, -18, -180);
+  ln(5, shade(bark, 0.15), 0.8, 2, -2, 10, -200);
+  ln(5, shade(bark, 0.15), 0.8, 30, -6, 20, -170);
+  ln(2, shade(bark, -0.3), 0.7, -22, -10, -10, -190);
+  ln(2, shade(bark, -0.3), 0.7, 18, -14, 14, -160);
+  ln(2, shade(bark, -0.3), 0.7, -36, -60, -28, -130);
+  // 板根
+  g.fillStyle(shade(bark, -0.08));
+  g.fillTriangle(cx - 100 * s, 0, cx - 40 * s, 0, cx - 44 * s, -40 * s);
+  g.fillTriangle(cx + 44 * s, 0, cx + 110 * s, 0, cx + 46 * s, -36 * s);
+  // 垂下的氣根（細線，有些已經扎進土裡）
+  const roots: [number, number, number][] = [
+    [-130, -224, -60], [-112, -226, -20], [-94, -218, 0], [-70, -210, -90],
+    [70, -214, -70], [92, -222, 0], [116, -228, -40], [134, -226, -110], [-150, -230, -130],
+  ];
+  for (const [x, y0, y1] of roots.slice(0, rootCount)) {
+    const top = P(x, y0), bot = P(x, y1);
+    g.lineStyle(1.5, 0x8a7458, 0.85);
+    g.lineBetween(top.x, top.y, bot.x + 2, bot.y);
+    g.lineStyle(1, 0x9a8468, 0.6);
+    g.lineBetween(top.x + 3, top.y + 4, bot.x + 4, Math.min(-4, bot.y + 20 * s));
+    if (y1 === 0) {
+      g.fillStyle(0x7a6450);
+      g.fillRect(bot.x - 2, -10 * s, 6, 10 * s);
+    }
+  }
+}
+
+/** 榕樹的前層樹冠（蓋在樹幹、樹屋前面） */
+function banyanFront(g: G, cx: number, s: number): void {
+  const front: [number, number, number, number, number][] = [
+    [-130, -258, 90, 56, 2], [126, -262, 96, 56, 2], [40, -324, 110, 44, 3],
+    [-60, -330, 90, 36, 3], [90, -286, 70, 40, 3], [-150, -236, 50, 30, 3],
+  ];
+  for (const [x, y, ew, eh, k] of front) {
+    g.fillStyle(BANYAN_GREENS[k]);
+    g.fillEllipse(cx + x * s, y * s, ew * s, eh * s);
+  }
+  g.fillStyle(0x7cb874, 0.45);
+  for (let i = 0; i < 20; i++) {
+    const a = i * 2.3;
+    g.fillCircle(cx + Math.cos(a) * (50 + (i * 17) % 100) * s, (-282 + Math.sin(a) * 36) * s, (2.5 + (i % 3)) * Math.max(0.7, s));
+  }
+}
+
+function drawTreehouse(ctx: Ctx, variant: string): number {
+  if (variant === '1995') return drawBanyan1995(ctx);
+  if (variant === '1960') return drawBanyan1960(ctx);
   const { g, night, w } = ctx;
   const cx = w / 2 + 10;
   // 地上陰影
   g.fillStyle(0x000000, 0.12);
   g.fillEllipse(cx, -2, w * 0.98, 18);
-
-  // 樹冠後層（先畫，讓樹幹與氣根在前面）
-  const greens = [0x2a5e34, 0x316c3a, 0x3b7a42, 0x48894c];
-  const back: [number, number, number, number, number][] = [
-    [cx, -262, w + 10, 150, 0], [cx - 110, -232, 120, 90, 0], [cx + 112, -236, 116, 86, 0],
-    [cx - 50, -306, 180, 100, 1], [cx + 60, -300, 170, 96, 1],
-  ];
-  for (const [x, y, ew, eh, k] of back) {
-    g.fillStyle(greens[k]);
-    g.fillEllipse(x, y, ew, eh);
-  }
-
-  // 粗壯的榕樹主幹（多根纏在一起）
-  const bark = 0x7a6450;
-  g.fillStyle(bark);
-  g.fillPoints([
-    { x: cx - 74, y: 0 }, { x: cx - 50, y: -12 }, { x: cx - 40, y: -70 }, { x: cx - 36, y: -140 },
-    { x: cx - 60, y: -190 }, { x: cx - 120, y: -222 }, { x: cx - 110, y: -234 }, { x: cx - 30, y: -206 },
-    { x: cx - 8, y: -246 }, { x: cx + 12, y: -246 }, { x: cx + 26, y: -204 }, { x: cx + 110, y: -238 },
-    { x: cx + 120, y: -224 }, { x: cx + 44, y: -186 }, { x: cx + 34, y: -130 }, { x: cx + 42, y: -60 },
-    { x: cx + 56, y: -12 }, { x: cx + 84, y: 0 },
-  ], true);
-  // 纏繞的樹根紋理（淺色）
-  g.lineStyle(5, shade(bark, 0.15), 0.8);
-  g.lineBetween(cx - 30, -4, cx - 18, -180);
-  g.lineBetween(cx + 2, -2, cx + 10, -200);
-  g.lineBetween(cx + 30, -6, cx + 20, -170);
-  g.lineStyle(2, shade(bark, -0.3), 0.7);
-  g.lineBetween(cx - 22, -10, cx - 10, -190);
-  g.lineBetween(cx + 18, -14, cx + 14, -160);
-  g.lineBetween(cx - 36, -60, cx - 28, -130);
-  // 板根
-  g.fillStyle(shade(bark, -0.08));
-  g.fillTriangle(cx - 100, 0, cx - 40, 0, cx - 44, -40);
-  g.fillTriangle(cx + 44, 0, cx + 110, 0, cx + 46, -36);
-
-  // 垂下的氣根（細線，有些已經扎進土裡）
-  const roots: [number, number, number][] = [
-    [cx - 130, -224, -60], [cx - 112, -226, -20], [cx - 94, -218, 0], [cx - 70, -210, -90],
-    [cx + 70, -214, -70], [cx + 92, -222, 0], [cx + 116, -228, -40], [cx + 134, -226, -110], [cx - 150, -230, -130],
-  ];
-  for (const [x, y0, y1] of roots) {
-    g.lineStyle(1.5, 0x8a7458, 0.85);
-    g.lineBetween(x, y0, x + 2, y1);
-    g.lineStyle(1, 0x9a8468, 0.6);
-    g.lineBetween(x + 3, y0 + 4, x + 4, Math.min(-4, y1 + 20));
-    if (y1 === 0) {
-      g.fillStyle(0x7a6450);
-      g.fillRect(x - 2, -10, 6, 10);
-    }
-  }
+  banyanBody(g, cx, w, 1);
 
   // 樹屋平台（架在左右兩根大枝上）
   const px0 = cx - 92, px1 = cx + 60, py = -176;
@@ -1978,19 +2006,7 @@ function drawTreehouse(ctx: Ctx): number {
   night.fillCircle(hx + 18, py - hh / 2 - 2, 26);
 
   // 樹冠前層（蓋住一點屋頂）
-  const front: [number, number, number, number, number][] = [
-    [cx - 130, -258, 90, 56, 2], [cx + 126, -262, 96, 56, 2], [cx + 40, -324, 110, 44, 3],
-    [cx - 60, -330, 90, 36, 3], [cx + 90, -286, 70, 40, 3], [cx - 150, -236, 50, 30, 3],
-  ];
-  for (const [x, y, ew, eh, k] of front) {
-    g.fillStyle(greens[k]);
-    g.fillEllipse(x, y, ew, eh);
-  }
-  g.fillStyle(0x7cb874, 0.45);
-  for (let i = 0; i < 20; i++) {
-    const a = i * 2.3;
-    g.fillCircle(cx + Math.cos(a) * (50 + (i * 17) % 100), -282 + Math.sin(a) * 36, 2.5 + (i % 3));
-  }
+  banyanFront(g, cx, 1);
 
   // 木梯（從地面到平台）
   const lx = px1 - 26;
@@ -2029,21 +2045,221 @@ function drawTreehouse(ctx: Ctx): number {
   return cx + 64;
 }
 
+/** 腳踏車（側面）：x = 後輪中心，r = 輪子半徑 */
+function bicycle(g: G, x: number, r: number, col: number, basket = false): void {
+  const fx = x + r * 3.4, wy = -r - 1;
+  g.fillStyle(0x000000, 0.12);
+  g.fillEllipse(x + r * 1.7, -1, r * 5.6, 4);
+  g.lineStyle(2, 0x2a2a2e);
+  g.strokeCircle(x, wy, r);
+  g.strokeCircle(fx, wy, r);
+  g.lineStyle(1, 0x9a9aa0, 0.8);
+  for (const cx of [x, fx]) {
+    g.lineBetween(cx - r + 2, wy, cx + r - 2, wy);
+    g.lineBetween(cx, wy - r + 2, cx, wy + r - 2);
+  }
+  // 車架
+  const bb = { x: x + r * 1.5, y: wy }, seat = { x: x + r * 1.1, y: wy - r * 1.5 }, head = { x: fx - r * 0.5, y: wy - r * 1.6 };
+  g.lineStyle(Math.max(2, r * 0.28), col);
+  g.lineBetween(x, wy, bb.x, bb.y);
+  g.lineBetween(x, wy, seat.x, seat.y);
+  g.lineBetween(seat.x, seat.y, bb.x, bb.y);
+  g.lineBetween(bb.x, bb.y, head.x, head.y);
+  g.lineBetween(seat.x, seat.y, head.x, head.y);
+  g.lineBetween(head.x, head.y, fx, wy);
+  // 座墊、把手
+  g.fillStyle(0x2a2420);
+  g.fillRoundedRect(seat.x - r * 0.5, seat.y - 3, r, 3.5, 1.5);
+  g.lineStyle(2, 0x3a3a40);
+  g.lineBetween(head.x, head.y, head.x - 1, head.y - r * 0.5);
+  g.lineBetween(head.x - r * 0.4, head.y - r * 0.5, head.x + r * 0.2, head.y - r * 0.5);
+  if (basket) {
+    g.fillStyle(0xc8a060);
+    g.fillRect(head.x + 1, head.y - r * 0.6, r * 0.9, r * 0.6);
+    g.lineStyle(1, 0x8a6a3a);
+    g.strokeRect(head.x + 1, head.y - r * 0.6, r * 0.9, r * 0.6);
+  }
+}
+
+/** 一雙藍白拖 */
+function slippers(g: G, x: number, col = 0x3b7dd8): void {
+  for (const dx of [0, 9]) {
+    g.fillStyle(0xf4f2ec);
+    g.fillEllipse(x + dx, -2, 8, 3.5);
+    g.fillStyle(col);
+    g.fillRect(x + dx - 2.5, -4.5, 4, 2);
+  }
+}
+
+/** 長柄雨傘（收起來斜靠著） */
+function umbrella(g: G, x: number, h: number, col: number, lean: number): void {
+  const tx = x + lean, ty = -h;
+  g.fillStyle(col);
+  g.fillTriangle(x - 4, -10, x + 4, -10, tx, ty + 6);
+  g.lineStyle(1.5, 0x3a3a40);
+  g.lineBetween(x, -10, x - 1, -2);
+  g.lineBetween(tx, ty + 6, tx, ty);
+  g.lineStyle(2, 0x6a4a30);
+  g.beginPath();
+  g.arc(x - 3, -2, 3, 0, Math.PI, false);
+  g.strokePath();
+}
+
+/** 1995：老榕樹還沒有樹屋，樹下有鞦韆、小朋友的腳踏車、老人家的長椅 */
+function drawBanyan1995(ctx: Ctx): number {
+  const { g, w } = ctx;
+  const cx = w / 2 + 10, s = 0.95;
+  g.fillStyle(0x000000, 0.12);
+  g.fillEllipse(cx, -2, w * 0.95, 18);
+  banyanBody(g, cx, w, s);
+  banyanFront(g, cx, s);
+  // 綁在左邊大枝上的麻繩鞦韆
+  const r0 = { x: cx - 104 * s, y: -214 * s }, r1 = { x: cx - 78 * s, y: -201 * s };
+  const seatY = -34, sx0 = cx - 108, sx1 = cx - 78;
+  g.lineStyle(2, 0xc8b080);
+  g.lineBetween(r0.x, r0.y, sx0 + 3, seatY);
+  g.lineBetween(r1.x, r1.y, sx1 - 3, seatY);
+  g.fillStyle(0x5a3e28);
+  g.fillCircle(r0.x, r0.y, 2.5);
+  g.fillCircle(r1.x, r1.y, 2.5);
+  g.fillStyle(0x9a6a3e);
+  g.fillRoundedRect(sx0 - 2, seatY - 1, sx1 - sx0 + 4, 6, 2);
+  g.fillStyle(0x6a4a2a);
+  g.fillRect(sx0 - 2, seatY + 4, sx1 - sx0 + 4, 2);
+  // 鞦韆下被踩禿的一塊泥地
+  g.fillStyle(0x8a6a4a, 0.35);
+  g.fillEllipse((sx0 + sx1) / 2, -2, 50, 7);
+  // 小朋友丟在樹下的腳踏車
+  bicycle(g, cx - 56, 9, 0xd8392f, true);
+  bicycle(g, cx - 18, 8, 0x3b7dd8);
+  bicycle(g, cx + 16, 7.5, 0xf2c14e);
+  // 老人家的長椅：收音機、茶杯、蒲扇、拐杖、拖鞋
+  const bx = w - 82;
+  bench(g, bx, 62);
+  g.fillStyle(0x6a4a30);
+  g.fillRoundedRect(bx + 6, -32, 18, 11, 2);
+  g.fillStyle(0xd8c8a0);
+  g.fillRect(bx + 8, -30, 8, 7);
+  g.fillStyle(0x2a2420);
+  g.fillCircle(bx + 20, -27, 2.5);
+  g.lineStyle(1, 0xa8acb0);
+  g.lineBetween(bx + 22, -32, bx + 30, -48);
+  g.fillStyle(0xf4f2ec);
+  g.fillRect(bx + 32, -28, 7, 7);
+  g.fillStyle(0x3b7dd8);
+  g.fillRect(bx + 32, -26, 7, 1.5);
+  g.fillStyle(0xd8c070);
+  g.fillEllipse(bx + 50, -24, 16, 7);
+  g.lineStyle(1.5, 0x8a6a3a);
+  g.lineBetween(bx + 50, -24, bx + 56, -18);
+  g.lineStyle(2.5, 0x5a3e28);
+  g.lineBetween(bx + 64, -2, bx + 58, -42);
+  g.beginPath();
+  g.arc(bx + 55, -42, 3, Math.PI * 1.9, Math.PI * 1.05, true);
+  g.strokePath();
+  slippers(g, bx + 18);
+  return cx - 10;
+}
+
+/** 1960：年輕一點的榕樹，樹下有人擺了奉茶與長板凳 */
+function drawBanyan1960(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const cx = w / 2 - 10, s = 0.62;
+  g.fillStyle(0x000000, 0.12);
+  g.fillEllipse(cx, -2, w * 0.72, 14);
+  banyanBody(g, cx, w * 0.9, s, 4);
+  banyanFront(g, cx, s);
+  // 樹下的長板凳
+  bench(g, 14, 70);
+  // 竹椅凳
+  for (const x of [cx + 30, cx + 50]) {
+    g.fillStyle(0xc8a860);
+    g.fillRect(x - 9, -16, 18, 4);
+    g.lineStyle(2, 0xa88a48);
+    g.lineBetween(x - 7, -12, x - 9, 0);
+    g.lineBetween(x + 7, -12, x + 9, 0);
+    g.lineBetween(x - 8, -6, x + 8, -6);
+  }
+  // 奉茶攤：木桌上一個大茶甕、幾個碗，旁邊小炭爐燒開水
+  const tx = cx + 64, tw = 64, tt = -40;
+  g.fillStyle(0x6a4a30);
+  g.fillRect(tx + 4, tt + 4, 5, -tt - 4);
+  g.fillRect(tx + tw - 9, tt + 4, 5, -tt - 4);
+  g.fillRect(tx + 6, -12, tw - 12, 3);
+  g.fillStyle(0x9a6b42);
+  g.fillRoundedRect(tx, tt, tw, 6, 2);
+  // 茶甕
+  const jx = tx + 22, jy = tt;
+  g.fillStyle(0x7a4a2a);
+  g.fillEllipse(jx, jy - 16, 30, 30);
+  g.fillRect(jx - 9, jy - 34, 18, 5);
+  g.fillStyle(0x9a6a42, 0.6);
+  g.fillEllipse(jx - 6, jy - 20, 8, 14);
+  g.fillStyle(0x5a3e28);
+  g.fillEllipse(jx, jy - 35, 22, 6);
+  // 竹勺
+  g.lineStyle(1.5, 0xc8a860);
+  g.lineBetween(jx + 6, jy - 36, jx + 16, jy - 48);
+  // 紅紙「奉茶」
+  g.fillStyle(0xc8322a);
+  g.fillRect(jx - 11, jy - 26, 22, 16);
+  label(ctx, jx, jy - 18, '奉茶', 9, 0xf8e8c0, '900');
+  // 茶碗
+  for (let k = 0; k < 3; k++) {
+    const bx = tx + 44 + k * 7;
+    g.fillStyle(0xf4f0e6);
+    g.fillRoundedRect(bx - 3, tt - 5, 6, 5, { tl: 0, tr: 0, bl: 2, br: 2 });
+    g.fillStyle(0x3b6ab8);
+    g.fillRect(bx - 3, tt - 4, 6, 1);
+  }
+  // 炭爐 + 鋁水壺
+  const kx = tx + tw + 16;
+  g.fillStyle(0x8a7a6a);
+  g.fillRect(kx - 9, -18, 18, 18);
+  g.fillStyle(0x2a1a14);
+  g.fillRect(kx - 5, -12, 10, 7);
+  g.fillStyle(0xe8602a);
+  g.fillRect(kx - 4, -9, 8, 3);
+  night.fillStyle(0xff7a30, 0.5);
+  night.fillCircle(kx, -8, 9);
+  g.fillStyle(0xb8bcc0);
+  g.fillEllipse(kx, -25, 18, 14);
+  g.fillRect(kx - 3, -34, 6, 3);
+  g.lineStyle(2, 0x8a8e92);
+  g.lineBetween(kx + 8, -26, kx + 14, -32);
+  smoke(g, kx + 14, -36, 4, 0xffffff, 0.35);
+  // 樹幹上綁的小木牌
+  g.fillStyle(0xd8b888);
+  g.fillRect(cx - 14, -96, 28, 14);
+  g.lineStyle(1, 0x6a4a30);
+  g.strokeRect(cx - 14, -96, 28, 14);
+  label(ctx, cx, -89, '歇腳', 9, 0x3a2416, '900');
+  return cx + 40;
+}
+
 // ───────────────────────── 東原：街角小診所 ─────────────────────────
 
-function drawClinic(ctx: Ctx): number {
+function drawClinic(ctx: Ctx, variant: string): number {
+  if (variant === '1960') return drawClinic1960(ctx);
+  return drawClinicModern(ctx, variant === '1995');
+}
+
+/** 街角小診所：2016 關著（休診）；1995 = 同一棟，正在看診 */
+function drawClinicModern(ctx: Ctx, open: boolean): number {
   const { g, night, w } = ctx;
   const L = 14, R = w - 14, top = -232;
-  const wall = 0xe6e2d6;
+  const wall = open ? 0xf2efe4 : 0xe6e2d6;
   // 牆面（兩層樓，淡淡的水漬）
   g.fillStyle(wall);
   g.fillRect(L, top, R - L, -top);
   g.fillStyle(shade(wall, -0.08));
   g.fillRect(L - 4, top - 12, R - L + 8, 14);
-  g.fillStyle(0x7fa69a);
+  g.fillStyle(open ? 0x5fb48e : 0x7fa69a);
   g.fillRect(L - 4, top - 4, R - L + 8, 4);
-  g.fillStyle(0x6a6450, 0.12);
-  for (let k = 0; k < 6; k++) g.fillRect(L + 12 + k * 28, top + 2, 4, 26 + (k % 3) * 14);
+  if (!open) {
+    g.fillStyle(0x6a6450, 0.12);
+    for (let k = 0; k < 6; k++) g.fillRect(L + 12 + k * 28, top + 2, 4, 26 + (k % 3) * 14);
+  }
   // 轉角圓弧（街角建築）
   g.fillStyle(shade(wall, -0.06));
   g.fillRect(R - 18, top, 18, -top);
@@ -2055,9 +2271,14 @@ function drawClinic(ctx: Ctx): number {
     g.fillRect(wx - 3, top + 28, 58, 40);
     g.fillStyle(0xb8c8c4);
     g.fillRect(wx, top + 31, 52, 34);
-    g.fillStyle(0xf0ece0, 0.85);
+    g.fillStyle(open ? 0xf6f2e6 : 0xf0ece0, 0.85);
     g.fillRect(wx + 2, top + 33, 22, 30);
-    g.lineStyle(1.5, 0x4a4440, 0.85);
+    if (open) {
+      // 樓上住著醫生一家：亮著的窗
+      night.fillStyle(0xffd27a, 0.7);
+      night.fillRect(wx, top + 31, 52, 34);
+    }
+    g.lineStyle(1.5, open ? 0x3f6a5a : 0x4a4440, 0.85);
     g.strokeRect(wx - 6, top + 25, 64, 46);
     for (let x = wx; x < wx + 56; x += 9) g.lineBetween(x, top + 25, x, top + 71);
   }
@@ -2072,16 +2293,29 @@ function drawClinic(ctx: Ctx): number {
   g.fillStyle(0xd8392f);
   g.fillRect(L + 22, st + 9, 6, 18);
   g.fillRect(L + 16, st + 15, 18, 6);
-  label(ctx, (L + R) / 2 + 14, (st + sb) / 2, '街角診所', 20, 0xb8322a, '900');
-  // 門診時間表（褪色）
-  g.fillStyle(0xf6f0e0);
-  g.fillRect(L + 10, -98, 40, 50);
-  g.lineStyle(1, 0x9a948a);
-  for (let y = -88; y < -50; y += 7) g.lineBetween(L + 14, y, L + 46, y);
-  g.fillStyle(0x3f6f9a);
-  g.fillRect(L + 10, -98, 40, 7);
+  label(ctx, (L + R) / 2 + 14, (st + sb) / 2, '街角診所', 20, open ? 0xd8261c : 0xb8322a, '900');
+  if (open) {
+    // 招牌燈箱亮著
+    g.fillStyle(0xffffff, 0.5);
+    g.fillRect(L + 9, st, R - L - 18, 4);
+    // 夜裡：燈箱透光（不要太亮，紅字才看得清楚）+ 外圍一圈光暈
+    night.fillStyle(0xffe8c0, 0.14);
+    night.fillRect(L - 6, st - 14, R - L + 12, sb - st + 28);
+    night.fillStyle(0xfff6e0, 0.32);
+    night.fillRect(L + 9, st, R - L - 18, sb - st);
+    clinicHoursBoard(ctx, L + 8, -106);
+  } else {
+    // 門診時間表（褪色）
+    g.fillStyle(0xf6f0e0);
+    g.fillRect(L + 10, -98, 40, 50);
+    g.lineStyle(1, 0x9a948a);
+    for (let y = -88; y < -50; y += 7) g.lineBetween(L + 14, y, L + 46, y);
+    g.fillStyle(0x3f6f9a);
+    g.fillRect(L + 10, -98, 40, 7);
+  }
   // 霧面玻璃門（拉門）
   const dl = L + 62, dr = R - 30;
+  if (open) return clinicOpenFront(ctx, L, R, dl, dr);
   g.fillStyle(0x8a8e92);
   g.fillRect(dl - 4, -104, dr - dl + 8, 104);
   g.fillStyle(0xd8dee0);
@@ -2137,6 +2371,246 @@ function drawClinic(ctx: Ctx): number {
   g.fillStyle(0xb8a058);
   g.fillTriangle(R - 22, -18, R - 12, -18, R - 20, -30);
   return (dl + dr) / 2;
+}
+
+/** 1995 診所的門診時間板 */
+function clinicHoursBoard(ctx: Ctx, x: number, y: number): void {
+  const { g } = ctx;
+  const bw = 48, bh = 56;
+  g.fillStyle(0x5a5450);
+  g.fillRect(x - 2, y - 2, bw + 4, bh + 4);
+  g.fillStyle(0xfbfaf4);
+  g.fillRect(x, y, bw, bh);
+  g.fillStyle(0x2f6fb0);
+  g.fillRect(x, y, bw, 13);
+  label(ctx, x + bw / 2, y + 6.5, '門診時間', 9, 0xffffff, '900');
+  const rows = ['早 8–12', '午 3–6', '晚 7–9'];
+  rows.forEach((r, k) => label(ctx, x + bw / 2, y + 21 + k * 12, r, 9, k === 2 ? 0xb8322a : 0x2a2433, '700'));
+}
+
+/** 1995 診所：拉門拉開、裡面亮著，門口長椅坐滿等看病的人留下的東西 */
+function clinicOpenFront(ctx: Ctx, L: number, R: number, dl: number, dr: number): number {
+  const { g, night } = ctx;
+  const mid = (dl + dr) / 2;
+  // 門框
+  g.fillStyle(0xb8bcc0);
+  g.fillRect(dl - 4, -104, dr - dl + 8, 104);
+  // 左半邊打開：看得到候診室
+  g.fillStyle(0xd4e8dc);
+  g.fillRect(dl, -100, mid - dl + 2, 96);
+  g.fillStyle(0xc8bca0);
+  g.fillRect(dl, -18, mid - dl + 2, 14);
+  // 候診室的日光燈
+  g.fillStyle(0xffffff);
+  g.fillRect(dl + 6, -94, mid - dl - 10, 3);
+  // 掛號小窗口
+  g.fillStyle(0x8a6a4a);
+  g.fillRect(dl + 6, -72, 26, 24);
+  g.fillStyle(0xf6f2e0);
+  g.fillRoundedRect(dl + 9, -69, 20, 14, { tl: 6, tr: 6, bl: 0, br: 0 });
+  g.fillStyle(0xd8392f);
+  g.fillRect(dl + 9, -82, 20, 8);
+  label(ctx, dl + 19, -78, '掛號', 7, 0xffffff, '900');
+  // 候診的塑膠椅
+  g.fillStyle(0xf2a03a);
+  g.fillRect(dl + 2, -30, 12, 4);
+  g.fillRect(dl + 2, -42, 3, 12);
+  g.fillStyle(0x6a6a72);
+  g.fillRect(dl + 4, -26, 2, 8);
+  g.fillRect(dl + 11, -26, 2, 8);
+  night.fillStyle(0xfff6d8, 0.75);
+  night.fillRect(dl, -100, mid - dl + 2, 96);
+  night.fillStyle(0xfff0c0, 0.18);
+  night.fillRect(dl - 30, -110, mid - dl + 60, 110);
+  // 右半邊：兩片霧面玻璃疊在一起
+  g.fillStyle(0xd8dee0);
+  g.fillRect(mid + 2, -100, dr - mid - 2, 96);
+  g.lineStyle(1, 0xffffff, 0.5);
+  for (let y = -96; y < -8; y += 4) g.lineBetween(mid + 4, y, dr - 2, y);
+  g.fillStyle(0x9ea4a8);
+  g.fillRect(mid, -100, 3, 96);
+  g.fillRect(dr - 6, -100, 2, 96);
+  // 鮮紅的十字貼紙
+  const lc = mid + (dr - mid) / 2;
+  g.fillStyle(0xe0261c);
+  g.fillRect(lc - 3, -74, 6, 18);
+  g.fillRect(lc - 9, -68, 18, 6);
+  // 「門診中」小牌
+  g.lineStyle(1, 0x5a4a3a);
+  g.lineBetween(lc - 10, -40, lc, -50);
+  g.lineBetween(lc + 10, -40, lc, -50);
+  g.fillStyle(0x3f8f4f);
+  g.fillRect(lc - 15, -40, 30, 15);
+  label(ctx, lc, -32.5, '門診中', 9, 0xffffff, '900');
+  // 門檻 + 磨石子台階
+  g.fillStyle(0xc0b8a8);
+  g.fillRect(dl - 10, -6, dr - dl + 20, 6);
+  g.fillStyle(0x8a8478, 0.6);
+  for (let k = 0; k < 14; k++) g.fillRect(dl - 6 + k * 8, -4, 1.5, 1.5);
+  // 牆腳灰色磁磚（新的）
+  g.fillStyle(0xb0b4ae);
+  g.fillRect(L, -20, dl - L - 4, 20);
+  g.fillRect(dr + 4, -20, R - dr - 4, 20);
+  g.lineStyle(1, 0xe8ece6, 0.8);
+  for (let x = L + 10; x < dl - 4; x += 10) g.lineBetween(x, -20, x, 0);
+  // 圓形紅十字燈箱（亮著）
+  const bx = R - 6, by = -196;
+  g.fillStyle(0x4a4440);
+  g.fillRect(bx - 18, by - 2, 14, 3);
+  g.fillStyle(0xffffff);
+  g.fillCircle(bx, by, 14);
+  g.lineStyle(2, 0xd8261c);
+  g.strokeCircle(bx, by, 14);
+  g.fillStyle(0xe8261c);
+  g.fillRect(bx - 3.5, by - 10, 7, 20);
+  g.fillRect(bx - 10, by - 3.5, 20, 7);
+  night.fillStyle(0xff6a5a, 0.18);
+  night.fillCircle(bx, by, 30);
+  night.fillStyle(0xffffff, 0.5);
+  night.fillCircle(bx, by, 13);
+  night.fillStyle(0xff3a2a, 0.5);
+  night.fillRect(bx - 3.5, by - 10, 7, 20);
+  night.fillRect(bx - 10, by - 3.5, 20, 7);
+  // 門口的候診長椅（沒有靠背），椅子下有拖鞋，旁邊靠著雨傘
+  const bl = L + 4, br = dl - 10;
+  g.fillStyle(0x6b4a30);
+  g.fillRect(bl + 4, -16, 4, 16);
+  g.fillRect(br - 8, -16, 4, 16);
+  g.fillStyle(0x9a6b42);
+  g.fillRoundedRect(bl, -21, br - bl, 6, 2);
+  // 長椅上：一個布包、一份報紙
+  g.fillStyle(0x8a4a8a);
+  g.fillRoundedRect(bl + 6, -31, 14, 10, 3);
+  g.lineStyle(1.5, 0x6a3a6a);
+  g.beginPath();
+  g.arc(bl + 13, -31, 5, Math.PI, 0, false);
+  g.strokePath();
+  g.fillStyle(0xeee8d8);
+  g.fillRect(bl + 26, -24, 16, 3);
+  g.fillStyle(0x8a8478);
+  g.fillRect(bl + 28, -23.5, 10, 1);
+  slippers(g, bl + 8, 0x3b7dd8);
+  slippers(g, bl + 30, 0xd8392f);
+  umbrella(g, br - 2, 46, 0x2a2a3a, 6);
+  // 門右邊的傘桶
+  g.fillStyle(0x8a9aa0);
+  g.fillRect(R - 24, -18, 14, 18);
+  g.fillStyle(0xa8b4b8);
+  g.fillRect(R - 25, -19, 16, 3);
+  umbrella(g, R - 20, 44, 0xd8392f, -4);
+  umbrella(g, R - 14, 48, 0x3b7dd8, 3);
+  return mid;
+}
+
+/** 1960：日治時期留下的木造診所，屋簷下吊著直式木招牌 */
+function drawClinic1960(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const L = 16, R = w - 16, top = -184;
+  const wood = 0xb89a72, dark = 0x4a3424;
+  // 雨淋板木牆
+  g.fillStyle(wood);
+  g.fillRect(L, top, R - L, -top);
+  g.lineStyle(1, shade(wood, -0.25), 0.8);
+  for (let y = top + 6; y < 0; y += 6) g.lineBetween(L, y, R, y);
+  // 柱子
+  g.fillStyle(dark);
+  for (const px of [L, R - 7]) g.fillRect(px, top, 7, -top);
+  // 黑瓦屋頂（寄棟）
+  const tile = 0x3a3c42;
+  g.fillStyle(tile);
+  g.fillPoints([{ x: L - 16, y: top + 6 }, { x: R + 16, y: top + 6 }, { x: R - 26, y: top - 40 }, { x: L + 26, y: top - 40 }], true);
+  g.lineStyle(1.5, shade(tile, -0.35), 0.9);
+  for (let k = 1; k < 16; k++) {
+    const t = k / 16;
+    g.lineBetween(L - 10 + (R - L + 20) * t, top + 4, L + 26 + (R - L - 52) * t, top - 38);
+  }
+  g.fillStyle(0x2a2c30);
+  for (let x = L - 12; x < R + 14; x += 9) g.fillCircle(x, top + 7, 3.2);
+  g.fillRect(L + 20, top - 46, R - L - 40, 7);
+  for (const ex of [L + 20, R - 20]) g.fillRoundedRect(ex - 6, top - 54, 12, 14, { tl: 5, tr: 5, bl: 0, br: 0 });
+  // 上方的欄間格子窗（亮燈）
+  for (const wx of [L + 22, L + 96]) {
+    g.fillStyle(dark);
+    g.fillRect(wx - 3, top + 20, 64, 30);
+    g.fillStyle(0xf3ead2);
+    g.fillRect(wx, top + 23, 58, 24);
+    g.lineStyle(1.5, dark);
+    for (let x = wx + 6; x < wx + 58; x += 6) g.lineBetween(x, top + 23, x, top + 47);
+    g.lineBetween(wx, top + 35, wx + 58, top + 35);
+    night.fillStyle(0xffc46a, 0.6);
+    night.fillRect(wx, top + 23, 58, 24);
+  }
+  // 一樓上方的小瓦庇
+  const ey = -118;
+  g.fillStyle(shade(tile, 0.1));
+  g.fillPoints([{ x: L - 6, y: ey }, { x: R + 6, y: ey }, { x: R - 4, y: ey - 14 }, { x: L + 4, y: ey - 14 }], true);
+  g.fillStyle(0x2a2c30);
+  for (let x = L - 4; x < R + 6; x += 8) g.fillCircle(x, ey + 1, 3);
+  // 白色琺瑯小招牌「內科 小兒科」
+  g.fillStyle(0xf6f2e6);
+  g.fillRect(L + 62, ey - 44, 80, 16);
+  g.lineStyle(1, 0x2f4f7a);
+  g.strokeRect(L + 63, ey - 43, 78, 14);
+  label(ctx, L + 102, ey - 36, '內科・小兒科', 9, 0x2f4f7a, '900');
+  // 木框玻璃拉門（四片，中間一片拉開）
+  const dl = L + 48, dr = R - 12, dt = -108;
+  const pw = (dr - dl) / 4;
+  g.fillStyle(dark);
+  g.fillRect(dl - 4, dt - 4, dr - dl + 8, -dt + 4);
+  for (let k = 0; k < 4; k++) {
+    const px = dl + k * pw;
+    if (k === 1) {
+      // 拉開的那一格：裡面暖黃的燈
+      g.fillStyle(0xe8d0a0);
+      g.fillRect(px, dt, pw, -dt - 4);
+      g.fillStyle(0x8a6a4a);
+      g.fillRect(px + 4, -40, pw - 8, 30);
+      night.fillStyle(0xffd080, 0.7);
+      night.fillRect(px, dt, pw, -dt - 4);
+      continue;
+    }
+    g.fillStyle(0xc8dcd8);
+    g.fillRect(px + 2, dt + 2, pw - 4, -dt - 8);
+    g.fillStyle(0xf0ece0, 0.7);
+    g.fillRect(px + 2, -40, pw - 4, 34);
+    g.lineStyle(2, dark);
+    g.strokeRect(px + 1, dt + 1, pw - 2, -dt - 6);
+    g.lineBetween(px + pw / 2, dt + 1, px + pw / 2, -5);
+    for (let y = dt + 22; y < -6; y += 22) g.lineBetween(px + 1, y, px + pw - 1, y);
+    night.fillStyle(0xffc46a, 0.35);
+    night.fillRect(px + 2, dt + 2, pw - 4, -dt - 8);
+  }
+  // 門上吊著的圓形霧玻璃燈
+  const lx = dl + pw * 1.5;
+  g.lineStyle(1, 0x2a2420);
+  g.lineBetween(lx, ey, lx, ey + 6);
+  g.fillStyle(0xf6f2e0);
+  g.fillCircle(lx, ey + 11, 5.5);
+  night.fillStyle(0xffe8b0, 0.9);
+  night.fillCircle(lx, ey + 11, 5.5);
+  night.fillStyle(0xffc070, 0.22);
+  night.fillCircle(lx, ey + 11, 18);
+  // 石階
+  g.fillStyle(0x9a948a);
+  g.fillRect(dl - 8, -5, dr - dl + 16, 5);
+  // 屋簷下吊著的直式木招牌「街角診所」
+  const sx = L + 24, sy0 = -108, sh = 82;
+  g.lineStyle(1.5, 0x2a2420);
+  g.lineBetween(sx - 8, ey + 2, sx - 8, sy0);
+  g.lineBetween(sx + 8, ey + 2, sx + 8, sy0);
+  g.fillStyle(0x5a3e28);
+  g.fillRect(sx - 15, sy0, 30, sh);
+  g.fillStyle(0xdcbf8c);
+  g.fillRect(sx - 12, sy0 + 3, 24, sh - 6);
+  g.lineStyle(1, 0xb89a68, 0.7);
+  g.lineBetween(sx - 10, sy0 + 10, sx - 9, sy0 + sh - 10);
+  g.lineBetween(sx + 9, sy0 + 14, sx + 10, sy0 + sh - 6);
+  vlabel(ctx, sx, sy0 + sh / 2, '街角診所', 15, 0x1e140c);
+  // 醫生的老鐵馬（黑色、有後座）
+  bicycle(g, R - 50, 10, 0x2a2a30);
+  g.fillStyle(0x2a2a30);
+  g.fillRect(R - 54, -24, 14, 2.5);
+  return dl + pw * 1.5;
 }
 
 // ───────────────────────── 東原：戲院原址（龍眼焙灶） ─────────────────────────
@@ -2499,4 +2973,208 @@ function drawGenericSign(ctx: Ctx, id: string): number {
   g.fillRoundedRect(cx - 50, -120, 100, 34, 4);
   label(ctx, cx, -103, id, 14, 0xfbf6ec);
   return cx;
+}
+
+// ───────────────────────── 東原：龍眼窯前的露天電影（白布電影） ─────────────────────────
+
+/** 白布的位置（相對龍眼窯地標原點，地面 y = 0） */
+const FILM = { x: 120, y: -170, w: 170, h: 110, lensX: 76, lensY: -55 };
+
+/** 摺疊木凳（X 形） */
+function foldingStool(g: G, x: number): void {
+  g.lineStyle(2.5, 0x7a5232);
+  g.lineBetween(x - 7, 0, x + 6, -14);
+  g.lineBetween(x + 7, 0, x - 6, -14);
+  g.fillStyle(0xa87a4a);
+  g.fillRoundedRect(x - 9, -17, 18, 4, 1.5);
+  g.fillStyle(0x3a3a40);
+  g.fillCircle(x, -7, 1.3);
+}
+
+/** 紅色塑膠椅 */
+function plasticStool(g: G, x: number): void {
+  g.fillStyle(0xd8302a);
+  g.fillPoints([{ x: x - 6, y: -14 }, { x: x + 6, y: -14 }, { x: x + 8, y: 0 }, { x: x - 8, y: 0 }], true);
+  g.fillStyle(0x9a1c18);
+  g.fillPoints([{ x: x - 3, y: -9 }, { x: x + 3, y: -9 }, { x: x + 5, y: 0 }, { x: x - 5, y: 0 }], true);
+  g.fillStyle(0xe84a3a);
+  g.fillRoundedRect(x - 8, -17, 16, 4, 1.5);
+}
+
+/** 竹竿（有竹節） */
+function bambooPole(g: G, x: number, h: number): void {
+  g.fillStyle(0xb8a060);
+  g.fillRect(x - 2.5, -h, 5, h);
+  g.fillStyle(0xd8c488);
+  g.fillRect(x - 1.5, -h, 1.5, h);
+  g.fillStyle(0x8a7440);
+  for (let y = -16; y > -h; y -= 26) g.fillRect(x - 3, y, 6, 2);
+}
+
+/**
+ * 露天電影：兩根竹竿撐起一塊白布、木凳上的 16 釐米放映機、地上幾張小板凳。
+ * 座標相對龍眼窯地標原點（地面 y = 0，地標寬 320）。
+ * beam 是另一個 Graphics（放映機鏡頭到白布的光錐，ADD 混色），不在 objects 裡，由場景自己加、控制 alpha。
+ */
+export function drawFilmScreen(scene: Phaser.Scene): {
+  objects: Phaser.GameObjects.GameObject[];
+  beam: Phaser.GameObjects.Graphics;
+  screenRect: { x: number; y: number; w: number; h: number };
+} {
+  const g = scene.add.graphics();
+  const objs: Phaser.GameObjects.GameObject[] = [g];
+  const { x: sx, y: sy, w: sw, h: sh } = FILM;
+  const p0 = sx - 8, p1 = sx + sw + 8, ph = -sy + 14;
+
+  // 拉住竹竿的斜繩 + 地樁
+  g.lineStyle(1.2, 0xd8c8a0, 0.9);
+  g.lineBetween(p0, -ph + 4, p0 - 36, 0);
+  g.lineBetween(p1, -ph + 4, Math.min(318, p1 + 26), 0);
+  g.fillStyle(0x6a4a30);
+  g.fillRect(p0 - 38, -5, 4, 5);
+  g.fillRect(Math.min(318, p1 + 26) - 2, -5, 4, 5);
+  bambooPole(g, p0, ph);
+  bambooPole(g, p1, ph);
+  // 竿頂橫拉的繩子
+  g.lineStyle(1.5, 0xd8c8a0);
+  g.beginPath();
+  g.moveTo(p0, -ph + 6);
+  for (let k = 1; k <= 10; k++) g.lineTo(p0 + ((p1 - p0) * k) / 10, -ph + 6 + Math.sin((k / 10) * Math.PI) * 3);
+  g.strokePath();
+
+  // 白布（上緣微微下垂、有幾道皺褶）
+  const top: Pt[] = [], bot: Pt[] = [];
+  for (let k = 0; k <= 12; k++) {
+    const t = k / 12, x = sx + sw * t;
+    top.push({ x, y: sy + Math.sin(t * Math.PI) * 3 });
+    bot.push({ x, y: sy + sh + Math.sin(t * Math.PI) * 2 });
+  }
+  g.fillStyle(0x000000, 0.15);
+  g.fillPoints([...top.map((p) => ({ x: p.x + 3, y: p.y + 3 })), ...bot.map((p) => ({ x: p.x + 3, y: p.y + 3 })).reverse()], true);
+  g.fillStyle(0xf8f6ee);
+  g.fillPoints([...top, ...bot.slice().reverse()], true);
+  // 布邊的縫線（反摺的布邊）
+  g.fillStyle(0xe2ddd0);
+  g.fillPoints([...top, ...top.map((p) => ({ x: p.x, y: p.y + 5 })).reverse()], true);
+  g.fillPoints([...bot.map((p) => ({ x: p.x, y: p.y - 5 })), ...bot.slice().reverse()], true);
+  // 縱向皺褶
+  for (const [fx, a] of [[0.18, 0.12], [0.41, 0.08], [0.63, 0.12], [0.86, 0.09]] as const) {
+    g.fillStyle(0x9a948a, a);
+    g.fillRect(sx + sw * fx, sy + 6, 3, sh - 10);
+  }
+  // 綁在竹竿上的四角繩
+  g.lineStyle(1.5, 0xd8c8a0);
+  for (const [cx, cy, px] of [[sx, sy, p0], [sx + sw, sy, p1], [sx, sy + sh, p0], [sx + sw, sy + sh, p1]] as const) {
+    g.lineBetween(cx, cy + 2, px, cy - 2);
+    g.fillStyle(0xc8b480);
+    g.fillCircle(cx + (px < cx ? 1 : -1), cy + 2, 2);
+  }
+
+  // 竹竿上掛的手寫告示
+  const nx = p1, ny = -96;
+  g.lineStyle(1, 0x5a4030);
+  g.lineBetween(nx - 12, ny - 12, nx, ny - 20);
+  g.lineBetween(nx + 12, ny - 12, nx, ny - 20);
+  g.fillStyle(0xf6eed6);
+  g.fillRect(nx - 16, ny - 12, 32, 26);
+  g.lineStyle(1.5, 0xb8322a);
+  g.strokeRect(nx - 14, ny - 10, 28, 22);
+  objs.push(scene.add.text(nx, ny + 1, '今晚\n電影', {
+    fontFamily: FONT, fontSize: '9px', fontStyle: '900', color: hex(0xb8322a), align: 'center',
+  }).setOrigin(0.5).setLineSpacing(-2));
+
+  // 觀眾的小板凳
+  foldingStool(g, 108);
+  plasticStool(g, 146);
+  foldingStool(g, 182);
+  plasticStool(g, 214);
+  plasticStool(g, 248);
+  foldingStool(g, 280);
+
+  // 放映機：木凳 + 16 釐米放映機 + 兩個片盤
+  const pg = scene.add.graphics();
+  objs.push(pg);
+  const kx = 46, ktop = -42;
+  pg.fillStyle(0x000000, 0.15);
+  pg.fillEllipse(kx, -1, 44, 5);
+  pg.fillStyle(0x6a4a2c);
+  pg.fillRect(kx - 15, ktop + 4, 4, -ktop - 4);
+  pg.fillRect(kx + 11, ktop + 4, 4, -ktop - 4);
+  pg.fillRect(kx - 13, -16, 26, 3);
+  pg.fillStyle(0x9a6b42);
+  pg.fillRoundedRect(kx - 18, ktop, 36, 6, 2);
+  // 機身
+  const bx0 = kx - 16, bx1 = kx + 20, by0 = ktop - 22;
+  pg.fillStyle(0x3a3e46);
+  pg.fillRoundedRect(bx0, by0, bx1 - bx0, 22, 3);
+  pg.fillStyle(0x5a606a);
+  pg.fillRect(bx0 + 2, by0 + 2, bx1 - bx0 - 4, 4);
+  pg.fillStyle(0x2a2c32);
+  pg.fillRect(bx0 + 4, by0 + 10, 10, 8);
+  pg.fillStyle(0xd8a03a);
+  pg.fillCircle(bx0 + 20, by0 + 14, 2);
+  // 鏡頭筒
+  pg.fillStyle(0x2a2c32);
+  pg.fillRect(bx1, FILM.lensY - 5, FILM.lensX - bx1 - 2, 10);
+  pg.fillStyle(0x4a505a);
+  pg.fillRect(bx1 + 2, FILM.lensY - 6, 3, 12);
+  pg.fillStyle(0xcfe4f0);
+  pg.fillEllipse(FILM.lensX - 1, FILM.lensY, 4, 9);
+  // 片盤支架 + 兩個片盤
+  const reels: [number, number][] = [[bx0 + 6, by0 - 20], [bx1 - 4, by0 - 16]];
+  pg.lineStyle(2.5, 0x2a2c32);
+  pg.lineBetween(bx0 + 8, by0, reels[0][0], reels[0][1]);
+  pg.lineBetween(bx1 - 8, by0, reels[1][0], reels[1][1]);
+  for (const [rx, ry] of reels) {
+    pg.fillStyle(0x24262c);
+    pg.fillCircle(rx, ry, 13);
+    pg.lineStyle(1.5, 0x8a909a);
+    pg.strokeCircle(rx, ry, 13);
+    pg.fillStyle(0x5a3a2a);
+    pg.fillCircle(rx, ry, 8);
+    pg.fillStyle(0x8a909a);
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI * 2) / 3 + 0.4;
+      pg.fillCircle(rx + Math.cos(a) * 5.5, ry + Math.sin(a) * 5.5, 2);
+    }
+    pg.fillStyle(0xd8dce0);
+    pg.fillCircle(rx, ry, 2);
+  }
+  // 片子從片盤繞進機身
+  pg.lineStyle(1, 0x3a2a20);
+  pg.lineBetween(reels[0][0] + 6, reels[0][1] + 11, bx0 + 12, by0);
+  pg.lineBetween(reels[1][0] - 6, reels[1][1] + 11, bx1 - 12, by0);
+
+  // 光錐（另一張 Graphics，場景控制 alpha）
+  const beam = scene.add.graphics();
+  beam.setBlendMode(Phaser.BlendModes.ADD);
+  const L0 = { x: FILM.lensX, y: FILM.lensY };
+  const cone = (inset: number, color: number, alpha: number) => {
+    beam.fillStyle(color, alpha);
+    beam.fillPoints([
+      L0, { x: sx + inset, y: sy + inset }, { x: sx + sw - inset, y: sy + inset }, { x: sx + sw - inset, y: sy + sh - inset },
+    ], true);
+  };
+  cone(0, 0xfff0c8, 0.16);
+  cone(14, 0xfff4d8, 0.16);
+  cone(30, 0xfff8e8, 0.2);
+  // 打在白布上的光
+  beam.fillStyle(0xfff6dc, 0.45);
+  beam.fillRect(sx + 2, sy + 5, sw - 4, sh - 9);
+  beam.fillStyle(0xffffff, 0.25);
+  beam.fillRect(sx + 18, sy + 16, sw - 36, sh - 32);
+  // 鏡頭口的亮點
+  beam.fillStyle(0xffffff, 0.9);
+  beam.fillCircle(L0.x, L0.y, 3);
+  beam.fillStyle(0xfff0c0, 0.35);
+  beam.fillCircle(L0.x, L0.y, 8);
+  // 光裡飛的小蟲／灰塵
+  beam.fillStyle(0xffffff, 0.5);
+  for (let k = 0; k < 9; k++) {
+    const t = 0.2 + (k * 0.37) % 0.75;
+    const tx = sx + 20 + ((k * 53) % (sw - 40)), ty = sy + 20 + ((k * 29) % (sh - 40));
+    beam.fillCircle(L0.x + (tx - L0.x) * t, L0.y + (ty - L0.y) * t, 1);
+  }
+
+  return { objects: objs, beam, screenRect: { x: sx, y: sy, w: sw, h: sh } };
 }

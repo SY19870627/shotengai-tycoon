@@ -3,7 +3,7 @@
  * 模擬一個「有空店面就簽應徵者（標準租金）、有錢就整修店面、偶爾辦活動」的會長，跑 30 天。
  * 劇情一律選第一個選項。
  */
-import { learnRecipe, MEMORY_KINDS } from '../src/core/memory';
+import { learnRecipe, MEMORY_KINDS, simulateTrip, memoryText } from '../src/core/memory';
 import {
   createGame, endDay, startNextDay, unlockLot, nextLotCost, signTenant, profileOf, applyEffects,
   startActivity, canStartActivity, goalsDone, renovate, presentTenants, buildFacility, installModule, setStaff,
@@ -92,6 +92,12 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   s.minute = 12 * 60; // 簡化：中午劇情在營業前檢查
   runStories('noon');
   s.minute = 7 * 60;
+  // 東原：每晚放白布電影（TRIPS=0 可以關掉）
+  if (street.memory && process.env.TRIPS !== '0') {
+    const g = simulateTrip(s, (steps) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); });
+    if (g) log.push(`  [回憶時光] ${memoryText(g) || '無'}`);
+    s.minute = 7 * 60;
+  }
   simulateDay(s, rand);
   runStories('evening');
   runStories('night');

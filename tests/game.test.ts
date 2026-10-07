@@ -15,13 +15,15 @@ import {
 } from '../src/core/onsen';
 import {
   negotiate, negotiateBlock, ownerOf, learnRecipe, residentsPerHour, touristsPerHour, dailyKinshipDelta,
+  canTrip, startTrip, endTrip, tripOver, pastHelp, passPastTime, pastShops, simulateTrip, recipeCost, recipeOf, PAST_HOURS,
 } from '../src/core/memory';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { STREETS } from '../src/content';
-import type { GameState } from '../src/core/types';
+import { NPCS } from '../src/content/npcs';
+import type { GameState, Step } from '../src/core/types';
 
 function seeded(seed: number) {
   return () => {
@@ -819,6 +821,81 @@ describe('東原', () => {
       if (!presentTenants(s).includes(id)) place(s, lot, id);
     }
     expect(dailyKinshipDelta(s)).toBeLessThan(0);
+  });
+
+  it('白布電影：找到膠卷後每天傍晚一次，過去的時鐘跑完就回到 2016 年當晚', () => {
+    const s = dy();
+    s.minute = 19 * 60;
+    expect(canTrip(s).ok).toBe(false);
+    s.flags.push('film');
+    s.minute = 15 * 60;
+    expect(canTrip(s).ok).toBe(false);
+    s.minute = 19 * 60;
+    s.weather = 'rain';
+    expect(startTrip(s).ok).toBe(true);
+    expect(s.trip!.era).toBe(1995);
+    expect(s.minute).toBe(PAST_HOURS[1995][0] * 60);
+    expect(s.weather).toBe('sunny');
+    expect(pastShops(s).length).toBe(11);
+    // 第一次幫忙是完整的故事，第二次是短短的閒聊
+    const first = pastHelp(s, 3)!;
+    const again = pastHelp(s, 3)!;
+    expect(first.length).toBeGreaterThan(again.length);
+    for (const st of flattenEffects(first)) if (st.t === 'effect') applyEffects(s, st.effects);
+    expect(s.flags).toContain('p95-icepop');
+    while (!tripOver(s)) passPastTime(s);
+    const gained = endTrip(s);
+    expect(gained.taste).toBe(3);
+    expect(s.trip).toBeNull();
+    expect(s.minute).toBe(19 * 60);
+    expect(s.weather).toBe('rain');
+    expect(canTrip(s).ok).toBe(false);
+    // 在 1995 年學過糖水，冰鋪需要的回憶變少
+    expect(recipeCost(s, recipeOf(s, 'icepop')!).taste).toBe(2);
+  });
+
+  it('1995 年的劇本：出場的角色都有定義', () => {
+    const s = dy();
+    const m = STREETS.dongyuan.memory!;
+    const scripts: Step[][] = [];
+    for (const p of m.past1995!) scripts.push(p.first(s), p.again(s));
+    for (const id of ['kiln', 'treehouse']) scripts.push(m.pastLandmark!(s, 1995, id)!, m.pastLandmark!(s, 1995, id)!);
+    scripts.push(m.tripIntro!(s, 1995), m.tripOutro!(s, 1995, { past: 1, taste: 0, bond: 0, craft: 0 }));
+    const walk = (steps: Step[]): void => {
+      for (const st of steps) {
+        if (st.t === 'appear' || st.t === 'say') expect(st.actor === 'me' || !!NPCS[st.actor], st.actor).toBe(true);
+        if (st.t === 'choice') for (const o of st.options) walk(o.then ?? []);
+      }
+    };
+    for (const sc of scripts) {
+      expect(sc.length).toBeGreaterThan(0);
+      walk(sc);
+    }
+  });
+
+  it('在回憶時光裡關掉遊戲，讀檔回到 2016 年', () => {
+    const s = dy();
+    s.flags.push('film');
+    s.minute = 19 * 60;
+    startTrip(s);
+    const back = deserialize(serialize(s))!;
+    expect(back.trip).toBeNull();
+    expect(back.lastTripDay).toBe(back.day);
+  });
+
+  it('每晚穿越：回憶來得比只靠居民聊天快，但第一次幫忙才有大量回憶', () => {
+    const s = dy();
+    s.flags.push('film');
+    const apply = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects); };
+    const totals: number[] = [];
+    for (let d = 0; d < 6; d++) {
+      const g = simulateTrip(s, apply)!;
+      totals.push(g.past + g.taste + g.bond + g.craft);
+      s.day += 1;
+    }
+    expect(totals[0]).toBeGreaterThan(totals[5]);
+    expect(totals[5]).toBeGreaterThan(0);
+    expect(s.trips).toBe(6);
   });
 
   it('數值模擬：只靠 2016 年的經營也能慢慢說服屋主，不會破產', () => {

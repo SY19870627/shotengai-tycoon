@@ -137,6 +137,37 @@ export interface Effects {
   chapterComplete?: boolean;
 }
 
+/** 東原：穿越到哪個年代 */
+export type Era = 1995 | 1960;
+
+/** 東原：正在進行的回憶時光（白布電影） */
+export interface Trip {
+  era: Era;
+  /** 回到 2016 年時的時間與天氣（回憶時光期間 minute 是過去的時鐘） */
+  returnMinute: number;
+  weather: Weather;
+  /** 出發時的回憶點數（用來算這趟找回多少） */
+  start: Memories;
+}
+
+/** 東原：過去的老街上，一間能幫忙的店 */
+export interface PastShop {
+  /** 店面 index */
+  lot: number;
+  /** 幫忙的 id（記錄做過沒） */
+  id: string;
+  shop: string;
+  name: string;
+  /** 顧店的人（NPC id） */
+  keeper: string;
+  /** 店面上的小牌子：可以幫什麼忙 */
+  task: string;
+  /** 第一次幫忙 */
+  first: (s: GameState) => Step[];
+  /** 之後再來 */
+  again: (s: GameState) => Step[];
+}
+
 /** 東原：四種回憶點數 */
 export type MemoryKind = 'past' | 'taste' | 'bond' | 'craft';
 export type Memories = Record<MemoryKind, number>;
@@ -171,6 +202,8 @@ export interface RecipeDef {
   cost: Partial<Memories>;
   /** 說明：作法從哪裡來 */
   text: string;
+  /** 在 1995 年親手學過（旗標 p95-店種）時，少付的回憶 */
+  discount?: Partial<Memories>;
 }
 
 export type Step =
@@ -383,6 +416,13 @@ export interface StreetDef {
     recipes: RecipeDef[];
     startTenants: { lot: number; tenant: string; tier: number }[];
     startMemories: Partial<Memories>;
+    /** 1995 年的老街 */
+    past1995?: PastShop[];
+    /** 回憶時光的開場、收尾 */
+    tripIntro?: (s: GameState, era: Era) => Step[];
+    tripOutro?: (s: GameState, era: Era, gained: Memories) => Step[];
+    /** 點過去的地標（戲院蛇窩探險…） */
+    pastLandmark?: (s: GameState, era: Era, id: string) => Step[] | null;
   };
   shopTypes: string[];
   tenants: TenantProfile[];
@@ -629,4 +669,12 @@ export interface GameState {
   recipes: string[];
   /** 鄉親認同 0~100 */
   kinship: number;
+  /** 回憶時光（白布電影）；不在穿越中是 null */
+  trip: Trip | null;
+  /** 穿越過幾次（決定下一次去哪個年代） */
+  trips: number;
+  /** 上次穿越是第幾天（每晚一次） */
+  lastTripDay: number;
+  /** 在過去做過的事（第一次幫忙的回憶比較多） */
+  pastDone: string[];
 }

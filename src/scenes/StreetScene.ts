@@ -20,7 +20,7 @@ import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
-import { drawLandmark, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
+import { drawLandmark, drawFilmScreen, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
 import { drawBackdrop } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
@@ -28,7 +28,8 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { MEMORY_NAME, MEMORY_COLOR, ownerOf } from '../core/memory';
+import { MEMORY_NAME, MEMORY_COLOR, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet } from '../core/memory';
+import type { Era } from '../core/types';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
 const MINUTES_PER_SEC = 8;
@@ -68,6 +69,18 @@ const TOURIST_LOOKS: Look[] = [
   { skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'ponytail', shirt: 0x3fb2a9, pants: 0x2b2b2b, accessory: 'headband', age: 'young' },
   { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0x6d5a4a, pants: 0x54627a, accessory: 'camera', age: 'mid' },
   { skin: 0xf9dcc4, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xf0f0f0, pants: 0x4f86c6, accessory: 'camera', age: 'young' },
+];
+
+/** 1995 年的街坊：汗衫阿伯、燙捲髮的阿姨、穿制服的國中生、戴斗笠的農夫 */
+const PAST95_LOOKS: Look[] = [
+  { skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'mid' },
+  { skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xd35454, pants: 0x3d3a36, accessory: 'none', age: 'mid' },
+  { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'none', age: 'kid' },
+  { skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'ponytail', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'none', age: 'kid' },
+  { skin: 0xb07a52, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0x5b7a5b, pants: 0x3d3a36, accessory: 'hat', age: 'mid' },
+  { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'bun', shirt: 0x9b6bc9, pants: 0x3d3a36, accessory: 'none', age: 'old' },
+  { skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'long', shirt: 0xf2b84b, pants: 0x4f86c6, accessory: 'none', age: 'young' },
+  { skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0x4f86c6, pants: 0x3d3a36, accessory: 'cap', age: 'young' },
 ];
 
 /** 角色站的位置（比路人前面一點） */
@@ -208,6 +221,13 @@ export class StreetScene extends Phaser.Scene {
   private flame: { g: Phaser.GameObjects.Graphics; glow: Phaser.GameObjects.Graphics; t: number } | null = null;
   private fireSeats: boolean[] = [];
   private steamTimer = 0;
+  /** 東原：現在顯示的年代、回憶時光的路人、白布 */
+  private era: 2016 | Era = 2016;
+  private pastWalkers: { sprite: Phaser.GameObjects.Image; key: string; dir: 1 | -1; speed: number; animT: number; pause: number; stopped?: boolean }[] = [];
+  private pastWalkTimer = 0;
+  private pastFilled = false;
+  private tripEndSent = false;
+  private filmView: { c: Phaser.GameObjects.Container; beam: Phaser.GameObjects.Graphics } | null = null;
   private wellLayer!: Phaser.GameObjects.Container;
   private wellSig = '';
   private festGlow!: Phaser.GameObjects.Container;
@@ -226,6 +246,12 @@ export class StreetScene extends Phaser.Scene {
 
   create() {
     this.street = streetOf(S());
+    this.era = eraOf(S());
+    this.pastWalkers = [];
+    this.pastWalkTimer = 0;
+    this.pastFilled = false;
+    this.tripEndSent = false;
+    this.filmView = null;
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -292,6 +318,15 @@ export class StreetScene extends Phaser.Scene {
     this.setupInput();
     this.redrawAllLots();
     this.cameras.main.scrollX = 0;
+    // 回憶時光：畫面泛黃、四周暗一點，像老照片
+    const fx = this.cameras.main.postFX;
+    fx?.clear();
+    if (this.era !== 2016 && fx) {
+      const cm = fx.addColorMatrix();
+      cm.sepia();
+      cm.alpha = this.era === 1960 ? 0.6 : 0.3;
+      fx.addVignette(0.5, 0.5, 0.95, 0.35);
+    }
 
     bus.on(Ev.LotRedraw, this.onLotRedraw, this);
     bus.on(Ev.Select, this.updateHighlight, this);
@@ -375,18 +410,25 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private createLandmark(id: string, x: number, width: number) {
-    const mode = id === 'fire' ? S().fireMode : undefined;
+    // 東原：龍眼窯、樹屋、診所在不同年代長得不一樣
+    const eraVariant = ['kiln', 'treehouse', 'clinic'].includes(id) ? String(this.era) : undefined;
+    const mode = id === 'fire' ? S().fireMode : eraVariant;
     const art = drawLandmark(this, id, width, mode);
     const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
     art.night.setBlendMode(Phaser.BlendModes.ADD);
     this.nightLayer.push({ g: night });
-    if (id === 'fire' && mode) this.fireView = { container, night, mode };
+    if (id === 'fire' && mode) this.fireView = { container, night, mode: mode as FireMode };
     this.landmarkStand.set(id, x + art.standX);
     this.landmarkBox.set(id, { x, w: width });
     const zone = this.add.zone(x, GROUND_Y - 360, width, 360).setOrigin(0).setInteractive({ useHandCursor: true });
     zone.on('pointerup', () => {
       if (this.drag.moved || store.storyRunning) return;
+      // 東原：回憶時光裡點地標（戲院探險…）；2016 年傍晚點龍眼窯放白布電影
+      if (this.era !== 2016 || (id === 'kiln' && isMemoryStreet(S()) && !store.waitingNextDay)) {
+        bus.emit(Ev.Landmark, id);
+        return;
+      }
       // 關子嶺：露頭、水火同源可以操作
       if ((id === 'spring' || id === 'fire') && hasSpring(S()) && !store.waitingNextDay) {
         bus.emit(Ev.Landmark, id);
@@ -424,6 +466,11 @@ export class StreetScene extends Phaser.Scene {
     const zone = this.add.zone(x, GROUND_Y - 340, LOT_W, 340 + SIDEWALK_H).setOrigin(0).setInteractive({ useHandCursor: true });
     zone.on('pointerup', () => {
       if (this.drag.moved || store.waitingNextDay || store.storyRunning) return;
+      // 回憶時光：點店家進去幫忙
+      if (this.era !== 2016) {
+        bus.emit(Ev.PastTap, i);
+        return;
+      }
       store.selected = store.selected === i ? -1 : i;
       bus.emit(Ev.Select, store.selected);
     });
@@ -457,7 +504,9 @@ export class StreetScene extends Phaser.Scene {
     const firstLocked = s.lots.findIndex((l) => !l.unlocked);
     const x0 = this.L.lotX(i);
 
-    if (!lot.unlocked) {
+    if (this.era !== 2016) {
+      this.drawPastLot(i);
+    } else if (!lot.unlocked) {
       const owner = this.street.memory ? ownerOf(s, i) : undefined;
       view.container.add(owner ? drawVacantHouse(this, owner.tag, i === firstLocked) : drawLockedLot(this, nextLotCost(s), i === firstLocked));
     } else if (lot.bath) {
@@ -551,6 +600,93 @@ export class StreetScene extends Phaser.Scene {
     }
     if (view.windows) this.paintMinshuku(i);
     if (store.selected === i) this.updateHighlight();
+  }
+
+  /** 回憶時光：過去的老街上，這間店本來的樣子；頭上掛著可以幫什麼忙 */
+  private drawPastLot(i: number) {
+    const s = S();
+    const view = this.lotViews[i];
+    const x0 = this.L.lotX(i);
+    const p = pastShopAt(s, i);
+    if (!p) {
+      view.container.add(drawEmptyLot(this, 'retro95', 0));
+      return;
+    }
+    const art = drawShopFacade(this, SHOP_BY_ID[p.shop], 1, p.name, 'retro95');
+    view.container.add(art.objects);
+    view.lights.fillStyle(0xffd27a, 0.55);
+    for (const r of art.upperWindows) view.lights.fillRect(x0 + r.x, GROUND_Y + r.y, r.width, r.height);
+    view.shopLight.fillStyle(0xffe2a0, 0.4);
+    view.shopLight.fillRect(x0 + art.shopWindow.x, GROUND_Y + art.shopWindow.y, art.shopWindow.width, art.shopWindow.height);
+    const done = s.pastDone.includes(p.id);
+    const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(1) - 22, done ? `✓ ${p.task}` : `幫忙：${p.task}`, {
+      fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: done ? '#5a5266' : '#2a2433',
+      backgroundColor: done ? '#d8d2e0' : '#f2c14e', padding: { x: 7, y: 3 },
+    }).setOrigin(0.5).setDepth(40);
+    if (!done) this.tweens.add({ targets: tag, y: tag.y - 5, yoyo: true, repeat: -1, duration: 700 });
+    view.extras.push(tag);
+  }
+
+  /** 回憶時光的路人：當年的街坊，只是走來走去（不消費） */
+  private updatePastWalkers(dt: number, running: boolean) {
+    const mult = running ? store.speed : 0;
+    this.pastWalkTimer -= dt * mult;
+    // 一開始街上就有人（1995 年的老街很熱鬧）
+    const prefill = !this.pastFilled;
+    this.pastFilled = true;
+    for (let n = prefill ? 16 : running && this.pastWalkTimer <= 0 && this.pastWalkers.length < 36 ? 1 : 0; n > 0; n--) {
+      this.pastWalkTimer = 300 + Math.random() * 500;
+      const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+      const k = Math.floor(Math.random() * PAST95_LOOKS.length);
+      const key = ensureCharTexture(this, `past95_${k}`, PAST95_LOOKS[k]);
+      const y = GROUND_Y + 8 + Math.random() * (SIDEWALK_H - 18);
+      const x = prefill ? this.L.startX + Math.random() * (this.L.endX - this.L.startX) : dir === 1 ? this.L.startX - 60 : this.L.endX + 60;
+      const sprite = this.add.image(x, y, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setDepth(30 + y / 1000).setFlipX(dir === -1);
+      this.pastWalkers.push({ sprite, key, dir, speed: 45 + Math.random() * 35, animT: 0, pause: Math.random() < 0.5 ? 2000 + Math.random() * 6000 : -1 });
+    }
+    for (let k = this.pastWalkers.length - 1; k >= 0; k--) {
+      const w = this.pastWalkers[k];
+      // 有些人會在店門口停下來聊天一下
+      if (w.stopped) {
+        w.pause -= dt * mult;
+        if (w.pause <= 0) w.stopped = false;
+        continue;
+      }
+      if (w.pause > 0 && Math.random() < 0.003 * mult) {
+        w.stopped = true;
+        continue;
+      }
+      w.sprite.x += w.dir * w.speed * mult * (dt / 1000);
+      w.animT += dt * mult;
+      w.sprite.setTexture(`${w.key}_${Math.floor(w.animT / 180) % 2}`);
+      if (w.sprite.x < this.L.startX - 100 || w.sprite.x > this.L.endX + 100) {
+        w.sprite.destroy();
+        this.pastWalkers.splice(k, 1);
+      }
+    }
+  }
+
+  /** 東原 2016：傍晚以後，龍眼窯前搭著白布 */
+  private updateFilmScreen() {
+    const s = S();
+    const box = this.landmarkBox.get('kiln');
+    if (!box || this.era !== 2016) return;
+    const show = s.flags.includes('film') && hourOf(s) >= 17;
+    if (show && !this.filmView) {
+      const art = drawFilmScreen(this);
+      const c = this.add.container(box.x, GROUND_Y, art.objects).setDepth(12);
+      const beam = art.beam.setPosition(box.x, GROUND_Y).setDepth(61).setAlpha(0);
+      this.filmView = { c, beam };
+    } else if (!show && this.filmView) {
+      this.filmView.c.destroy();
+      this.filmView.beam.destroy();
+      this.filmView = null;
+    }
+    if (this.filmView) {
+      // 今晚還能放：放映機的光一閃一閃
+      const ready = canTrip(s).ok;
+      this.filmView.beam.setAlpha(ready ? 0.5 + 0.25 * Math.sin(performance.now() / 300) : 0);
+    }
   }
 
   /** 民宿：依今晚入住人數點亮窗戶、更新房況牌 */
@@ -673,6 +809,20 @@ export class StreetScene extends Phaser.Scene {
     const s = S();
     const running = store.speed > 0 && !store.waitingNextDay && !s.gameOver && !store.storyRunning;
     const dm = running ? (dt / 1000) * MINUTES_PER_SEC * store.speed : 0;
+
+    // 回憶時光：只有時鐘、當年的路人和劇情，沒有經營
+    if (this.era !== 2016) {
+      if (running && s.trip) s.minute = Math.min(PAST_HOURS[s.trip.era][1] * 60, s.minute + dm);
+      this.updatePastWalkers(dt, running);
+      this.updateActors(dt);
+      this.updateEnvironment(dt);
+      if (running && tripOver(s) && !this.tripEndSent) {
+        this.tripEndSent = true;
+        bus.emit(Ev.TripEnd);
+      }
+      return;
+    }
+    if (this.street.memory) this.updateFilmScreen();
 
     if (running) {
       this.checkStories();

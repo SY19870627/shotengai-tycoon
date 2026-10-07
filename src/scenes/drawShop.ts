@@ -34,6 +34,8 @@ export function drawShopFacade(
   const top = -buildingHeight(level);
   const lanterns: { x: number; y: number }[] = [];
   const upperWindows: Phaser.Geom.Rectangle[] = [];
+  // 1995：同店種的兩家店（例如兩間理髮店）也要長得不一樣
+  const rs = retroSeed(def.id) + (shopName === def.name ? 0 : retroSeed(shopName) % 17);
 
   if (style === 'redbrick') {
     // 紅磚牆
@@ -72,6 +74,8 @@ export function drawShopFacade(
     lanterns.push({ x: left + 20, y: FACADE.floorTop - 6 }, { x: right - 20, y: FACADE.floorTop - 6 });
   } else if (style === 'oldtown') {
     drawOldtownUpper(g, level, top, upperWindows, def.id.length);
+  } else if (style === 'retro95') {
+    drawRetro95Upper(g, level, top, upperWindows, rs);
   } else {
     // 九份：深色木造、黑瓦屋簷
     const wood = 0x4a3426;
@@ -145,6 +149,8 @@ export function drawShopFacade(
     // 日曬褪色的斑
     g.fillStyle(0xffffff, 0.18);
     g.fillEllipse(left + 60, signY + 12, 70, 10);
+  } else if (style === 'retro95') {
+    retro95Sign(g, signY, signH, retroSignColors(def, rs), rs);
   } else {
     g.fillStyle(style === 'jiufen' ? 0x1e1410 : 0x3b2a20);
     g.fillRoundedRect(left + 10, signY, right - left - 20, signH, 4);
@@ -153,9 +159,11 @@ export function drawShopFacade(
   }
   const fontSize = shopName.length > 8 ? 14 : shopName.length > 6 ? 16 : 18;
   const signColor = style === 'jiufen' ? hex(C.gold) : style === 'onsen' ? '#f3e6c8'
-    : style === 'oldtown' ? hex(signInk(def.awningColor)) : hex(C.paper);
+    : style === 'oldtown' ? hex(signInk(def.awningColor))
+    : style === 'retro95' ? hex(retroSignColors(def, rs).text) : hex(C.paper);
   objs.push(scene.add.text(LOT_W / 2, signY + 17, shopName, {
     fontFamily: FONT, fontSize: `${fontSize}px`, fontStyle: '900', color: signColor,
+    ...(style === 'retro95' ? { stroke: hex(retroSignColors(def, rs).stroke), strokeThickness: 3 } : {}),
   }).setOrigin(0.5));
   for (let i = 0; i < level; i++) objs.push(scene.add.star(right - 24 - i * 12, signY + 8, 5, 2.4, 5, C.gold));
 
@@ -184,6 +192,8 @@ export function drawShopFacade(
     g.lineBetween(left + 8, FACADE.floorTop + 4, right - 8, FACADE.floorTop + 4);
     // 一樓磨石子腰牆
     terrazzo(g, left + 6, -20, right - left - 12, 20, 0xbab3a4);
+  } else if (style === 'retro95') {
+    retro95Storefront(g, aw, rs);
   } else {
     for (let x = left + 6, k = 0; x < right - 6; x += 16, k++) {
       g.fillStyle(k % 2 === 0 ? aw : shade(aw, 0.7));
@@ -192,7 +202,7 @@ export function drawShopFacade(
     }
   }
   const shopWindow = new Phaser.Geom.Rectangle(left + 16, FACADE.floorTop + 18, 126, 64);
-  g.fillStyle(style === 'onsen' ? 0x3e2c20 : style === 'oldtown' ? 0xa8adb0 : 0x6e5442);
+  g.fillStyle(style === 'onsen' ? 0x3e2c20 : style === 'oldtown' ? 0xa8adb0 : style === 'retro95' ? 0xd0d4d6 : 0x6e5442);
   g.fillRect(shopWindow.x - 4, shopWindow.y - 4, shopWindow.width + 8, shopWindow.height + 8);
   g.fillStyle(0xe3ecee);
   g.fillRect(shopWindow.x, shopWindow.y, shopWindow.width, shopWindow.height);
@@ -236,6 +246,8 @@ export function drawShopFacade(
     g.fillRect(dl + 8, dt + 10, 12, 9);
     g.fillStyle(0xd64545, 0.7);
     g.fillRect(dl + 8, dt + 10, 12, 2);
+  } else if (style === 'retro95') {
+    retro95OpenDoor(g, rs);
   }
   // 門口小攤（小吃類）
   if (def.category === 'food') {
@@ -246,6 +258,8 @@ export function drawShopFacade(
   }
   // 各店門口的招牌小物（理髮旋轉燈、藥局燈箱……）
   drawFrontExtras(scene, g, objs, def.id, style);
+  // 九〇年代：騎樓上滿出來的生活雜物（箱子、米袋、紅色塑膠椅、機車）
+  if (style === 'retro95') retro95Clutter(g, def, rs);
 
   // 紅磚拱廊（亭仔腳）畫在最前面
   if (style === 'redbrick') {
@@ -527,6 +541,433 @@ function drawOldtownUpper(
   }
 }
 
+// ───────────────────────── 東原 1995：同一條街，二十一年前 ─────────────────────────
+
+/** 由店 id 算出一個穩定的小種子（讓每家店的牆色、雜物位置不同） */
+function retroSeed(id: string): number {
+  let n = 0;
+  for (let i = 0; i < id.length; i++) n += id.charCodeAt(i) * (i + 1);
+  return n;
+}
+
+function lumOf(c: number): number {
+  const r = (c >> 16) & 255, gg = (c >> 8) & 255, b = c & 255;
+  return (0.299 * r + 0.587 * gg + 0.114 * b) / 255;
+}
+
+/** 剛粉刷好的牆色：奶油、淡綠、淡藍小磁磚 */
+const RETRO_WALLS = [0xf3e7c6, 0xd6e9cc, 0xd2e3ee];
+
+/** 手漆招牌的配色：店種色底白字／亮黃底紅字／白底店種色字 */
+function retroSignColors(def: ShopDef, seed: number): { bg: number; text: number; stroke: number } {
+  const k = seed % 3;
+  const bg = k === 0 ? def.awningColor : k === 1 ? 0xf7d548 : 0xfbf8ee;
+  if (lumOf(bg) < 0.55) return { bg, text: 0xffffff, stroke: shade(bg, -0.55) };
+  return { bg, text: k === 2 ? signInk(def.awningColor) : 0xc0241a, stroke: 0xffffff };
+}
+
+/** 新漆好的手繪鐵皮招牌 */
+function retro95Sign(
+  g: Phaser.GameObjects.Graphics, signY: number, signH: number, col: { bg: number; text: number }, seed: number,
+): void {
+  const { left, right } = FACADE;
+  g.fillStyle(0x34343a);
+  g.fillRect(left + 6, signY - 3, right - left - 12, signH + 6);
+  g.fillStyle(col.bg);
+  g.fillRect(left + 9, signY, right - left - 18, signH);
+  // 上半部一點亮光（新漆的光澤）
+  g.fillStyle(0xffffff, 0.16);
+  g.fillRect(left + 9, signY, right - left - 18, signH / 2 - 2);
+  // 白色內框
+  g.lineStyle(2, lumOf(col.bg) < 0.55 ? 0xffffff : col.text, 0.9);
+  g.strokeRect(left + 13, signY + 4, right - left - 26, signH - 8);
+  // 兩端手漆的小圖樣（圓點／菱形）
+  const accent = col.text === 0xffffff ? 0xf7d548 : col.text;
+  g.fillStyle(accent);
+  for (const x of [left + 22, right - 22]) {
+    if (seed % 2) g.fillCircle(x, signY + signH / 2, 5);
+    else g.fillPoints([{ x, y: signY + signH / 2 - 6 }, { x: x + 6, y: signY + signH / 2 }, { x, y: signY + signH / 2 + 6 }, { x: x - 6, y: signY + signH / 2 }], true);
+  }
+  // 鉚釘（亮的）
+  g.fillStyle(0xe8e8e0);
+  for (const rx of [left + 11, right - 11]) for (const ry of [signY + 3, signY + signH - 3]) g.fillCircle(rx, ry, 1.5);
+}
+
+/** 新漆好的鐵捲門箱（沒有鏽），門片整個捲上去 */
+function retroShutterBox(g: Phaser.GameObjects.Graphics, x0: number, x1: number, y: number, paint: number): void {
+  g.fillStyle(shade(paint, -0.3));
+  g.fillRect(x0, y - 2, x1 - x0, 18);
+  g.fillStyle(paint);
+  g.fillRect(x0 + 1, y, x1 - x0 - 2, 13);
+  g.fillStyle(0xffffff, 0.3);
+  g.fillRect(x0 + 1, y, x1 - x0 - 2, 3);
+  g.lineStyle(1, shade(paint, -0.2), 0.8);
+  g.lineBetween(x0 + 1, y + 7, x1 - 1, y + 7);
+  // 捲起來的門片下緣（拉到最上面）
+  g.fillStyle(0x8a8e92);
+  g.fillRect(x0 + 4, y + 13, x1 - x0 - 8, 2);
+  // 兩側亮亮的導軌
+  g.fillStyle(0xb8bcc0);
+  g.fillRect(x0 + 2, y + 16, 3, -y - 16);
+  g.fillRect(x1 - 5, y + 16, 3, -y - 16);
+}
+
+/** 九〇年代：剛粉刷的透天厝上半部（同樣的窗、同樣的位置，只是新、而且有人住） */
+function drawRetro95Upper(
+  g: Phaser.GameObjects.Graphics, level: number, top: number, upperWindows: Phaser.Geom.Rectangle[], seed: number,
+): void {
+  const { left, right } = FACADE;
+  const kind = Math.floor(seed / 5) % 3;
+  const wall = RETRO_WALLS[kind];
+  g.fillStyle(wall);
+  g.fillRect(left, top, right - left, -top);
+  if (kind === 2) {
+    // 淡藍色馬賽克小磁磚
+    g.lineStyle(1, 0xffffff, 0.55);
+    for (let y = top + 6; y < 0; y += 7) g.lineBetween(left, y, right, y);
+    for (let x = left + 7; x < right; x += 7) g.lineBetween(x, top, x, 0);
+  } else {
+    // 新洗石子（很淡的細點）
+    g.fillStyle(shade(wall, -0.12), 0.35);
+    for (let i = 0; i < 70; i++) g.fillRect(left + ((i * 53) % (right - left)), top + ((i * 29 + i * i) % (-top - 20)), 1.5, 1.5);
+  }
+  // 兩側二丁掛磁磚柱（顏色還很鮮）
+  for (const px of [left, right - 8]) {
+    g.fillStyle(0xc9845a);
+    g.fillRect(px, top + 4, 8, -top - 4);
+    g.lineStyle(1, 0xf6ecd8, 0.85);
+    for (let y = top + 8; y < 0; y += 5) g.lineBetween(px, y, px + 8, y);
+  }
+  // 女兒牆 + 亮綠色磁磚帶
+  g.fillStyle(shade(wall, -0.05));
+  g.fillRect(left - 4, top - 18, right - left + 8, 20);
+  g.fillStyle(0x5fb48e);
+  g.fillRect(left - 4, top - 6, right - left + 8, 6);
+  g.lineStyle(1, 0xffffff, 0.85);
+  for (let x = left - 4; x < right + 4; x += 6) g.lineBetween(x, top - 6, x, top);
+  // 頂樓：亮晶晶的不鏽鋼水塔
+  const tx = seed % 2 ? left + 40 : right - 54;
+  g.fillStyle(0x7a7e82);
+  g.fillRect(tx - 2, top - 26, 4, 8);
+  g.fillRect(tx + 22, top - 26, 4, 8);
+  g.fillStyle(0xd8dde2);
+  g.fillRoundedRect(tx - 6, top - 52, 36, 28, 6);
+  g.fillStyle(0xffffff, 0.8);
+  g.fillRect(tx, top - 50, 5, 24);
+  g.lineStyle(1, 0x9aa0a6, 0.8);
+  g.lineBetween(tx - 6, top - 38, tx + 30, top - 38);
+  // 魚骨天線（那時候家家戶戶都有）
+  const ax = tx < LOT_W / 2 ? right - 46 : left + 46;
+  g.lineStyle(1.5, 0x5a5a62);
+  g.lineBetween(ax, top - 18, ax, top - 74);
+  for (let k = 0; k < 5; k++) {
+    const yy = top - 70 + k * 7, hw = 16 - k * 2;
+    g.lineBetween(ax - hw, yy, ax + hw, yy);
+  }
+  g.lineStyle(1, 0x2a2a2e, 0.6);
+  g.lineBetween(ax, top - 30, ax + 14, top - 18);
+  // 頂樓盆栽（長得很好，還開花）
+  const px = tx < LOT_W / 2 ? right - 22 : left + 28;
+  g.fillStyle(0xb8643a);
+  g.fillRect(px - 7, top - 28, 14, 10);
+  g.fillStyle(0x4f9a44);
+  g.fillCircle(px, top - 34, 9);
+  g.fillCircle(px - 6, top - 29, 6);
+  g.fillCircle(px + 6, top - 30, 6);
+  g.fillStyle(0xe8508a);
+  for (const [dx, dy] of [[-4, -38], [3, -36], [6, -31], [-6, -31]]) g.fillCircle(px + dx, top + dy, 2);
+  // 每層樓：兩扇鋁窗（窗簾、漆過的鐵窗）、冷氣、曬衣竿
+  const curtains = [0xf2a6b8, 0xf6d27a, 0x9cc8ec, 0xf4f0e6];
+  const grille = seed % 2 ? 0x3f8a6a : 0xf4f0e6;
+  for (let f = 0; f < level; f++) {
+    const wy = FACADE.signTop - 74 - f * 46;
+    if (wy < top + 12) break;
+    for (const [k, wx] of [28, 134].entries()) {
+      const r = new Phaser.Geom.Rectangle(wx, wy, 76, 30);
+      upperWindows.push(r);
+      g.fillStyle(shade(wall, -0.1));
+      g.fillRect(r.x - 4, r.y + r.height, r.width + 8, 4);
+      g.fillStyle(0xd4d8da);
+      g.fillRect(r.x - 2, r.y - 2, r.width + 4, r.height + 4);
+      g.fillStyle(0x9ccfd0);
+      g.fillRect(r.x, r.y, r.width, r.height);
+      // 拉到一邊的花窗簾
+      const cc = curtains[(seed + f + k) % curtains.length];
+      const cl = (seed + k) % 2 ? r.x + 2 : r.x + r.width - 22;
+      g.fillStyle(cc);
+      g.fillRect(cl, r.y + 2, 20, r.height - 4);
+      g.fillStyle(shade(cc, -0.15));
+      for (let x = cl + 4; x < cl + 20; x += 5) g.fillRect(x, r.y + 2, 1.5, r.height - 4);
+      g.fillStyle(0xffffff, 0.35);
+      g.fillTriangle(r.x, r.y, r.x + 24, r.y, r.x, r.y + 24);
+      g.fillStyle(0xd4d8da);
+      g.fillRect(r.x + r.width / 2 - 1, r.y, 2, r.height);
+      // 新漆的鐵窗（有捲草花紋）
+      g.lineStyle(1.5, grille, 0.95);
+      g.strokeRect(r.x - 5, r.y - 5, r.width + 10, r.height + 8);
+      for (let x = r.x + 2; x < r.x + r.width + 4; x += 8) g.lineBetween(x, r.y - 5, x, r.y + r.height + 3);
+      g.lineBetween(r.x - 5, r.y + r.height / 2, r.x + r.width + 5, r.y + r.height / 2);
+      for (let x = r.x + 6; x < r.x + r.width; x += 16) g.strokeCircle(x, r.y + r.height / 2 - 6, 3);
+    }
+    // 窗型冷氣機（新的、白的）
+    if ((f + seed) % 2 === 0) {
+      const ax2 = (seed + f) % 3 === 0 ? 119 : 220, ay = wy + 6;
+      g.fillStyle(0xf4f2ec);
+      g.fillRect(ax2 - 9, ay, 20, 20);
+      g.fillStyle(0xb8b4aa);
+      for (let y = ay + 3; y < ay + 18; y += 3) g.fillRect(ax2 - 7, y, 16, 1.5);
+    }
+    // 曬衣竿：竹竿伸出窗外、掛著衣服毛巾
+    if ((f + seed) % 2 === 1) {
+      const wx = (seed + f) % 4 < 2 ? 28 : 134, py = wy + 2;
+      g.lineStyle(2.5, 0xc8a860);
+      g.lineBetween(wx - 8, py, wx + 84, py - 3);
+      const clothes = [0xf4f4f0, 0xd64545, 0x3b7dd8, 0xf2c14e, 0x6abf8a];
+      for (let c = 0; c < 4; c++) {
+        const cx = wx + 4 + c * 20, cy = py - (c * 3) / 4 + 1;
+        g.fillStyle(clothes[(seed + c + f) % clothes.length]);
+        if (c % 2 === 0) {
+          // 短袖上衣
+          g.fillRect(cx - 6, cy, 12, 16);
+          g.fillRect(cx - 9, cy, 18, 5);
+        } else {
+          // 毛巾
+          g.fillRect(cx - 5, cy, 10, 20);
+          g.fillStyle(0xffffff, 0.5);
+          g.fillRect(cx - 5, cy + 15, 10, 2);
+        }
+      }
+    }
+    g.fillStyle(shade(wall, -0.1));
+    g.fillRect(left, wy + 40, right - left, 3);
+  }
+}
+
+/** 九〇年代的一樓：乾淨的鐵捲門箱、吊著的日光燈、新的磨石子腰牆 */
+function retro95Storefront(g: Phaser.GameObjects.Graphics, aw: number, seed: number): void {
+  const { left, right } = FACADE;
+  const paint = [0xe8e4d8, 0x9cc8b4, 0xd8dce0][seed % 3];
+  retroShutterBox(g, left + 4, right - 4, FACADE.floorTop - 12, paint);
+  // 鐵捲門箱上手漆的店種色細條
+  g.fillStyle(aw);
+  g.fillRect(left + 6, FACADE.floorTop - 4, right - left - 12, 3);
+  // 吊在騎樓下的日光燈管
+  const lx0 = left + 34, lx1 = left + 104, ly = FACADE.floorTop + 8;
+  g.lineStyle(1, 0x3a3a40);
+  g.lineBetween(lx0 + 6, FACADE.floorTop + 4, lx0 + 6, ly);
+  g.lineBetween(lx1 - 6, FACADE.floorTop + 4, lx1 - 6, ly);
+  g.fillStyle(0xd8dcdc);
+  g.fillRect(lx0, ly - 1, lx1 - lx0, 3);
+  g.fillStyle(0xf8fbff);
+  g.fillRoundedRect(lx0 + 2, ly + 2, lx1 - lx0 - 4, 4, 2);
+  g.fillStyle(0xe8f4ff, 0.35);
+  g.fillEllipse((lx0 + lx1) / 2, ly + 5, lx1 - lx0 + 14, 12);
+  // 新的磨石子腰牆
+  terrazzo(g, left + 6, -20, right - left - 12, 20, 0xd6cfc0);
+}
+
+/** 九〇年代：門大開，看得到店裡（日光燈、牆上的掛鐘和日曆） */
+function retro95OpenDoor(g: Phaser.GameObjects.Graphics, seed: number): void {
+  const dl = FACADE.doorLeft, dr = FACADE.doorRight, dt = FACADE.floorTop + 14;
+  // 店內：被日光燈照亮的牆
+  g.fillStyle(0xf2e6c2);
+  g.fillRect(dl, dt, dr - dl, -dt);
+  g.fillStyle(0xd8c8a0);
+  g.fillRect(dl, -16, dr - dl, 16);
+  g.fillStyle(0xb8a888);
+  g.fillRect(dl, -16, dr - dl, 2);
+  // 捲上去的門片在門楣下露一點
+  g.fillStyle(0x9ea3a8);
+  g.fillRect(dl, dt, dr - dl, 4);
+  // 店內天花板的日光燈
+  g.fillStyle(0xffffff);
+  g.fillRect(dl + 8, dt + 7, dr - dl - 16, 3);
+  g.fillStyle(0xffffff, 0.25);
+  g.fillRect(dl + 2, dt + 4, dr - dl - 4, 12);
+  // 掛鐘（每家掛的位置不同）
+  const flip = seed % 3 === 1;
+  const kx = flip ? dr - 14 : dl + 14, ky = dt + 26;
+  g.fillStyle(0x7a4a2a);
+  g.fillCircle(kx, ky, 8);
+  g.fillStyle(0xfbf8ee);
+  g.fillCircle(kx, ky, 6.5);
+  g.lineStyle(1.5, 0x2a2433);
+  g.lineBetween(kx, ky, kx, ky - 5);
+  g.lineBetween(kx, ky, kx + 3.5, ky + 1);
+  // 撕的日曆（紅字大日期）
+  const cx = flip ? dl + 16 : dr - 16, cy = dt + 16;
+  g.fillStyle(0xd8392f);
+  g.fillRect(cx - 8, cy, 16, 6);
+  g.fillStyle(0xfbf8ee);
+  g.fillRect(cx - 8, cy + 6, 16, 16);
+  g.fillStyle(seed % 2 ? 0xd8392f : 0x2a2433);
+  g.fillRect(cx - 4, cy + 9, 3, 9);
+  g.fillRect(cx + 1, cy + 9, 3, 9);
+  g.fillStyle(0xf2c14e);
+  g.fillRect(cx - 8, cy + 22, 16, 3);
+  // 店裡的木櫃台（一角）
+  const cl = flip ? dr - 30 : dl + 4;
+  g.fillStyle(0x9a6a42);
+  g.fillRect(cl, -40, 26, 24);
+  g.fillStyle(0x7a5032);
+  g.fillRect(cl - 2, -42, 30, 4);
+  // 門框（銀色）
+  g.fillStyle(0xc8ccce);
+  g.fillRect(dl - 2, dt, 3, -dt);
+  g.fillRect(dr - 1, dt, 3, -dt);
+}
+
+/** 紅色塑膠椅 */
+function redStool(g: Phaser.GameObjects.Graphics, x: number): void {
+  g.fillStyle(0xd8302a);
+  g.fillPoints([{ x: x - 6, y: -14 }, { x: x + 6, y: -14 }, { x: x + 8, y: 0 }, { x: x - 8, y: 0 }], true);
+  g.fillStyle(0x9a1c18);
+  g.fillPoints([{ x: x - 3, y: -9 }, { x: x + 3, y: -9 }, { x: x + 5, y: 0 }, { x: x - 5, y: 0 }], true);
+  g.fillStyle(0xe84a3a);
+  g.fillRoundedRect(x - 8, -17, 16, 4, 1.5);
+}
+
+/** 老式速克達機車（側面） */
+function scooter(g: Phaser.GameObjects.Graphics, x: number, col: number): void {
+  g.fillStyle(0x000000, 0.15);
+  g.fillEllipse(x + 27, -1, 56, 6);
+  // 輪子
+  for (const wx of [x + 9, x + 45]) {
+    g.fillStyle(0x24242a);
+    g.fillCircle(wx, -7, 7);
+    g.fillStyle(0xa8acb0);
+    g.fillCircle(wx, -7, 3);
+  }
+  // 前叉
+  g.lineStyle(2.5, 0x8a8e92);
+  g.lineBetween(x + 40, -36, x + 45, -7);
+  // 前土除
+  g.fillStyle(col);
+  g.slice(x + 45, -8, 9, Math.PI, Math.PI * 1.95, false);
+  g.fillPath();
+  // 後車殼
+  g.fillPoints([
+    { x: x + 1, y: -12 }, { x: x + 3, y: -24 }, { x: x + 10, y: -30 }, { x: x + 28, y: -30 },
+    { x: x + 31, y: -16 }, { x: x + 22, y: -11 },
+  ], true);
+  g.fillStyle(0xffffff, 0.25);
+  g.fillEllipse(x + 14, -25, 14, 4);
+  // 踏板
+  g.fillStyle(0x3a3a40);
+  g.fillRect(x + 20, -14, 18, 4);
+  // 前擋板
+  g.fillStyle(col);
+  g.fillPoints([{ x: x + 34, y: -11 }, { x: x + 39, y: -11 }, { x: x + 43, y: -38 }, { x: x + 37, y: -40 }], true);
+  // 座墊
+  g.fillStyle(0x2a2420);
+  g.fillRoundedRect(x + 5, -33, 24, 6, 3);
+  // 龍頭、大燈、後照鏡
+  g.fillStyle(col);
+  g.fillRect(x + 37, -47, 11, 8);
+  g.fillStyle(0xfff2c0);
+  g.fillCircle(x + 46, -43, 2.6);
+  g.lineStyle(2, 0x2a2a2e);
+  g.lineBetween(x + 33, -47, x + 44, -47);
+  g.lineStyle(1, 0x5a5a62);
+  g.lineBetween(x + 39, -47, x + 37, -55);
+  g.fillStyle(0xc8ccce);
+  g.fillCircle(x + 37, -56, 2);
+  // 後面的紅色尾燈
+  g.fillStyle(0xd8392f);
+  g.fillRect(x + 1, -22, 3, 4);
+}
+
+/** 疊起來的塑膠籃（汽水瓶） */
+function crates(g: Phaser.GameObjects.Graphics, x: number, n: number, seed: number): void {
+  const cols = [0xf2c14e, 0xd64545, 0x3b7dd8, 0x3fa66a];
+  for (let k = 0; k < n; k++) {
+    const y = -12 - k * 12, c = cols[(seed + k) % cols.length];
+    g.fillStyle(shade(c, -0.25));
+    g.fillRect(x - 1, y - 1, 26, 13);
+    g.fillStyle(c);
+    g.fillRect(x, y, 24, 11);
+    g.fillStyle(shade(c, -0.35));
+    g.fillRect(x + 3, y + 3, 6, 3);
+    g.fillRect(x + 15, y + 3, 6, 3);
+    if (k === n - 1) {
+      // 最上面那籃露出瓶蓋
+      for (let b = 0; b < 4; b++) {
+        g.fillStyle(0x6a3a1a);
+        g.fillRect(x + 2 + b * 6, y - 6, 4, 6);
+        g.fillStyle(0xe8e0d0);
+        g.fillRect(x + 2.5 + b * 6, y - 7, 3, 2);
+      }
+    }
+  }
+}
+
+/** 米袋 */
+function riceSack(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
+  g.fillStyle(0xeee4cc);
+  g.fillRoundedRect(x - 11, y - 18, 22, 18, 5);
+  g.fillStyle(0xdcd0b2);
+  g.fillTriangle(x - 5, y - 18, x + 5, y - 18, x, y - 23);
+  g.lineStyle(1, 0xa89a7a);
+  g.lineBetween(x - 4, y - 19, x + 4, y - 19);
+  g.fillStyle(0xd8392f);
+  g.fillRect(x - 8, y - 12, 16, 3);
+  g.fillStyle(0x3b7dd8);
+  g.fillRect(x - 6, y - 7, 12, 2);
+}
+
+/** 騎樓上滿出來的生活雜物 */
+function retro95Clutter(g: Phaser.GameObjects.Graphics, def: ShopDef, seed: number): void {
+  const { left } = FACADE;
+  if (def.category === 'food') {
+    // 小吃攤前的紅色塑膠椅
+    redStool(g, left + 30);
+    redStool(g, left + 112);
+  } else if (def.id === 'grocery') {
+    riceSack(g, left + 18, 0);
+    riceSack(g, left + 40, 0);
+    riceSack(g, left + 29, -17);
+  } else {
+    crates(g, left + 6, 2 + (seed % 2), seed);
+  }
+  // 有些店門口停著老機車，有些放著紅椅子和臉盆
+  if (seed % 2 === 0) {
+    scooter(g, FACADE.doorLeft + 2, [0xd8392f, 0x3b7dd8, 0xf0ead8, 0x3fa66a][(seed >> 1) % 4]);
+  } else {
+    redStool(g, FACADE.doorRight - 4);
+    g.fillStyle(0x3b7dd8);
+    g.fillEllipse(FACADE.doorRight - 4, -19, 18, 5);
+    g.fillStyle(0x5a9ae8);
+    g.fillEllipse(FACADE.doorRight - 4, -20, 14, 3);
+  }
+}
+
+/** 九〇年代的空店面：房子新新的，鐵捲門拉下來 */
+function retro95Shell(g: Phaser.GameObjects.Graphics): void {
+  const { left, right } = FACADE;
+  drawRetro95Upper(g, 1, -250, [], 5);
+  // 空白招牌底板（深綠漆，等著寫字）
+  g.fillStyle(0x34343a);
+  g.fillRect(left + 8, FACADE.signTop - 2, right - left - 16, 38);
+  g.fillStyle(0x2f6a52);
+  g.fillRect(left + 10, FACADE.signTop, right - left - 20, 34);
+  g.lineStyle(2, 0xf4f0e6, 0.8);
+  g.strokeRect(left + 14, FACADE.signTop + 4, right - left - 28, 26);
+  // 一樓
+  g.fillStyle(0xcfc8b8);
+  g.fillRect(left + 6, FACADE.floorTop - 10, right - left - 12, -FACADE.floorTop + 10);
+  retroShutterBox(g, left + 6, right - 6, FACADE.floorTop - 12, 0xe8e4d8);
+  const sy = FACADE.floorTop + 4;
+  g.fillStyle(0xb4c4ca);
+  g.fillRect(left + 11, sy, right - left - 22, -sy);
+  g.lineStyle(1, 0x8a9aa0);
+  for (let y = sy + 5; y < 0; y += 6) g.lineBetween(left + 11, y, right - 11, y);
+  g.fillStyle(0x6a7a80);
+  g.fillRect(left + 11, -6, right - left - 22, 6);
+  g.fillStyle(0x3a3634);
+  g.fillRect(LOT_W / 2 - 8, -10, 16, 4);
+  terrazzo(g, left - 2, -3, right - left + 4, 3, 0xc8c0b0);
+}
+
 /** 店門口（店面以外）的招牌小物，依店種而定 */
 function drawFrontExtras(
   scene: Phaser.Scene, g: Phaser.GameObjects.Graphics, objs: Phaser.GameObjects.GameObject[], id: string, style: FacadeStyle,
@@ -607,7 +1048,7 @@ function drawFrontExtras(
     case 'baozi':
     case 'mantou':
       // 門口飄出的蒸氣／油煙
-      if (style === 'oldtown') {
+      if (style === 'oldtown' || style === 'retro95') {
         g.fillStyle(0xffffff, 0.35);
         for (let k = 0; k < 4; k++) g.fillCircle(FACADE.left + 60 + Math.sin(k) * 6, -34 - k * 9, 5 + k * 2);
       }
@@ -1276,9 +1717,16 @@ export function drawEmptyLot(scene: Phaser.Scene, style: FacadeStyle, applicants
   const { left, right } = FACADE;
   const top = -240;
   const wall = style === 'redbrick' ? 0xa86a58 : style === 'onsen' ? 0x8a7258 : style === 'oldtown' ? 0xbcb4a2 : 0x5a4a3e;
-  g.fillStyle(wall);
-  g.fillRect(left, top, right - left, -top);
-  if (style === 'oldtown') {
+  if (style === 'retro95') {
+    // 九〇年代的空店面：房子還新，只是鐵捲門拉下來、貼著出租紅紙
+    retro95Shell(g);
+  } else {
+    g.fillStyle(wall);
+    g.fillRect(left, top, right - left, -top);
+  }
+  if (style === 'retro95') {
+    // 已在 retro95Shell 畫好
+  } else if (style === 'oldtown') {
     // 空著的透天厝：灰撲撲的水泥牆 + 拉下的鐵捲門
     oldtownShell(g, top, wall, false);
   } else if (style === 'onsen') {
@@ -1317,8 +1765,8 @@ export function drawEmptyLot(scene: Phaser.Scene, style: FacadeStyle, applicants
     g.fillStyle(shade(wall, -0.35));
     g.fillRoundedRect(left + 10, FACADE.signTop, right - left - 20, 34, 4);
   }
-  if (style === 'oldtown') {
-    // 鐵捲門已在 oldtownShell 畫好
+  if (style === 'oldtown' || style === 'retro95') {
+    // 鐵捲門已在 oldtownShell / retro95Shell 畫好
   } else if (style === 'onsen') {
     // 木板拉門（雨戶）
     g.fillStyle(0x8a6a4a);
