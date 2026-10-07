@@ -225,6 +225,7 @@ export class StreetScene extends Phaser.Scene {
   private era: 2016 | Era = 2016;
   private pastWalkers: { sprite: Phaser.GameObjects.Image; key: string; dir: 1 | -1; speed: number; animT: number; pause: number; stopped?: boolean }[] = [];
   private pastWalkTimer = 0;
+  private pastFilled = false;
   private tripEndSent = false;
   private filmView: { c: Phaser.GameObjects.Container; beam: Phaser.GameObjects.Graphics } | null = null;
   private wellLayer!: Phaser.GameObjects.Container;
@@ -248,6 +249,7 @@ export class StreetScene extends Phaser.Scene {
     this.era = eraOf(S());
     this.pastWalkers = [];
     this.pastWalkTimer = 0;
+    this.pastFilled = false;
     this.tripEndSent = false;
     this.filmView = null;
     this.L = buildLayout(this.street);
@@ -629,13 +631,16 @@ export class StreetScene extends Phaser.Scene {
   private updatePastWalkers(dt: number, running: boolean) {
     const mult = running ? store.speed : 0;
     this.pastWalkTimer -= dt * mult;
-    if (running && this.pastWalkTimer <= 0 && this.pastWalkers.length < 22) {
-      this.pastWalkTimer = 500 + Math.random() * 700;
+    // 一開始街上就有人（1995 年的老街很熱鬧）
+    const prefill = !this.pastFilled;
+    this.pastFilled = true;
+    for (let n = prefill ? 16 : running && this.pastWalkTimer <= 0 && this.pastWalkers.length < 36 ? 1 : 0; n > 0; n--) {
+      this.pastWalkTimer = 300 + Math.random() * 500;
       const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
       const k = Math.floor(Math.random() * PAST95_LOOKS.length);
       const key = ensureCharTexture(this, `past95_${k}`, PAST95_LOOKS[k]);
       const y = GROUND_Y + 8 + Math.random() * (SIDEWALK_H - 18);
-      const x = dir === 1 ? this.L.startX - 60 : this.L.endX + 60;
+      const x = prefill ? this.L.startX + Math.random() * (this.L.endX - this.L.startX) : dir === 1 ? this.L.startX - 60 : this.L.endX + 60;
       const sprite = this.add.image(x, y, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setDepth(30 + y / 1000).setFlipX(dir === -1);
       this.pastWalkers.push({ sprite, key, dir, speed: 45 + Math.random() * 35, animT: 0, pause: Math.random() < 0.5 ? 2000 + Math.random() * 6000 : -1 });
     }
@@ -670,7 +675,7 @@ export class StreetScene extends Phaser.Scene {
     if (show && !this.filmView) {
       const art = drawFilmScreen(this);
       const c = this.add.container(box.x, GROUND_Y, art.objects).setDepth(12);
-      const beam = art.beam.setPosition(box.x, GROUND_Y).setDepth(13).setAlpha(0);
+      const beam = art.beam.setPosition(box.x, GROUND_Y).setDepth(61).setAlpha(0);
       this.filmView = { c, beam };
     } else if (!show && this.filmView) {
       this.filmView.c.destroy();

@@ -281,7 +281,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private refreshTop() {
     const s = S();
-    if (s.trip) return this.refreshPastBar();
+    // 換年代淡出的那一下，資訊列還是舊年代的版面
+    if (this.pastBar) return this.refreshPastBar();
     this.dayText.setText(`第 ${s.day} 天・${weekdayName(s)}`);
     const bad = s.weather === 'heavyFog';
     this.weatherText.setText(s.kami ? '神隱日' : WEATHER_NAME[s.weather])
@@ -301,7 +302,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.grievanceBar!.setFillStyle(g >= 80 ? 0xd64545 : g >= 55 ? 0xe08a5a : g >= 30 ? 0xf2c14e : 0x7cc37a);
       this.grievanceText!.setText(String(Math.round(g)));
     }
-    if (this.memText) {
+    if (this.memText && this.kinBar) {
       const m = s.memories;
       this.memText.setText(`往事${m.past} 味道${m.taste} 人情${m.bond} 手藝${m.craft}`);
       const k = s.kinship;
@@ -517,6 +518,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private refreshPastBar() {
     const s = S();
+    if (!s.trip) return;
     const [a, b] = PAST_HOURS[s.trip!.era];
     this.clockText.setText(clock(s.minute));
     this.pastBar!.width = 238 * Math.max(0, (b * 60 - s.minute) / ((b - a) * 60));

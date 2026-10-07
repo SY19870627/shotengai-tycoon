@@ -2113,9 +2113,9 @@ function drawBanyan1995(ctx: Ctx): number {
   g.fillEllipse(cx, -2, w * 0.95, 18);
   banyanBody(g, cx, w, s);
   banyanFront(g, cx, s);
-  // 綁在右邊大枝上的麻繩鞦韆
-  const r0 = { x: cx + 72 * s, y: -205 * s }, r1 = { x: cx + 96 * s, y: -214 * s };
-  const seatY = -34, sx0 = cx + 66, sx1 = cx + 96;
+  // 綁在左邊大枝上的麻繩鞦韆
+  const r0 = { x: cx - 104 * s, y: -214 * s }, r1 = { x: cx - 78 * s, y: -201 * s };
+  const seatY = -34, sx0 = cx - 108, sx1 = cx - 78;
   g.lineStyle(2, 0xc8b080);
   g.lineBetween(r0.x, r0.y, sx0 + 3, seatY);
   g.lineBetween(r1.x, r1.y, sx1 - 3, seatY);
@@ -2130,9 +2130,9 @@ function drawBanyan1995(ctx: Ctx): number {
   g.fillStyle(0x8a6a4a, 0.35);
   g.fillEllipse((sx0 + sx1) / 2, -2, 50, 7);
   // 小朋友丟在樹下的腳踏車
-  bicycle(g, 18, 9, 0xd8392f, true);
-  bicycle(g, 56, 8, 0x3b7dd8);
-  bicycle(g, 92, 7.5, 0xf2c14e);
+  bicycle(g, cx - 56, 9, 0xd8392f, true);
+  bicycle(g, cx - 18, 8, 0x3b7dd8);
+  bicycle(g, cx + 16, 7.5, 0xf2c14e);
   // 老人家的長椅：收音機、茶杯、蒲扇、拐杖、拖鞋
   const bx = w - 82;
   bench(g, bx, 62);
@@ -2172,7 +2172,7 @@ function drawBanyan1960(ctx: Ctx): number {
   // 樹下的長板凳
   bench(g, 14, 70);
   // 竹椅凳
-  for (const x of [cx + 30, cx + 140]) {
+  for (const x of [cx + 30, cx + 50]) {
     g.fillStyle(0xc8a860);
     g.fillRect(x - 9, -16, 18, 4);
     g.lineStyle(2, 0xa88a48);
@@ -2202,8 +2202,8 @@ function drawBanyan1960(ctx: Ctx): number {
   g.lineBetween(jx + 6, jy - 36, jx + 16, jy - 48);
   // 紅紙「奉茶」
   g.fillStyle(0xc8322a);
-  g.fillRect(jx - 8, jy - 24, 16, 14);
-  label(ctx, jx, jy - 17, '奉茶', 7, 0xf8e8c0, '900');
+  g.fillRect(jx - 11, jy - 26, 22, 16);
+  label(ctx, jx, jy - 18, '奉茶', 9, 0xf8e8c0, '900');
   // 茶碗
   for (let k = 0; k < 3; k++) {
     const bx = tx + 44 + k * 7;
@@ -2298,10 +2298,11 @@ function drawClinicModern(ctx: Ctx, open: boolean): number {
     // 招牌燈箱亮著
     g.fillStyle(0xffffff, 0.5);
     g.fillRect(L + 9, st, R - L - 18, 4);
-    night.fillStyle(0xfff6e0, 0.85);
+    // 夜裡：燈箱透光（不要太亮，紅字才看得清楚）+ 外圍一圈光暈
+    night.fillStyle(0xffe8c0, 0.14);
+    night.fillRect(L - 6, st - 14, R - L + 12, sb - st + 28);
+    night.fillStyle(0xfff6e0, 0.32);
     night.fillRect(L + 9, st, R - L - 18, sb - st);
-    night.fillStyle(0xffe8c0, 0.18);
-    night.fillRect(L - 4, st - 12, R - L + 8, sb - st + 24);
     clinicHoursBoard(ctx, L + 8, -106);
   } else {
     // 門診時間表（褪色）
@@ -2463,13 +2464,13 @@ function clinicOpenFront(ctx: Ctx, L: number, R: number, dl: number, dr: number)
   g.fillStyle(0xe8261c);
   g.fillRect(bx - 3.5, by - 10, 7, 20);
   g.fillRect(bx - 10, by - 3.5, 20, 7);
-  night.fillStyle(0xffffff, 0.8);
+  night.fillStyle(0xff6a5a, 0.18);
+  night.fillCircle(bx, by, 30);
+  night.fillStyle(0xffffff, 0.5);
   night.fillCircle(bx, by, 13);
-  night.fillStyle(0xff4a3a, 0.9);
+  night.fillStyle(0xff3a2a, 0.5);
   night.fillRect(bx - 3.5, by - 10, 7, 20);
   night.fillRect(bx - 10, by - 3.5, 20, 7);
-  night.fillStyle(0xff8a7a, 0.2);
-  night.fillCircle(bx, by, 30);
   // 門口的候診長椅（沒有靠背），椅子下有拖鞋，旁邊靠著雨傘
   const bl = L + 4, br = dl - 10;
   g.fillStyle(0x6b4a30);
@@ -3070,7 +3071,7 @@ export function drawFilmScreen(scene: Phaser.Scene): {
   }
 
   // 竹竿上掛的手寫告示
-  const nx = p0, ny = -96;
+  const nx = p1, ny = -96;
   g.lineStyle(1, 0x5a4030);
   g.lineBetween(nx - 12, ny - 12, nx, ny - 20);
   g.lineBetween(nx + 12, ny - 12, nx, ny - 20);
@@ -3154,13 +3155,13 @@ export function drawFilmScreen(scene: Phaser.Scene): {
       L0, { x: sx + inset, y: sy + inset }, { x: sx + sw - inset, y: sy + inset }, { x: sx + sw - inset, y: sy + sh - inset },
     ], true);
   };
-  cone(0, 0xfff0c8, 0.12);
-  cone(14, 0xfff4d8, 0.12);
-  cone(30, 0xfff8e8, 0.14);
+  cone(0, 0xfff0c8, 0.16);
+  cone(14, 0xfff4d8, 0.16);
+  cone(30, 0xfff8e8, 0.2);
   // 打在白布上的光
-  beam.fillStyle(0xfff6dc, 0.35);
+  beam.fillStyle(0xfff6dc, 0.45);
   beam.fillRect(sx + 2, sy + 5, sw - 4, sh - 9);
-  beam.fillStyle(0xffffff, 0.2);
+  beam.fillStyle(0xffffff, 0.25);
   beam.fillRect(sx + 18, sy + 16, sw - 36, sh - 32);
   // 鏡頭口的亮點
   beam.fillStyle(0xffffff, 0.9);
