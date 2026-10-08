@@ -28,6 +28,8 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { RailShow } from './railShow';
+import { MigrantShow, MIGRANT_LOOKS, RUSH_LINES } from './migrantShow';
+import { rollCurfew, noTimeFor, isNation, LAST_BUS, isHomeShop } from '../core/zhongli';
 import { PED_VARIANTS } from './BootScene';
 import { nightMarket, morningMarket, longanSeason, sausageHere, chickenDay, chickenHere, CHICKEN_ROUND } from '../core/future';
 import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
@@ -140,6 +142,10 @@ interface Ped {
   tex?: string;
   /** 敷著泥漿面膜 */
   mud?: boolean;
+  /** 中壢：幾點要收假、正在趕回去、頭上的小時鐘 */
+  curfew?: number;
+  rushing?: boolean;
+  clock?: 'white' | 'red';
 }
 
 type SightKind = 'view' | 'selfie' | 'telescope' | 'bench' | 'fireView' | 'fireSelfie' | 'fireSit' | 'fireBuy';
@@ -208,6 +214,8 @@ export class StreetScene extends Phaser.Scene {
   private drag = { down: false, startX: 0, scrollX: 0, moved: false };
   /** 十分：鐵軌、火車連擊、天燈 */
   private rail: RailShow | null = null;
+  /** 中壢：週末的機車、野餐墊、紅龍…… */
+  private migrant: MigrantShow | null = null;
   private keys?: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] };
   private storyChecks = { morning: false, noon: false, evening: false, night: false };
   private ambientTimer = 4000;
@@ -336,6 +344,7 @@ export class StreetScene extends Phaser.Scene {
       spawnTrainPed: (x, origin) => { this.createPed(0, 1, 6 + Math.floor(Math.random() * 4), origin, false, false, true, x); },
       canTap: () => !this.drag.moved && !store.storyRunning && !store.waitingNextDay,
     }) : null;
+    this.migrant = this.street.migrant ? new MigrantShow(this, this.L) : null;
     this.vista = null;
     this.lastSkyHour = -1;
     for (const it of this.L.items) {
@@ -414,6 +423,16 @@ export class StreetScene extends Phaser.Scene {
       for (let y = GROUND_Y, row = 0; y < GROUND_Y + SIDEWALK_H; y += 8, row++) {
         for (let x = row % 2 ? 0 : 12; x < W2; x += 24) g.lineBetween(x, y, x, y + 8);
       }
+    } else if (this.street.ground === 'arcade') {
+      // 中壢：磨石子騎樓
+      g.fillStyle(0xb8b0a2);
+      g.fillRect(0, GROUND_Y, W2, SIDEWALK_H);
+      for (let k = 0; k < W2 / 3; k++) {
+        g.fillStyle([0x8a8478, 0xd8d0c4, 0x6a7a6a][k % 3], 0.6);
+        g.fillRect((k * 37) % W2, GROUND_Y + ((k * 13) % (SIDEWALK_H - 2)), 2, 2);
+      }
+      g.lineStyle(1, 0x9a9488);
+      for (let x = 0; x < W2; x += 120) g.lineBetween(x, GROUND_Y, x, GROUND_Y + SIDEWALK_H);
     } else {
       g.fillStyle(0x9a958a);
       g.fillRect(0, GROUND_Y, W2, SIDEWALK_H);
@@ -426,7 +445,7 @@ export class StreetScene extends Phaser.Scene {
     g.fillStyle(0x6a645a);
     g.fillRect(0, GROUND_Y + SIDEWALK_H, W2, 6);
     // 下方前景：店家前的小路
-    g.fillStyle(this.street.ground === 'brick' ? 0x5a5560 : 0x6b665e);
+    g.fillStyle(this.street.ground === 'brick' ? 0x5a5560 : this.street.ground === 'arcade' ? 0x4d4a55 : 0x6b665e);
     g.fillRect(0, GROUND_Y + SIDEWALK_H + 6, W2, H);
     g.fillStyle(0xffffff, 0.08);
     for (let x = 0; x < W2; x += 120) g.fillRect(x, GROUND_Y + SIDEWALK_H + 50, 60, 4);
@@ -473,7 +492,7 @@ export class StreetScene extends Phaser.Scene {
   private createLandmark(id: string, x: number, width: number) {
     // 東原：龍眼窯、樹屋、診所在不同年代長得不一樣
     const eraVariant = ['kiln', 'treehouse', 'clinic'].includes(id) ? String(this.era) : undefined;
-    const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : id === 'mine' && this.street.ground === 'rail' ? 'coal' : eraVariant;
+    const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : id === 'mine' && this.street.ground === 'rail' ? 'coal' : id === 'station' && this.street.migrant ? 'zhongli' : eraVariant;
     const art = drawLandmark(this, id, width, mode);
     const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
@@ -487,6 +506,11 @@ export class StreetScene extends Phaser.Scene {
       if (this.drag.moved || store.storyRunning) return;
       // 東原：回憶時光裡點地標（戲院探險…）；2016 年傍晚點龍眼窯放白布電影
       if (this.era !== 2016 || (id === 'kiln' && isMemoryStreet(S()) && !store.waitingNextDay)) {
+        bus.emit(Ev.Landmark, id);
+        return;
+      }
+      // 中壢：點站前廣場決定週日的管法
+      if (id === 'plaza' && this.street.migrant && !store.waitingNextDay) {
         bus.emit(Ev.Landmark, id);
         return;
       }
@@ -1321,6 +1345,7 @@ export class StreetScene extends Phaser.Scene {
     }
     const active = running && !store.storyRunning;
     this.rail?.update(dt, active, prevMinute);
+    this.migrant?.update();
     this.updatePeds(dt, active);
     this.updateActors(dt);
     this.updateEnvironment(dt);
@@ -1470,6 +1495,20 @@ export class StreetScene extends Phaser.Scene {
         sprite.setTexture(`${ped.tex}_0`).setScale(61 / CHAR_H);
       }
     }
+    // 中壢：各國移工、通勤族；移工頭上有國旗，還有收假時間
+    else if (this.street.migrant) {
+      const key = isNation(origin) ? origin : origin === 'commuter' ? 'commuter' : null;
+      if (key) {
+        const looks = MIGRANT_LOOKS[key];
+        const k = variant % looks.length;
+        ped.tex = ensureCharTexture(this, `mig-${key}${k}`, looks[k]);
+        sprite.setTexture(`${ped.tex}_0`).setScale(61 / CHAR_H);
+      }
+      if (isNation(origin)) {
+        ped.curfew = rollCurfew(origin, Math.random);
+        this.attach(ped, `flag-${origin}`, 0, -70);
+      }
+    }
     // 開了浴衣店：街上有一些早上就租好浴衣的遊客
     else if (!fromBus && hourOf(s) >= 9.5 && s.lots.some((l) => l.shop?.defId === 'yukata') && Math.random() < 0.1) {
       this.wearYukata(ped);
@@ -1507,6 +1546,7 @@ export class StreetScene extends Phaser.Scene {
             continue;
           }
         }
+        if (mult > 0 && p.curfew !== undefined) this.updateCurfew(p);
         if (mult > 0 && p.state === 'walk' && !p.sightDone && this.maybeSightsee(p)) continue;
         if (mult > 0 && p.state === 'walk' && !p.hikeDone && this.maybeHike(p)) continue;
         if (mult > 0 && p.state === 'walk' && !p.fireDone && this.maybeFireSight(p)) continue;
@@ -1534,7 +1574,8 @@ export class StreetScene extends Phaser.Scene {
         if (p.state === 'walk' && !(p.yokai && !p.yokai.revealed) && (p.doorsLeft <= 0 || p.visits >= 2) && Math.random() < 0.01) this.fadeOutPed(p);
         // 深夜十一點後，一般遊客陸續下山，街上只剩住在九份的夜貓子
         else if (p.state === 'walk' && !p.suitcase && hourOf(s) >= 23 && !festivalActive(s) && Math.random() < 0.03) this.fadeOutPed(p);
-      } else if (p.state === 'inside' && s.minute >= p.leaveAt) {
+      } else if (p.state === 'inside' && (s.minute >= p.leaveAt || (p.curfew !== undefined && s.minute >= p.curfew))) {
+        // 中壢：收假時間到了，東西吃到一半也得走
         this.leaveShop(p);
       } else if (p.state === 'sightsee') {
         this.updateSight(p, dt, mult);
@@ -1547,8 +1588,43 @@ export class StreetScene extends Phaser.Scene {
     }
   }
 
+  /** 中壢：收假時間快到了，頭上的時鐘變紅；時間到了就往車站或接駁車跑 */
+  private updateCurfew(p: Ped) {
+    const s = S();
+    const left = p.curfew! - s.minute;
+    if (left <= 60 && !p.clock) {
+      p.clock = 'white';
+      this.attach(p, 'clock', 12, -82);
+    }
+    if (left <= 20 && p.clock === 'white') {
+      p.clock = 'red';
+      this.detach(p, 'clock');
+      this.attach(p, 'clock-red', 12, -82);
+    }
+    if (left > 0 || p.rushing || p.state !== 'walk') return;
+    p.rushing = true;
+    p.doorsLeft = 0;
+    p.speed *= 2.2;
+    // 看護回車站；工廠移工去接駁車
+    const target = this.L.landmark(p.curfew! >= LAST_BUS ? 'factorybus' : 'station');
+    const tx = target ? target.x + target.width / 2 : this.L.startX;
+    p.dir = tx < p.sprite.x ? -1 : 1;
+    p.sprite.setFlipX(p.dir === -1);
+    if (Math.random() < 0.3 && isNation(p.origin)) this.floatText(p.sprite.x, p.sprite.y - 90, Phaser.Utils.Array.GetRandom(RUSH_LINES[p.origin]), '#ffffff', 14);
+    // 九點以後還在街上的人：錯過最後一班接駁車
+    if (s.minute > LAST_BUS + 10 && Math.random() < 0.15) this.floatText(p.sprite.x, p.sprite.y - 110, '回不去了……', '#c9c3d6', 15);
+    this.time.delayedCall(4000, () => { if (p.sprite.active && p.state === 'walk') this.fadeOutPed(p); });
+  }
+
   private enterShop(p: Ped, i: number) {
     const s = S();
+    // 中壢：快收假了，沒時間進去了
+    const want = s.lots[i]?.shop ? SHOP_BY_ID[s.lots[i].shop!.defId] : null;
+    if (p.curfew !== undefined && want && noTimeFor(s.minute, p.curfew, want.stayMinutes)) {
+      s.today.rushed = (s.today.rushed ?? 0) + 1;
+      if (Math.random() < 0.3) this.floatText(this.L.doorX(i), GROUND_Y - 110, '沒時間了……', '#ffb0b0', 14);
+      return;
+    }
     if (!tryEnter(s, i)) {
       if (Math.random() < 0.5) this.floatText(this.L.doorX(i), GROUND_Y - 110, '客滿…', '#c9c3d6', 15);
       return;
@@ -1576,6 +1652,8 @@ export class StreetScene extends Phaser.Scene {
     const yk = p.yokai ? { kind: p.yokai.kind, leaves: p.yokai.leaves && !p.yokai.revealed } : undefined;
     const r = completeVisit(s, i, spend, p.origin, yk);
     this.rail?.onVisit(i, r);
+    // 中壢：吃到家鄉味
+    if (def && isHomeShop(p.origin, def.id) && Math.random() < 0.4) this.floatText(this.L.doorX(i) + 30, GROUND_Y - 84, '家鄉的味道！', '#ffe0a0', 15);
     if (r.income > 0) this.floatText(this.L.doorX(i), GROUND_Y - 112, `+$${r.income}`, hex(C.gold), 17);
     if (r.memory) this.floatText(this.L.doorX(i) + 26, GROUND_Y - 138, `+${MEMORY_NAME[r.memory]}`, MEMORY_COLOR[r.memory], 17);
     if (def) this.afterOnsenVisit(p, def.id, i);

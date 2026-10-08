@@ -40,6 +40,9 @@ function drawMascot(g: G, id: string, f: number): void {
     case 'sfLantern': drawSkyLanternKid(g, f); break;
     case 'sfTrain': drawTrainHead(g, f); break;
     case 'sfCart': drawMineCart(g, f); break;
+    case 'zlScooter': drawScooterKid(g, f); break;
+    case 'zlBowl': drawPhoBowl(g, f); break;
+    case 'zlPhone': drawPhoneKid(g, f); break;
     default: drawGeneric(g, f); break;
   }
 }
@@ -836,4 +839,69 @@ function drawMineCart(g: G, f: number): void {
   g.fillRect(cx - 28, 32 + bob, 56, 6);
   face(g, cx - 3, 52 + bob, 1, 0xffb08a);
   arms(g, cx, 50 + bob, 24, 0x3a2a24, f);
+}
+
+/** 中壢：會走路的機車 */
+function drawScooterKid(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1;
+  feet(g, cx, 84, 0x2a2a30, f, 9, 6);
+  g.fillStyle(0xd04040);
+  g.fillRoundedRect(cx - 24, 40 + bob, 48, 30, 10);
+  g.fillStyle(0x2a2a30);
+  g.fillRect(cx + 10, 16 + bob, 6, 28);
+  g.fillRect(cx + 2, 14 + bob, 22, 5);
+  g.fillStyle(0xfff4c0);
+  g.fillCircle(cx + 22, 30 + bob, 5);
+  g.fillStyle(0x3a3a42);
+  g.fillRoundedRect(cx - 20, 34 + bob, 26, 8, 3);
+  face(g, cx - 6, 54 + bob, 1, 0xffb08a);
+  arms(g, cx, 52 + bob, 24, 0x2a2a30, f);
+}
+
+/** 中壢：河粉碗公 */
+function drawPhoBowl(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  feet(g, cx, 84, 0x3a2a24, f, 8, 5);
+  // 熱氣
+  g.fillStyle(0xffffff, 0.6);
+  g.fillCircle(cx - 8, 16 + bob, 4);
+  g.fillCircle(cx + 6, 12 + bob, 5);
+  g.fillCircle(cx - 2, 6 + bob, 3);
+  g.fillStyle(0xf6f0e4);
+  g.fillEllipse(cx, 32 + bob, 56, 14);
+  g.fillStyle(0xe8d0a0);
+  g.fillEllipse(cx, 32 + bob, 48, 9);
+  g.fillStyle(0x6abf69);
+  g.fillCircle(cx + 10, 30 + bob, 3);
+  g.fillStyle(0xd04040);
+  g.fillCircle(cx - 12, 31 + bob, 2.5);
+  g.fillStyle(0xf6f0e4);
+  g.slice(cx, 34 + bob, 28, 0, Math.PI, false);
+  g.fillPath();
+  g.fillStyle(0x3060c0);
+  g.fillRect(cx - 24, 42 + bob, 48, 3);
+  face(g, cx - 3, 50 + bob, 1, 0xffb08a);
+  arms(g, cx, 48 + bob, 26, 0x3a2a24, f);
+}
+
+/** 中壢：一直在跟家人視訊的小手機 */
+function drawPhoneKid(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1;
+  feet(g, cx, 84, 0x2a2a30, f, 7, 5);
+  g.fillStyle(0x2a2a30);
+  g.fillRoundedRect(cx - 18, 10 + bob, 36, 66, 8);
+  g.fillStyle(0x8ac8f0);
+  g.fillRect(cx - 14, 18 + bob, 28, 48);
+  // 螢幕上揮手的家人
+  g.fillStyle(0xc8946a);
+  g.fillCircle(cx, 34 + bob, 7);
+  g.fillStyle(0xd04040);
+  g.fillRect(cx - 7, 41 + bob, 14, 14);
+  g.fillStyle(0xc8946a);
+  g.fillCircle(cx + 11, 34 + bob + (f ? -3 : 0), 3);
+  face(g, cx - 3, 32 + bob, 0.6, 0xffb08a);
+  arms(g, cx, 50 + bob, 20, 0x2a2a30, f);
 }

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { endingEvent } from '../core/story';
 import { isRailStreet, nextTrain, lanternFestToday } from '../core/shifen';
+import { isMigrantStreet, NATIONS, NATION_INFO, POLICIES, setPolicy, selfOrder, isSunday, isSaturday, lebaranToday } from '../core/zhongli';
+import type { Policy } from '../core/types';
 import {
   unlockLot, nextLotCost, neighborEffects, signTenant, rejectApplicant, postAd, AD_COST, profileOf, renovate,
   giveGift, GIFT_COST, evict, setRentTier, startNextDay, startActivity, canStartActivity, activityCost, getRel,
@@ -149,6 +151,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (id === 'kiln') return this.showFilm();
       if (id === 'spring') this.showSpring();
       else if (id === 'fire') this.showFire();
+      else if (id === 'plaza') this.showPolicy();
     });
 
     const kb = this.input.keyboard;
@@ -377,6 +380,17 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       else {
         const left = processionDaysLeft(s);
         if (left !== null && left <= 7) { items.push(`全山頭繞境：還有 ${left} 天`); colors[items.length - 1] = '#ffc890'; }
+      }
+    }
+    if (isMigrantStreet(s)) {
+      const sun = isSunday(s) || lebaranToday(s);
+      items.push(lebaranToday(s) ? '開齋節！' : sun ? '星期天：一週一天的假' : isSaturday(s) ? '星期六：少數排休的移工' : '平日：通勤族和居民');
+      colors[items.length - 1] = sun ? '#ff9a8a' : '#d8d2e6';
+      items.push(`管法：${POLICIES[s.policy].name}・街坊不滿 ${Math.round(s.unrest)}`);
+      colors[items.length - 1] = s.unrest >= 80 ? '#ff9a8a' : s.unrest >= 50 ? '#ffc890' : '#b8e0a0';
+      for (const n of NATIONS) {
+        items.push(`${NATION_INFO[n].name} ${Math.round(s.homeFeel[n])}`);
+        colors[items.length - 1] = NATION_INFO[n].color;
       }
     }
     if (isRailStreet(s)) {
@@ -1044,6 +1058,37 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   }
 
   /** 水火同源：經營模式 */
+  /** 中壢：週日人潮的管法 */
+  private showPolicy() {
+    const s = S();
+    const MW = 1000, MH = 540;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '站前廣場・週日要怎麼管？', 26, hex(C.ink), '900'));
+    const feel = NATIONS.map((n) => `${NATION_INFO[n].name} ${Math.round(s.homeFeel[n])}`).join('　');
+    m.add(this.text(x + 30, y + 64, `街坊不滿 ${Math.round(s.unrest)}　・　家鄉感：${feel}`, 15, '#4a4356'));
+    const so = selfOrder(s);
+    m.add(this.text(x + 30, y + 88, so > 0.05 ? `亂中自有秩序：家鄉感高的社群會自己收垃圾、排隊（亂象 −${Math.round(so * 100)}%）` : '家鄉感超過 50 的社群，會開始自己維持秩序。', 14, so > 0.05 ? '#2f7d3f' : '#6a6378', '700'));
+    (['strict', 'guide', 'free'] as Policy[]).forEach((p, k) => {
+      const d = POLICIES[p];
+      const cx = x + 30 + k * 318, cy = y + 124;
+      const cur = s.policy === p;
+      m.add(this.add.rectangle(cx, cy, 302, 380, cur ? 0xfff6dc : 0xffffff).setOrigin(0).setStrokeStyle(cur ? 4 : 2, cur ? C.gold : 0xd8cfe0));
+      m.add(this.text(cx + 18, cy + 16, d.name, 22, hex(C.ink), '900'));
+      m.add(this.text(cx + 18, cy + 56, d.desc, 14, '#4a4356').setWordWrapWidth(266, true).setLineSpacing(4));
+      const b = this.button(cx + 18, cy + 310, 266, 52, cur ? '目前的管法' : `改成${d.name}`, () => {
+        const r = setPolicy(s, p);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast(p === 'strict' ? '警察開始巡邏，廣場拉起了紅龍。' : p === 'guide' ? '垃圾桶、多語告示、野餐區都準備好了。' : '隨便大家，週日就是大家的。');
+        this.closeModal();
+      }, cur ? 0x9a94ac : p === 'strict' ? 0x3f4f7f : p === 'guide' ? 0x2f8f5f : 0xb07a2a, 15);
+      b.setEnabled(!cur);
+      m.add(b.root);
+    });
+  }
+
   private showFire() {
     const s = S();
     const MW = 1000, MH = 520;
@@ -1796,6 +1841,16 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     }
     if (sum.fireVisitors) notes.push(`水火同源看火 ${sum.fireVisitors} 人${sum.fireIncome ? `・攤販收入 ${money(sum.fireIncome)}` : ''}`);
     if (sum.hikers) notes.push(`爬好漢坡 ${sum.hikers} 人（下來又累又餓，吃的店生意變好）`);
+    if (sum.feelAfter && sum.feelBefore) {
+      const d = NATIONS.map((n) => {
+        const v = Math.round(sum.feelAfter![n] - sum.feelBefore![n]);
+        return `${NATION_INFO[n].name} ${Math.round(sum.feelAfter![n])}${v ? `（${v > 0 ? '+' : ''}${v}）` : ''}`;
+      }).join('、');
+      notes.push(`家鄉感：${d}`);
+      const crowd = NATIONS.reduce((a, n) => a + (sum.nat?.[n] ?? 0), 0);
+      if (crowd) notes.push(`今天來的移工 ${crowd} 人${sum.rushed ? `・${sum.rushed} 次因為快收假沒時間進店` : ''}${sum.missed ? `・${sum.missed} 人錯過最後一班接駁車` : ''}`);
+      notes.push(`街坊不滿 ${Math.round(sum.unrestBefore ?? 0)} → ${Math.round(sum.unrestAfter ?? 0)}${sum.policyCost ? `・疏導花了 ${money(sum.policyCost)}` : ''}${sum.stallIncome ? `・路邊攤抽成 ${money(sum.stallIncome)}` : ''}`);
+    }
     if (sum.trains) notes.push(`火車 ${sum.trains} 班・今天最高連擊 ×${sum.combo ?? 0}・放了 ${sum.lanterns ?? 0} 盞天燈`);
     if (sum.festival) notes.push('妖怪祭辦完了！明天早上……收銀機裡會不會有樹葉？');
     if (sum.swimmers) notes.push(`溫泉泳池泳客 ${sum.swimmers} 人`);

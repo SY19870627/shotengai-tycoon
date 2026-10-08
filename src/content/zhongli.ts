@@ -545,7 +545,7 @@ export const ZHONGLI: StreetDef = {
   difficulty: 3,
   tagline: '車站前・一週一天的家鄉',
   intro: '這裡不是景點，是車站前的舊商圈。平日是通勤族匆匆走過；到了星期天，整條街會突然變成另一個國家——印尼、越南、菲律賓、泰國的移工，一週只放一天假，搭車來這裡吃家鄉菜、寄錢回家、跟家人視訊。人很多、很吵、很亂，但亂中自有秩序。',
-  map: { x: 0.66, y: 0.17 },
+  map: { x: 0.6, y: 0.2 },
   playable: true,
   facade: 'stationfront',
   backdrop: 'city-rail',

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GROUND_Y, W, lerpColor, shade } from '../theme';
 
-export type BackdropKind = 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley';
+export type BackdropKind = 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley' | 'city-rail';
 
 /** 遠景霧色：遠層顏色往此色靠攏以降低飽和度 */
 const HAZE = 0xc9d6dc;
@@ -60,6 +60,7 @@ export function drawBackdrop(scene: Phaser.Scene, kind: BackdropKind, worldW: nu
     case 'hot-spring': return hotSpring(scene, rng, worldW);
     case 'orchard': return orchard(scene, rng, worldW);
     case 'pingxi-valley': return pingxiValley(scene, rng, worldW);
+    case 'city-rail': return cityRail(scene, rng, worldW);
     default: return simpleHills(scene, rng, worldW, [0xa8b8b0, 0x88a890, 0x689870], false);
   }
 }
@@ -1152,4 +1153,69 @@ function pingxiValley(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator,
     }
   }
   return [g1, g2, n2, g3];
+}
+
+// ───────────────────────── 中壢：城市、公寓、高架橋 ─────────────────────────
+
+function cityRail(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, worldW: number): Phaser.GameObjects.GameObject[] {
+  const f1 = 0.08, f2 = 0.22, f3 = 0.42;
+  // 遠景：淡淡的山與大樓剪影
+  const g1 = layer(scene, f1, 0.5);
+  const n1 = nightLayer(scene, f1, 59);
+  const w1 = layerWidth(worldW, f1);
+  ridge(g1, rng, -100, w1, GROUND_Y - 150, 40, haze(0x7a9a8a, 0.6), 3, 24);
+  for (let x = -40; x < w1; x += rng.between(40, 90)) {
+    const bw = rng.between(30, 60), bh = rng.between(80, 200);
+    g1.fillStyle(haze(rng.pick([0x9aa4b0, 0x8a96a4, 0xa8b0b8]), 0.5));
+    g1.fillRect(x, GROUND_Y - 60 - bh, bw, bh + 60);
+    for (let wy = GROUND_Y - 50 - bh; wy < GROUND_Y - 70; wy += 14) {
+      for (let wx = x + 5; wx < x + bw - 6; wx += 10) {
+        if (rng.frac() < 0.4) { n1.fillStyle(0xffe0a0, 0.5); n1.fillRect(wx, wy, 4, 5); }
+      }
+    }
+  }
+  // 中景：高架鐵路與公寓
+  const g2 = layer(scene, f2, 1);
+  const n2 = nightLayer(scene, f2, 59);
+  const w2 = layerWidth(worldW, f2);
+  let x = -60;
+  while (x < w2) {
+    const bw = rng.between(70, 130), bh = rng.between(90, 170);
+    const wall = haze(rng.pick([0xd8d0c4, 0xc8c0b4, 0xe0dcd0, 0xb8c0c4, 0xe4d4c8]), 0.25);
+    g2.fillStyle(wall);
+    g2.fillRect(x, GROUND_Y - 30 - bh, bw, bh + 30);
+    // 頂樓加蓋的鐵皮屋、水塔
+    g2.fillStyle(haze(rng.pick([0x3a6a8a, 0x8a4a3a, 0x6a7078]), 0.25));
+    g2.fillRect(x + 8, GROUND_Y - 30 - bh - 12, bw * 0.6, 12);
+    g2.fillStyle(haze(0xe0e0e0, 0.25));
+    g2.fillRect(x + bw - 22, GROUND_Y - 30 - bh - 16, 14, 16);
+    for (let wy = GROUND_Y - 20 - bh; wy < GROUND_Y - 40; wy += 22) {
+      for (let wx = x + 8; wx < x + bw - 14; wx += 22) {
+        g2.fillStyle(haze(0x7a8a96, 0.25));
+        g2.fillRect(wx, wy, 12, 12);
+        g2.lineStyle(1, haze(0x5a5e66, 0.25));
+        g2.strokeRect(wx - 2, wy - 2, 16, 16);
+        // 冷氣機
+        if (rng.frac() < 0.4) { g2.fillStyle(haze(0xf0f0f0, 0.25)); g2.fillRect(wx + 14, wy + 6, 8, 6); }
+        if (rng.frac() < 0.45) { n2.fillStyle(0xffd27a, 0.6); n2.fillRect(wx, wy, 12, 12); }
+      }
+    }
+    x += bw + rng.between(4, 20);
+  }
+  // 高架橋
+  const by = GROUND_Y - 120;
+  g2.fillStyle(haze(0xb0b0a8, 0.2));
+  g2.fillRect(-100, by, w2 + 200, 14);
+  for (let px = 0; px < w2; px += 160) g2.fillRect(px, by + 14, 12, GROUND_Y - by);
+  g2.fillStyle(haze(0x8a8a82, 0.2));
+  g2.fillRect(-100, by + 12, w2 + 200, 3);
+
+  // 近景：騎樓後面的招牌與電線
+  const g3 = layer(scene, f3, 1.5);
+  const w3 = layerWidth(worldW, f3);
+  g3.fillStyle(0x6a6a70);
+  g3.fillRect(-100, GROUND_Y - 24, w3 + 200, 60);
+  g3.lineStyle(1, 0x2a2433, 0.5);
+  for (let k = 0; k < 3; k++) g3.lineBetween(-100, GROUND_Y - 180 + k * 8, w3 + 100, GROUND_Y - 170 + k * 8);
+  return [g1, n1, g2, n2, g3];
 }

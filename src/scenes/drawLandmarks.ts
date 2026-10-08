@@ -39,7 +39,10 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number, var
     case 'stairs': standX = drawStairs(ctx); break;
     case 'theater': standX = drawTheater(ctx); break;
     case 'mine': standX = drawMine(ctx, variant); break;
-    case 'station': standX = drawStation(ctx); break;
+    case 'station': standX = variant === 'zhongli' ? drawCityStation(ctx) : drawStation(ctx); break;
+    case 'plaza': standX = drawPlaza(ctx); break;
+    case 'church': standX = drawChurch(ctx); break;
+    case 'factorybus': standX = drawFactoryBus(ctx); break;
     case 'bridge': standX = drawSuspension(ctx); break;
     case 'falls': standX = drawFalls(ctx); break;
     case 'haohan': standX = drawHaohan(ctx); break;
@@ -3415,4 +3418,150 @@ function drawFalls(ctx: Ctx): number {
   night.fillStyle(0xbfe8ff, 0.18);
   night.fillRect(fx0, fy0, fx1 - fx0, fy1 - fy0);
   return w / 2;
+}
+
+// ───────────────────────── 中壢 ─────────────────────────
+
+/** 中壢車站：灰白色的大站房、玻璃門、站名 */
+function drawCityStation(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const sx = 16, sw = w - 32, sh = 210;
+  g.fillStyle(0xd8d4cc);
+  g.fillRect(sx, -sh, sw, sh);
+  g.fillStyle(0xc0bcb4);
+  for (let x = sx; x < sx + sw; x += 40) g.fillRect(x, -sh, 4, sh);
+  // 屋頂
+  g.fillStyle(0x8a9098);
+  g.fillRect(sx - 10, -sh - 16, sw + 20, 18);
+  // 站名
+  g.fillStyle(0x2a5a9a);
+  g.fillRect(sx + 30, -sh + 18, sw - 60, 44);
+  label(ctx, sx + sw / 2, -sh + 34, '中壢車站', 22, 0xffffff);
+  label(ctx, sx + sw / 2, -sh + 54, 'ZHONGLI STATION', 10, 0xd8e8ff);
+  // 大玻璃門
+  for (let k = 0; k < 4; k++) {
+    const dx = sx + 30 + k * ((sw - 60) / 4);
+    const dw = (sw - 60) / 4 - 10;
+    g.fillStyle(0x6a8a9a);
+    g.fillRect(dx, -120, dw, 120);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillTriangle(dx, -120, dx + 18, -120, dx, -90);
+    night.fillStyle(0xffe8b0, 0.55);
+    night.fillRect(dx, -120, dw, 120);
+  }
+  // 時刻表電子看板
+  g.fillStyle(0x1a1a20);
+  g.fillRect(sx + sw / 2 - 60, -150, 120, 24);
+  label(ctx, sx + sw / 2, -138, '區間車 往 新竹 14:20', 11, 0xffb040);
+  night.fillStyle(0xffb040, 0.4);
+  night.fillRect(sx + sw / 2 - 60, -150, 120, 24);
+  return w / 2;
+}
+
+/** 站前廣場：幾棵樹、花台、時鐘；週末的野餐墊和人群由場景畫 */
+function drawPlaza(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  g.fillStyle(0xc8c0b0);
+  g.fillRect(0, -8, w, 8);
+  for (const tx of [40, w - 40]) {
+    g.fillStyle(0x6a5040);
+    g.fillRect(tx - 5, -110, 10, 102);
+    g.fillStyle(0x3f7a48);
+    g.fillCircle(tx, -130, 36);
+    g.fillCircle(tx - 24, -112, 24);
+    g.fillCircle(tx + 24, -112, 26);
+    g.fillStyle(0x8a8478);
+    g.fillRect(tx - 26, -16, 52, 12);
+  }
+  // 廣場中間的時鐘柱
+  const cx = w / 2;
+  g.fillStyle(0x5a5e66);
+  g.fillRect(cx - 4, -170, 8, 162);
+  g.fillStyle(0xffffff);
+  g.fillCircle(cx, -180, 16);
+  g.lineStyle(2, 0x2a2433);
+  g.strokeCircle(cx, -180, 16);
+  g.lineBetween(cx, -180, cx, -191);
+  g.lineBetween(cx, -180, cx + 8, -178);
+  night.fillStyle(0xfff0c0, 0.5);
+  night.fillCircle(cx, -180, 20);
+  // 路燈
+  for (const lx of [w * 0.28, w * 0.72]) {
+    g.fillStyle(0x4a4e56);
+    g.fillRect(lx - 2, -140, 4, 132);
+    g.fillStyle(0xfff0c0);
+    g.fillCircle(lx, -144, 6);
+    night.fillStyle(0xffe0a0, 0.6);
+    night.fillCircle(lx, -144, 18);
+  }
+  return w / 2;
+}
+
+/** 天主堂：白牆、尖塔、十字架、彩色玻璃 */
+function drawChurch(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const cx = w / 2, bw = 170, bh = 170;
+  g.fillStyle(0xf0ece0);
+  g.fillRect(cx - bw / 2, -bh, bw, bh);
+  g.fillStyle(0x8a4a3a);
+  g.fillTriangle(cx - bw / 2 - 12, -bh, cx + bw / 2 + 12, -bh, cx, -bh - 60);
+  // 鐘塔
+  g.fillStyle(0xf0ece0);
+  g.fillRect(cx - 22, -bh - 120, 44, 70);
+  g.fillStyle(0x8a4a3a);
+  g.fillTriangle(cx - 28, -bh - 120, cx + 28, -bh - 120, cx, -bh - 160);
+  g.fillStyle(0xc8a040);
+  g.fillRect(cx - 2, -bh - 186, 4, 28);
+  g.fillRect(cx - 10, -bh - 176, 20, 4);
+  g.fillStyle(0x5a4a3a);
+  g.fillCircle(cx, -bh - 92, 9);
+  // 彩色玻璃與門
+  const glass = [0xd04040, 0x3060c0, 0xf2c14e, 0x5bb36a];
+  for (const [k, gx] of [-55, 55].entries()) {
+    g.fillStyle(glass[k]);
+    g.fillRoundedRect(cx + gx - 14, -140, 28, 50, { tl: 14, tr: 14, bl: 0, br: 0 });
+    night.fillStyle(glass[k + 2], 0.55);
+    night.fillRoundedRect(cx + gx - 14, -140, 28, 50, { tl: 14, tr: 14, bl: 0, br: 0 });
+  }
+  g.fillStyle(0x6a4a30);
+  g.fillRoundedRect(cx - 22, -80, 44, 80, { tl: 22, tr: 22, bl: 0, br: 0 });
+  label(ctx, cx, -bh + 20, '天主堂', 14, 0x6a4a30);
+  return cx;
+}
+
+/** 工廠接駁車站：站牌、遮雨棚、一台白色的接駁巴士 */
+function drawFactoryBus(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  // 遮雨棚
+  g.fillStyle(0x6a7078);
+  g.fillRect(20, -120, 6, 120);
+  g.fillRect(120, -120, 6, 120);
+  g.fillStyle(0x3a6a8a);
+  g.fillRect(12, -128, 122, 10);
+  g.fillStyle(0x8a5a3a);
+  g.fillRect(34, -40, 80, 6);
+  // 站牌
+  g.fillStyle(0xf0f0f0);
+  g.fillRect(140, -150, 6, 150);
+  g.fillStyle(0x2f8f5f);
+  g.fillRoundedRect(110, -190, 66, 44, 4);
+  label(ctx, 143, -176, '員工接駁', 12, 0xffffff);
+  label(ctx, 143, -160, '末班 21:00', 11, 0xffe070);
+  // 接駁巴士
+  const bx = 160, bw = w - 170;
+  g.fillStyle(0xf0f0ec);
+  g.fillRoundedRect(bx, -96, bw, 80, 8);
+  g.fillStyle(0x2f8f5f);
+  g.fillRect(bx, -40, bw, 8);
+  for (let wx = bx + 10; wx < bx + bw - 30; wx += 26) {
+    g.fillStyle(0x6a8a9a);
+    g.fillRect(wx, -86, 20, 22);
+    night.fillStyle(0xffe2a0, 0.5);
+    night.fillRect(wx, -86, 20, 22);
+  }
+  g.fillStyle(0x2a2a30);
+  g.fillCircle(bx + 20, -14, 10);
+  g.fillCircle(bx + bw - 20, -14, 10);
+  label(ctx, bx + bw / 2, -52, '○○電子 員工專車', 10, 0x2a2433);
+  return 70;
 }

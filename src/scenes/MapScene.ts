@@ -90,7 +90,7 @@ export class MapScene extends Phaser.Scene {
       g.fillStyle(0xffffff);
       g.fillCircle(0, -22, 6);
       pin.add(g);
-      const leftSide = id === 'guanziling' || id === 'shenkeng';
+      const leftSide = id === 'guanziling' || id === 'shenkeng' || id === 'zhongli';
       const label = this.add.text(leftSide ? -22 : 22, -24, `${idx + 1}. ${st.name}`, {
         fontFamily: FONT, fontSize: '17px', fontStyle: '900', color: '#ffffff', backgroundColor: hex(col), padding: { x: 8, y: 3 },
       }).setOrigin(leftSide ? 1 : 0, 0.5);
