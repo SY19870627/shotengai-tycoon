@@ -4,7 +4,7 @@ import {
   startNextDay, serialize, deserialize, DAY_START_MIN, startActivity, canStartActivity, applyEffects, getRel, addRel,
   renovate, evict, setRentTier, postAd, profileOf, presentTenants, combinedMods, generateTenant, weekdayName,
   buildFacility, installModule, setStaff, upgradeFacility, registerFall, vanishChance, ritualProtected,
-  transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, strandedPerHour, rollForecast,
+  transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, rollOrigin, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
   sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive, eligibleProfiles,
 } from '../src/core/game';
@@ -24,6 +24,7 @@ import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { trainInterval, trainsBetween, trainCombo, decaySky } from '../src/core/shifen';
+import { rollCurfew, LAST_BUS, setPolicy } from '../src/core/zhongli';
 import { STREETS } from '../src/content';
 import { NPCS } from '../src/content/npcs';
 import type { GameState, Step } from '../src/core/types';
@@ -1195,5 +1196,91 @@ describe('十分', () => {
     }
     expect(s.chapterComplete).toBe(true);
     expect(day).toBeGreaterThan(10);
+  });
+});
+
+describe('中壢', () => {
+  const zl = () => createGame('zhongli', seeded(5));
+  // 第 1 天是週五，第 3 天是週日
+  const toSunday = (s: GameState) => { s.day = 3; s.minute = 14 * 60; };
+
+  it('週日移工湧進來，平日幾乎都是通勤族', () => {
+    const s = zl();
+    s.minute = 14 * 60;
+    const weekday = trafficPerHour(s);
+    toSunday(s);
+    expect(trafficPerHour(s)).toBeGreaterThan(weekday * 4);
+    const counts: Record<string, number> = {};
+    for (let k = 0; k < 400; k++) { const o = rollOrigin(s, Math.random); counts[o] = (counts[o] ?? 0) + 1; }
+    expect((counts.id ?? 0)).toBeGreaterThan(counts.th ?? 0);
+  });
+
+  it('收假時間：看護下午就要走，工廠移工趕 9 點的接駁車', () => {
+    const r = seeded(4);
+    const curfews = Array.from({ length: 200 }, () => rollCurfew('id', r));
+    expect(curfews.some((c) => c < 18 * 60)).toBe(true);
+    expect(curfews.some((c) => c === LAST_BUS)).toBe(true);
+    expect(rollCurfew('commuter', Math.random)).toBe(24 * 60);
+  });
+
+  it('週日吃到家鄉菜、匯到錢，家鄉感上升；沒有匯款行會扣分', () => {
+    const s = zl();
+    signTenant(s, 0, 'zl-dewi', 1);
+    signTenant(s, 1, 'zl-remit', 1);
+    toSunday(s);
+    s.today.nat = { id: 100 };
+    s.today.home = { id: 60 };
+    endDay(s, seeded(1));
+    expect(s.homeFeel.id).toBeGreaterThan(30);
+  });
+
+  it('管法：放任的週日街坊不滿漲最多，嚴管最少；家鄉感高的社群會自己維持秩序', () => {
+    const run = (p: 'strict' | 'guide' | 'free', feel = 30) => {
+      const s = zl();
+      setPolicy(s, p);
+      s.homeFeel = { id: feel, vn: feel, ph: feel, th: feel };
+      toSunday(s);
+      s.today.nat = { id: 1000, vn: 500, ph: 300, th: 200 };
+      endDay(s, seeded(1));
+      return s.unrest;
+    };
+    expect(run('free')).toBeGreaterThan(run('guide'));
+    expect(run('guide')).toBeGreaterThan(run('strict'));
+    expect(run('guide', 100)).toBeLessThan(run('guide', 30));
+  });
+
+  it('數值模擬：招家鄉店與匯款行、街坊不滿高就疏導，45 天內可以看到結局', () => {
+    const s = zl();
+    const rand = seeded(9);
+    const run = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); };
+    let day = 0;
+    for (let d = 1; d <= 45 && !s.chapterComplete; d++) {
+      day = d;
+      for (let i = 0; i < s.lots.length; i++) {
+        const a = s.applicants[0];
+        if (s.lots[i].unlocked && !s.lots[i].shop && a) signTenant(s, i, a.tenantId, Math.min(1, profileOf(s, a.tenantId)!.maxRentTier));
+      }
+      if (s.money > nextLotCost(s) + 8000) unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+      if (s.money > 25000) {
+        const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
+        if (i >= 0) renovate(s, i);
+      }
+      if (s.unrest >= 35 && s.policy !== 'guide') setPolicy(s, 'guide');
+      if (canStartActivity(s, 'templeFair').ok && s.money > 15000) startActivity(s, 'templeFair', undefined, rand);
+      for (const when of ['morning', 'noon'] as const) {
+        const st = pickStory(s, when, rand);
+        if (st) run(st.steps);
+      }
+      s.minute = DAY_START_MIN;
+      simulateDay(s, rand);
+      s.minute = 18.5 * 60;
+      const ev = pickStory(s, 'evening', rand);
+      if (ev) run(ev.steps);
+      endDay(s, rand);
+      expect(s.gameOver).toBe(false);
+      startNextDay(s, rand);
+    }
+    expect(s.chapterComplete).toBe(true);
+    expect(day).toBeGreaterThan(14);
   });
 });

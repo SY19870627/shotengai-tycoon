@@ -18,6 +18,7 @@ import { pickStory, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { SHOP_BY_ID } from '../src/core/shops';
 import { STREETS } from '../src/content';
+import { setPolicy } from '../src/core/zhongli';
 
 const streetId = process.argv[2] ?? 'shenkeng';
 let seed = Number(process.argv[3] ?? 7);
@@ -83,7 +84,12 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
       if (i >= 0 && buildBath(s, i).ok) log.push('  [民怨] 共同浴場');
     }
   }
-  // 東原：回憶夠了就學老店作法
+  // 中壢：街坊不滿高就改疏導，低就放任
+  if (smart && street.migrant) {
+    if (s.unrest >= 35 && s.policy !== 'guide') { setPolicy(s, 'guide'); log.push('  [管法] 疏導'); }
+    else if (s.unrest < 10 && s.policy !== 'free' && process.env.POLICY !== 'guide') { setPolicy(s, 'free'); log.push('  [管法] 放任'); }
+  }
+    // 東原：回憶夠了就學老店作法
   for (const r of street.memory?.recipes ?? []) if (learnRecipe(s, r.shop).ok) log.push(`  [回憶] 學會${r.name}`);
   // 東原：有錢就推動未來計畫（土地公只辦一次）、準備繞境
   if (street.memory) {
@@ -135,6 +141,7 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
     (sum.kinshipAfter !== undefined ? ` 居民${sum.residents ?? 0}/遊客${sum.tourists ?? 0} 鄉親${sum.kinshipAfter} 回憶[${MEMORY_KINDS.map((k) => s.memories[k]).join(',')}]` : '') +
     (sum.spring ? ` 泉${sum.spring.supply}/${sum.spring.demand} 怨${sum.grievanceAfter} 火${s.fireLevel}(${s.fireMode})$${sum.fireIncome}` : '') +
     (sum.lanterns !== undefined || sum.trains ? ` 天燈${sum.lanterns ?? 0} 連擊${sum.combo ?? 0} 車${sum.trains ?? 0}` : '') +
+    (sum.feelAfter ? ` 鄉[${(['id','vn','ph','th'] as const).map((n) => `${n}${sum.nat?.[n] ?? 0}:${sum.feelAfter![n]}`).join(' ')}] 不滿${sum.unrestBefore}→${sum.unrestAfter} ${s.policy}` : '') +
     (sum.closed?.length ? ` 靜坐:${sum.closed}` : '') + (sum.festival ? ' ★妖怪祭' : '') + (s.festival?.leafCommission ? ` 樹葉$${s.festival.leafCommission}` : ''),
   );
   for (const l of log.splice(0)) console.log(l);

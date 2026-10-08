@@ -1685,7 +1685,7 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private sightLine(p: Ped, pick: { local: string[]; jp: string[]; kr: string[] }): string {
-    return Phaser.Utils.Array.GetRandom(pick[p.origin === 'resident' ? 'local' : p.origin]) as string;
+    return Phaser.Utils.Array.GetRandom(pick[p.origin === 'jp' || p.origin === 'kr' ? p.origin : 'local']) as string;
   }
 
   /** 觀景台的台詞：依天氣與時段變化 */

@@ -10,7 +10,9 @@ export type Accessory =
   // 關子嶺：浴衣、妖怪
   | 'yukata' | 'kappa' | 'tanuki' | 'kitsune' | 'yukionna'
   // 敷泥漿面膜的客人：灰臉、毛巾包頭、小黃瓜片、浴袍
-  | 'mudmask';
+  | 'mudmask'
+  // 中壢：頭巾（顏色用 hair）
+  | 'hijab';
 
 export interface Look {
   skin: number;
@@ -133,6 +135,10 @@ export interface Effects {
   kinship?: number;
   /** 東原：學會老店的作法（店種 id） */
   recipe?: string;
+  /** 中壢：家鄉感增減、街坊不滿增減、改變管法 */
+  homeFeel?: Partial<Record<Nation, number>>;
+  unrest?: number;
+  policy?: Policy;
   /** 過關 */
   chapterComplete?: boolean;
 }
@@ -398,9 +404,9 @@ export interface StreetDef {
   map: { x: number; y: number };
   playable: boolean;
   facade: FacadeStyle;
-  backdrop: 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley';
+  backdrop: 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley' | 'city-rail';
   /** rail：十分，街前面有一條鐵軌 */
-  ground: 'brick' | 'stone' | 'rail';
+  ground: 'brick' | 'stone' | 'rail' | 'arcade';
   layout: LayoutItem[];
   landmarks: LandmarkDef[];
   startLots: number;
@@ -436,6 +442,8 @@ export interface StreetDef {
   quakeDay?: number;
   /** 十分：火車班次（每幾分鐘一班、第一班與最後一班的時間、每班倒出多少人） */
   train?: { interval: number; weekendInterval: number; first: number; last: number; burst: number };
+  /** 中壢：週日各國移工的基本人數（每小時，人潮最多的時候） */
+  migrant?: Record<Nation, number>;
   /** 妖怪祭當天的打烊時間 */
   festivalCloseHour?: number;
   /** 東原：用回憶點數經營（居民人潮、屋主、老店作法、一開始就在的店） */
@@ -473,6 +481,8 @@ export interface StreetDef {
   goals: Goal[];
   /** 破關後解鎖的下一條老街 */
   next?: string;
+  /** 破關後一起解鎖的其他老街（不分順序） */
+  unlocks?: string[];
 }
 
 // =====================================================================
@@ -518,7 +528,11 @@ export interface Lot {
 
 export type Weather = 'sunny' | 'rain' | 'fog' | 'heavyFog';
 /** resident：東原的村民（只在東原出現） */
-export type Origin = 'local' | 'jp' | 'kr' | 'resident';
+export type Origin = 'local' | 'jp' | 'kr' | 'resident' | Nation | 'commuter';
+/** 中壢：印尼、越南、菲律賓、泰國的移工 */
+export type Nation = 'id' | 'vn' | 'ph' | 'th';
+/** 中壢：週日人潮的管法（嚴管、疏導、放任） */
+export type Policy = 'strict' | 'guide' | 'free';
 
 export interface Guest {
   lot: number;
@@ -578,6 +592,11 @@ export interface DayStats {
   lanterns?: number;
   combo?: number;
   trains?: number;
+  /** 中壢：今天各國來了多少人、吃到家鄉味（或用到匯款、手機…）的次數、收假趕回去的人、錯過接駁車的人 */
+  nat?: Partial<Record<Nation, number>>;
+  home?: Partial<Record<Nation, number>>;
+  rushed?: number;
+  missed?: number;
 }
 
 export interface DaySummary {
@@ -627,6 +646,16 @@ export interface DaySummary {
   lanterns?: number;
   combo?: number;
   trains?: number;
+  /** 中壢 */
+  nat?: Partial<Record<Nation, number>>;
+  feelBefore?: Record<Nation, number>;
+  feelAfter?: Record<Nation, number>;
+  unrestBefore?: number;
+  unrestAfter?: number;
+  policyCost?: number;
+  stallIncome?: number;
+  missed?: number;
+  rushed?: number;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
@@ -741,4 +770,10 @@ export interface GameState {
   /** 一天最多放過幾盞、最高的火車連擊 */
   lanternBest: number;
   bestCombo: number;
+  // ---- 中壢（其他老街用預設值） ----
+  /** 各國移工的家鄉感 0～100 */
+  homeFeel: Record<Nation, number>;
+  /** 街坊不滿 0～100 */
+  unrest: number;
+  policy: Policy;
 }

@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95' | 'showa60' | 'railside';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95' | 'showa60' | 'railside' | 'stationfront';
 
 export interface ShopDef {
   id: string;
@@ -298,6 +298,55 @@ export const SHOPS: ShopDef[] = [
     hours: [9, 21], wallColor: 0xe8e0b8, awningColor: 0x5a8a3a,
     description: '在竹筒上寫願望，掛在店門口。天燈放完，願望還沒寫夠的人都會來。',
   }),
+  // ---- 中壢 ----
+  S({
+    id: 'warung', name: '印尼小吃', short: 'Warung', category: 'food',
+    spend: 120, appeal: 0.09, capacity: 8, stayMinutes: 25, upkeep: 260, baseRent: 800,
+    hours: [9, 22], wallColor: 0xf2e0c0, awningColor: 0xd04040,
+    description: '清真的沙爹、炒麵、印尼炒飯。印尼移工的家鄉味。',
+  }),
+  S({
+    id: 'pho', name: '越南河粉', short: 'Phở', category: 'food',
+    spend: 130, appeal: 0.09, capacity: 8, stayMinutes: 25, upkeep: 260, baseRent: 800,
+    hours: [8, 21], wallColor: 0xf6eccc, awningColor: 0xd0a020,
+    description: '熱湯河粉、法國麵包。越南移工的家鄉味，通勤族也愛。',
+  }),
+  S({
+    id: 'sarisari', name: '菲律賓雜貨', short: 'Sari-sari', category: 'retail',
+    spend: 110, appeal: 0.085, capacity: 6, stayMinutes: 15, upkeep: 220, baseRent: 700,
+    hours: [9, 21], wallColor: 0xdfe8f4, awningColor: 0x3060c0,
+    description: '零食、泡麵、罐頭、家鄉的調味料。菲律賓移工的家鄉味。',
+  }),
+  S({
+    id: 'thaifood', name: '泰式小吃', short: '泰式', category: 'food',
+    spend: 120, appeal: 0.085, capacity: 7, stayMinutes: 20, upkeep: 250, baseRent: 780,
+    hours: [10, 22], wallColor: 0xece0f4, awningColor: 0x8050c0,
+    description: '打拋、涼拌、手搖泰式奶茶。泰國移工的家鄉味。',
+  }),
+  S({
+    id: 'remit', name: '匯款行', short: '匯款', category: 'daily',
+    spend: 70, appeal: 0.07, capacity: 5, stayMinutes: 15, upkeep: 300, baseRent: 900,
+    hours: [9, 20], wallColor: 0xe8f0e0, awningColor: 0x2f8f5f,
+    description: '一定要有！把薪水寄回家給孩子、爸媽。賺得不多，但沒有它，大家寧可去別的地方。',
+  }),
+  S({
+    id: 'phoneshop', name: '手機行', short: '手機', category: 'retail',
+    spend: 160, appeal: 0.07, capacity: 5, stayMinutes: 15, upkeep: 320, baseRent: 950,
+    hours: [10, 21], wallColor: 0xe0e6ee, awningColor: 0xe07020,
+    description: '儲值、換電話卡、修手機。手機是跟家人視訊的唯一管道。',
+  }),
+  S({
+    id: 'asiamart', name: '東南亞超市', short: '超市', category: 'retail',
+    spend: 260, appeal: 0.06, capacity: 8, stayMinutes: 20, upkeep: 420, baseRent: 1100,
+    hours: [9, 22], wallColor: 0xf0ecdc, awningColor: 0x20a080,
+    description: '一次買一週份的家鄉食材、泡麵、香料。四個國家的人都會來。',
+  }),
+  S({
+    id: 'ktv', name: '卡拉 OK', short: 'KTV', category: 'leisure',
+    spend: 200, appeal: 0.06, capacity: 10, stayMinutes: 60, upkeep: 450, baseRent: 1000,
+    hours: [12, 24], wallColor: 0x3a2a4a, awningColor: 0xe040a0,
+    description: '唱家鄉的歌，大家最開心的地方。很吵，開到很晚。',
+  }),
 ];
 
 export const SHOP_BY_ID: Record<string, ShopDef> = Object.fromEntries(SHOPS.map((s) => [s.id, s]));
@@ -349,6 +398,14 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   peanutroll: { wingrice: 1.1, lantern: 1.1 },
   railgoods: { cafe: 1.15, souvenir: 1.05 },
   wishshop: { lantern: 1.15, railgoods: 1.05 },
+  warung: { remit: 1.1, phoneshop: 1.05 },
+  pho: { remit: 1.1, asiamart: 1.05 },
+  sarisari: { ktv: 1.1, phoneshop: 1.05 },
+  thaifood: { ktv: 1.1, asiamart: 1.05 },
+  remit: { phoneshop: 1.15, warung: 1.05, pho: 1.05 },
+  phoneshop: { remit: 1.15 },
+  asiamart: { remit: 1.1 },
+  ktv: { thaifood: 1.05, sarisari: 1.05 },
 };
 
 /** 同一種店距離兩格以內會互搶客人 */

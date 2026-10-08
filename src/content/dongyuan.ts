@@ -790,4 +790,5 @@ export const DONGYUAN: StreetDef = {
     { id: 'future', text: '完成 3 個未來計畫', check: (s) => futureDoneCount(s) >= 3 },
   ],
   next: 'shifen',
+  unlocks: ['zhongli'],
 };

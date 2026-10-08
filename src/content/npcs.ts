@@ -371,6 +371,34 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'sfCat', name: '猴硐來的橘貓', kind: 'cat',
     look: L({ skin: 0xe8a050, hair: 0xe8a050, hairStyle: 'short', shirt: 0xe8a050, pants: 0xe8a050, accessory: 'none', age: 'young' }),
   },
+  zlChief: {
+    id: 'zlChief', name: '中壢里長',
+    look: L({ skin: 0xe8b48f, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x2b2b3a, accessory: 'glasses', age: 'mid' }),
+  },
+  zlJoel: {
+    id: 'zlJoel', name: 'Joel',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0x3060c0, pants: 0x2b2b3a, accessory: 'none', age: 'young' }),
+  },
+  zlSiti: {
+    id: 'zlSiti', name: 'Siti',
+    look: L({ skin: 0xc8946a, hair: 0xe08aa0, hairStyle: 'short', shirt: 0x6a8ac0, pants: 0x3d3a36, accessory: 'hijab', age: 'young' }),
+  },
+  zlNan: {
+    id: 'zlNan', name: '阿南',
+    look: L({ skin: 0xb07a52, hair: 0x111111, hairStyle: 'short', shirt: 0x8050c0, pants: 0x3d3a36, accessory: 'cap', age: 'mid' }),
+  },
+  zlSocial: {
+    id: 'zlSocial', name: '移工協會的社工 小葉',
+    look: L({ skin: 0xf6d6bd, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0x5bb36a, pants: 0x54627a, accessory: 'none', age: 'young' }),
+  },
+  zlGrandma: {
+    id: 'zlGrandma', name: 'Siti 照顧的阿嬤',
+    look: L({ skin: 0xe8c0a0, hair: 0xe8e4dc, hairStyle: 'bun', shirt: 0x9b6bc9, pants: 0x3d3a36, accessory: 'none', age: 'old' }),
+  },
+  zlPolice: {
+    id: 'zlPolice', name: '警察',
+    look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0x2b3f6a, pants: 0x2b2b3a, accessory: 'cap', age: 'mid' }),
+  },
   busGuide: {
     id: 'busGuide', name: '遊覽車導遊',
     look: L({ skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'bob', shirt: 0xd64545, pants: 0x2b2b3a, accessory: 'hat', age: 'mid' }),

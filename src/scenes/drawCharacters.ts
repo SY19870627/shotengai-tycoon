@@ -213,6 +213,15 @@ export function drawCharacter(g: Phaser.GameObjects.Graphics, look: Look, frame:
       g.fillRect(cx - headR - 1, headY - 2, 5, 6);
   }
 
+  // 頭巾：整個包住頭髮，垂到肩膀，只露出臉
+  if (acc === 'hijab') {
+    g.fillStyle(look.hair);
+    g.fillCircle(cx, headY, headR + 2);
+    g.fillRoundedRect(cx - headR - 2, headY, headR * 2 + 4, bodyTop - headY + 8, 4);
+    g.fillStyle(skin);
+    g.fillEllipse(cx + 4, headY + 2, headR * 1.15, headR * 1.45);
+  }
+
   // 臉（看右邊）
   g.fillStyle(0x222222);
   g.fillCircle(cx + 5, headY + 1, 1.6);
@@ -507,6 +516,12 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, look: Look, x: numb
     case 'scarf':
       g.fillStyle(0xd64545);
       g.fillRect(x - hr * 0.8, y + r * 0.42, hr * 1.6, hr * 0.35);
+      break;
+    case 'hijab':
+      g.lineStyle(hr * 0.4, look.hair);
+      g.strokeCircle(x, hy, hr * 1.12);
+      g.fillStyle(look.hair);
+      g.fillEllipse(x, y + r * 0.6, r * 1.3, r * 0.5);
       break;
     case 'camera':
       g.fillStyle(0x222222);

@@ -51,8 +51,7 @@ function loadMeta(): Meta {
   if (!m || !Array.isArray(m.unlocked)) return defaultMeta();
   // 後來才加的新老街：已經破關的老街，下一條直接解鎖
   for (const id of m.completed ?? []) {
-    const next = STREETS[id]?.next;
-    if (next && !m.unlocked.includes(next)) m.unlocked.push(next);
+    for (const next of [STREETS[id]?.next, ...(STREETS[id]?.unlocks ?? [])]) if (next && !m.unlocked.includes(next)) m.unlocked.push(next);
   }
   return m;
 }
@@ -141,8 +140,8 @@ export function enterStreet(streetId: string, fresh: boolean): GameState {
 export function completeChapter(): void {
   const s = S();
   if (!store.meta.completed.includes(s.streetId)) store.meta.completed.push(s.streetId);
-  const next = STREETS[s.streetId].next;
-  if (next && !store.meta.unlocked.includes(next)) store.meta.unlocked.push(next);
+  const st = STREETS[s.streetId];
+  for (const next of [st.next, ...(st.unlocks ?? [])]) if (next && !store.meta.unlocked.includes(next)) store.meta.unlocked.push(next);
   saveMeta();
 }
 

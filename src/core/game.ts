@@ -6,8 +6,7 @@ import { TRAITS } from './traits';
 import { ACTIVITY_BY_ID, INFLUENCERS, type ActivityDef } from './activities';
 import type {
   GameState, StreetDef, TenantProfile, ShopInstance, DaySummary, DayStats, Effects, Mods, ActivityVariant,
-  Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind, MemoryKind,
-} from './types';
+  Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind, MemoryKind, Nation } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
 import {
@@ -25,6 +24,9 @@ import {
   futureDefaults, futureVisitors, futureMods, futureUpkeepMult, endDayFuture, dailyFutureUpdate, processionToday, nightMarket,
   futureDone, seasonSpendMult,
 } from './future';
+import {
+  zhongliDefaults, isMigrantStreet, migrantTraffic, rollMigrantOrigin, recordMigrantPasserby, recordMigrantVisit, MIGRANT_PREF, endDayZhongli,
+} from './zhongli';
 import { shifenDefaults, isRailStreet, skyMods, decaySky, releaseLanterns, endDayShifen, type LanternColor } from './shifen';
 
 export const DAY_START_MIN = 7 * 60;
@@ -154,6 +156,7 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     ...memoryDefaults(),
     ...futureDefaults(),
     ...shifenDefaults(),
+    ...zhongliDefaults(),
   };
   // 東原：一開始就在的老店、帶著的回憶
   if (street.memory) {
@@ -224,7 +227,9 @@ export function forecastText(f: Forecast): string {
 // 外國旅客
 // =====================================================================
 
-export const ORIGIN_NAME: Record<Origin, string> = { local: '本地', jp: '日本', kr: '韓國', resident: '居民' };
+export const ORIGIN_NAME: Record<Origin, string> = {
+  local: '本地', jp: '日本', kr: '韓國', resident: '居民', id: '印尼', vn: '越南', ph: '菲律賓', th: '泰國', commuter: '通勤族',
+};
 
 /** 外國旅客（日本、韓國） */
 export const isForeign = (o: Origin) => o === 'jp' || o === 'kr';
@@ -235,9 +240,19 @@ const ORIGIN_PREF: Record<Origin, Record<string, number>> = {
   jp: { teahouse: 1.4, taro: 1.25, ocarina: 1.2, fishball: 1.1, douhua: 1.15 },
   kr: { cafe: 1.35, souvenir: 1.3, caogui: 1.15, tofuice: 1.2, brownsugar: 1.15 },
   resident: {},
+  id: {}, vn: {}, ph: {}, th: {}, commuter: {},
 };
 
+/** 中壢：通勤族與在地居民的基本人數 */
+function localBase(s: GameState): number {
+  const street = streetOf(s);
+  const shops = s.lots.filter((l) => l.shop).length;
+  return street.baseTraffic + shops * 2 + s.reputation * street.repTraffic;
+}
+
 export function rollOrigin(s: GameState, rand: () => number): Origin {
+  // 中壢：照現在各國移工、通勤族的人數比例
+  if (isMigrantStreet(s)) return rollMigrantOrigin(s, localBase(s), timeCurve(hourOf(s)), rand);
   // 東原：照現在居民和遊客的人數比例
   if (isMemoryStreet(s)) {
     const res = residentsPerHour(s);
@@ -418,6 +433,11 @@ const REVIEW_TEXT: Record<Origin, { good: string[]; noise: string[]; mid: string
   jp: { good: ['夜景最高！', '朝ごはん美味しい', 'また来たい！'], noise: ['隣がうるさい…', '眠れなかった'], mid: ['まあまあ', '部屋が狭い'] },
   kr: { good: ['야경 최고!', '사장님 친절해요', '또 올게요!'], noise: ['옆집 시끄러워요', '잠을 못 잤어요'], mid: ['그냥 그래요', '방이 좀 작아요'] },
   resident: { good: ['跟以前一樣', '老闆人很好'], noise: ['隔壁好吵'], mid: ['還可以'] },
+  id: { good: ['Enak!', 'Mantap!'], noise: ['Berisik…'], mid: ['Lumayan'] },
+  vn: { good: ['Ngon quá!', 'Tuyệt vời!'], noise: ['Ồn quá…'], mid: ['Cũng được'] },
+  ph: { good: ['Sarap!', 'Ang galing!'], noise: ['Ang ingay…'], mid: ['Okay lang'] },
+  th: { good: ['อร่อย!', 'ดีมาก!'], noise: ['เสียงดัง…'], mid: ['ก็โอเค'] },
+  commuter: { good: ['方便'], noise: ['好吵'], mid: ['普通'] },
 };
 
 /** 今晚住客的評價（打烊時算，隔天早上顯示） */
@@ -873,6 +893,8 @@ export function enterChance(s: GameState, index: number, favorite?: Category, or
   if (yokai) p *= YOKAI[yokai].pref[def.id] ?? 1;
   // 東原：居民去日常的店，遊客去伴手禮和咖啡
   if (isMemoryStreet(s)) p *= audiencePref(def.id, origin);
+  // 中壢：各國移工找家鄉味、匯款、手機；通勤族去咖啡店、藥局
+  if (isMigrantStreet(s)) p *= MIGRANT_PREF[origin]?.[def.id] ?? 1;
   // 外國旅客：有偏好，但沒有多語服務時語言不通
   if (isForeign(origin)) {
     p *= ORIGIN_PREF[origin][def.id] ?? 1;
@@ -911,6 +933,7 @@ export function trafficPerHour(s: GameState): number {
   const street = streetOf(s);
   const shops = s.lots.filter((l) => l.shop).length;
   const mods = combinedMods(s);
+  if (street.migrant) return migrantTraffic(s, localBase(s), timeCurve(hourOf(s)), mods.traffic);
   if (street.memory) return (residentsPerHour(s) + touristsPerHour(s, touristBase(s)) * timeCurveFor(s) + futureVisitors(s) * timeCurve(hourOf(s))) * mods.traffic;
   let base = street.baseTraffic + shops * 3 + s.reputation * street.repTraffic;
   if (isWeekend(s)) base *= street.weekendMult;
@@ -953,6 +976,7 @@ export function tickTraffic(s: GameState, dm: number): number {
 
 export function notePasserby(s: GameState, origin?: Origin): void {
   s.today.passersby += 1;
+  if (origin) recordMigrantPasserby(s, origin);
   if (!isMemoryStreet(s) || !origin) return;
   if (origin === 'resident') s.today.residents = (s.today.residents ?? 0) + 1;
   else s.today.tourists = (s.today.tourists ?? 0) + 1;
@@ -1018,6 +1042,8 @@ export function completeVisit(
     s.today.yokai += 1;
     if (yokai.leaves) recordLeaves(s, shop.tenantId, revenue, commission);
   }
+  // 中壢：吃到家鄉菜、匯到錢、跟家人視訊
+  recordMigrantVisit(s, origin, def.id);
   // 十分：天燈店的客人放天燈
   const lantern = def.id === 'lantern' ? releaseLanterns(s, shop.level, rand) : null;
   return {
@@ -1140,6 +1166,9 @@ export function applyEffects(s: GameState, e: Effects, rand: () => number = Math
     s.recipes.push(e.recipe);
     if (!s.flags.includes(`recipe-${e.recipe}`)) s.flags.push(`recipe-${e.recipe}`);
   }
+  for (const [n, d] of Object.entries(e.homeFeel ?? {}) as [Nation, number][]) s.homeFeel[n] = Math.max(0, Math.min(100, s.homeFeel[n] + d));
+  if (e.unrest) s.unrest = Math.max(0, Math.min(100, s.unrest + e.unrest));
+  if (e.policy) s.policy = e.policy;
   if (e.chapterComplete) s.chapterComplete = true;
 }
 
@@ -1315,6 +1344,7 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
   const grievanceBefore = s.grievance;
   const fest = festivalActive(s);
   if (isRailStreet(s)) endDayShifen(s);
+  const zl = isMigrantStreet(s) ? endDayZhongli(s, rand) : null;
   const rent = rentIncome(s);
   const maintenance = street.maintenance + unlockedCount(s) * 60 + ownerUpkeep(s);
   const kinshipBefore = s.kinship;
@@ -1378,6 +1408,10 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     mem: s.today.mem,
     kinshipBefore: street.memory ? kinshipBefore : undefined,
     kinshipAfter: street.memory ? s.kinship : undefined,
+    ...(zl ? {
+      nat: s.today.nat, feelBefore: zl.feelBefore, feelAfter: { ...s.homeFeel }, unrestBefore: zl.unrestBefore, unrestAfter: s.unrest,
+      policyCost: zl.policyCost, stallIncome: zl.stallIncome, missed: s.today.missed, rushed: s.today.rushed,
+    } : {}),
     lanterns: s.today.lanterns,
     combo: s.today.combo,
     trains: s.today.trains,
@@ -1550,7 +1584,7 @@ export function deserialize(raw: string): GameState | null {
     data.morning ??= [];
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults(), ...shifenDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
+    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults(), ...shifenDefaults(), ...zhongliDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
     // 東原：在回憶時光裡關掉遊戲，回到 2016 年的當晚（這一晚不能再放）
     if (data.trip) {
       data.minute = data.trip.returnMinute;
