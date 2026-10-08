@@ -191,7 +191,7 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
   },
   p95Ice: {
-    id: 'p95Ice', name: '冰鋪的秋月姨',
+    id: 'p95Ice', name: '冰店的秋月姨',
     look: L({ skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0x5fa8c9, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
   },
   p95Pharm: {

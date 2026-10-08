@@ -173,13 +173,13 @@ export const SHOPS: ShopDef[] = [
     id: 'pharmacy', name: '藥局', short: '藥局', category: 'daily', audience: 'resident',
     spend: 120, appeal: 0.045, capacity: 3, stayMinutes: 10, upkeep: 250, baseRent: 700,
     hours: [8, 21], wallColor: 0xeef0e6, awningColor: 0x3f8f4f,
-    description: '包藥、量血壓、聽街坊說心事。居民很需要，遊客用不到。',
+    description: '藥不常賣，賣最好的是感冒糖漿；還有量血壓、聽街坊說心事。居民很需要，遊客用不到。',
   }),
   S({
-    id: 'icepop', name: '糖水冰鋪', short: '冰鋪', category: 'food',
+    id: 'icepop', name: '冰店', short: '冰店', category: 'food',
     spend: 45, appeal: 0.085, capacity: 6, stayMinutes: 12, upkeep: 150, baseRent: 500,
     hours: [10, 21], wallColor: 0xf3ead6, awningColor: 0x5fa8c9,
-    description: '用黑糖熬的糖水淋在刨冰上。要先找回糖水的作法才能重新開張。',
+    description: '招牌是四果冰，還有自己煮的紅茶、冬瓜茶。要先找回作法才能重新開張。',
   }),
   S({
     id: 'platekoe', name: '盤子碗粿', short: '碗粿', category: 'food',
