@@ -362,7 +362,7 @@ export function pastLandmark(s: GameState, era: Era, id: string): Step[] | null 
       choice('兩個囡仔要偷跑進蛇窟',
         opt('「我陪你們進去，看一下就出來」', {}, [
           narrate('從破掉的木板縫鑽進去。裡面好暗，空氣裡都是灰塵和霉味。一排一排的木頭椅子，有的已經塌了。'),
-          narrate('牆上還貼著一張褪色的電影海報：「十二生肖大冒險」。放映室的角落，堆著幾捲生鏽的膠卷。'),
+          narrate('牆上還貼著一張褪色的電影海報：台語片《薛平貴與王寶釧》。放映室的角落，堆著幾捲生鏽的膠卷。'),
           say('p95Kid', '……你、你看那邊，地上那條是什麼？'),
           narrate('嘶——'),
           emote('p95Kid', 'shock'), emote('p95Kid2', 'shock'), emote('me', 'shock'),
@@ -372,7 +372,7 @@ export function pastLandmark(s: GameState, era: Era, id: string): Step[] | null 
         ]),
         opt('「裡面有蛇很危險，我去叫大人」', {}, [
           say('p95Kid', '大哥哥是抓耙仔！'),
-          narrate('離開前，你從門縫看到牆上一張褪色的電影海報：「十二生肖大冒險」。'),
+          narrate('離開前，你從門縫看到牆上一張褪色的電影海報：台語片《薛平貴與王寶釧》。'),
           ...caught,
         ]),
       ),

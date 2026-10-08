@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { MEMORY_NAME, MEMORY_COLOR, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
+import { MEMORY_NAME, MEMORY_COLOR, memoryTag, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
@@ -613,6 +613,14 @@ export class StreetScene extends Phaser.Scene {
       if (s.closedToday.includes(i)) {
         const objs = drawProtest(this);
         view.container.add(objs);
+      }
+      // 東原：招牌旁標出這間店會聊出哪一種回憶
+      const mt = memoryTag(s, def.id);
+      if (mt) {
+        const tag = this.add.text(x0 + 10, GROUND_Y - buildingHeight(lot.shop.level) + 8, mt.text, {
+          fontFamily: FONT, fontSize: '12px', fontStyle: '900', color: '#2a2433', backgroundColor: mt.color, padding: { x: 5, y: 2 },
+        }).setDepth(13);
+        view.extras.push(tag);
       }
       // 心情很差的店：頭上一朵烏雲
       if (lot.shop.satisfaction < 25) {
