@@ -450,6 +450,8 @@ export interface StreetDef {
     tripOutro?: (s: GameState, era: Era, gained: Memories) => Step[];
     /** 三年一次的全山頭繞境在第幾天 */
     processionDay?: number;
+    /** 龍眼焙季（七、八月）：第幾天到第幾天 */
+    longanSeason?: [number, number];
     /** 回憶巡禮點 */
     pilgrimage?: PilgrimDef[];
     pilgrimStory?: (s: GameState, p: PilgrimDef) => Step[];

@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { nightMarket, morningMarket } from '../core/future';
+import { nightMarket, morningMarket, longanSeason } from '../core/future';
 import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
@@ -248,6 +248,10 @@ export class StreetScene extends Phaser.Scene {
   private marketLayer?: Phaser.GameObjects.Container;
   private marketKind = '';
   private marketGlow?: Phaser.GameObjects.Graphics;
+  private seasonOn = false;
+  private seasonTimer = 0;
+  private seasonLayer?: Phaser.GameObjects.Container;
+  private seasonHaze?: Phaser.GameObjects.Rectangle;
   private pilgrimSig = '';
   private wellLayer!: Phaser.GameObjects.Container;
   private wellSig = '';
@@ -280,6 +284,9 @@ export class StreetScene extends Phaser.Scene {
     this.marketLayer = undefined;
     this.marketKind = '';
     this.marketGlow = undefined;
+    this.seasonOn = false;
+    this.seasonLayer = undefined;
+    this.seasonHaze = undefined;
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -800,6 +807,54 @@ export class StreetScene extends Phaser.Scene {
     });
   }
 
+  /** 東原：龍眼焙季。煙和香味籠罩老街，騎樓下有人在剝龍眼 */
+  private updateLonganSeason(dt: number, running: boolean) {
+    const s = S();
+    const on = longanSeason(s);
+    if (on !== this.seasonOn) {
+      this.seasonOn = on;
+      this.seasonLayer?.destroy();
+      this.seasonLayer = undefined;
+      this.seasonHaze?.destroy();
+      this.seasonHaze = undefined;
+      if (on) {
+        this.seasonHaze = this.add.rectangle(0, 0, W, H, 0xa07848, 0.17).setOrigin(0).setScrollFactor(0).setDepth(49);
+        // 騎樓下剝龍眼的人：板凳、一大盆龍眼
+        const layer = this.add.container(0, 0).setDepth(12);
+        s.lots.forEach((l, i) => {
+          if (!l.shop || i % 2 === 1) return;
+          const x = this.L.lotX(i) + 26, y = GROUND_Y + 6;
+          const k = i % RESIDENT_LOOKS.length;
+          const key = ensureCharTexture(this, `resident${k}`, RESIDENT_LOOKS[k]);
+          const g = this.add.graphics();
+          g.fillStyle(0xd64545);
+          g.fillRect(x - 10, y - 12, 20, 4);
+          g.fillRect(x - 8, y - 8, 3, 8);
+          g.fillRect(x + 5, y - 8, 3, 8);
+          g.fillStyle(0xc0c4c8);
+          g.fillEllipse(x + 26, y - 4, 30, 10);
+          g.fillStyle(0x8a5a2a);
+          for (let n = 0; n < 9; n++) g.fillCircle(x + 16 + (n % 5) * 5, y - 7 - Math.floor(n / 5) * 3, 2.6);
+          const person = this.add.image(x, y - 10, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setCrop(0, 0, CHAR_W, 59);
+          layer.add([g, person]);
+        });
+        this.seasonLayer = layer;
+      }
+    }
+    if (!on || !running) return;
+    const mult = store.speed;
+    this.seasonTimer -= dt * mult;
+    if (this.seasonTimer > 0) return;
+    this.seasonTimer = 500 + Math.random() * 600;
+    const cam = this.cameras.main;
+    // 家家戶戶屋後的焙灶冒煙
+    const x = cam.scrollX + Math.random() * W;
+    const puff = this.add.circle(x, GROUND_Y - 240 - Math.random() * 40, 12 + Math.random() * 8, 0xb0a088, 0.6).setDepth(9);
+    this.tweens.add({ targets: puff, y: puff.y - 120, x: x + Phaser.Math.Between(10, 60), scale: 2.8, alpha: 0, duration: 3200, onComplete: () => puff.destroy() });
+    // 飄過來的龍眼香
+    if (Math.random() < 0.35) this.floatText(cam.scrollX + 80 + Math.random() * (W - 160), GROUND_Y - 160 - Math.random() * 80, '龍眼香～', '#f3dcb0', 14);
+  }
+
   /** 東原：週一夜市、週五早市在馬路上擺攤 */
   private updateMarketStalls() {
     const s = S();
@@ -1024,6 +1079,7 @@ export class StreetScene extends Phaser.Scene {
       this.updateFilmScreen();
       this.updatePilgrimMarkers();
       this.updateMarketStalls();
+      this.updateLonganSeason(dt, running && !store.storyRunning);
     }
 
     if (running) {
@@ -2498,9 +2554,11 @@ export class StreetScene extends Phaser.Scene {
     if (!box) return;
     this.kilnTimer -= dt;
     if (this.kilnTimer > 0) return;
-    this.kilnTimer = 900 + Math.random() * 600;
+    // 龍眼焙季：日夜都在焙，煙又濃又密
+    const season = longanSeason(S());
+    this.kilnTimer = season ? 300 + Math.random() * 250 : 900 + Math.random() * 600;
     const x = box.x + KILN.chimneyX + Phaser.Math.Between(-4, 4), y = GROUND_Y + KILN.chimneyY;
-    const puff = this.add.circle(x, y, 7 + Math.random() * 4, 0xd8d0c4, 0.5).setDepth(12);
+    const puff = this.add.circle(x, y, (season ? 10 : 7) + Math.random() * 4, season ? 0xc8b8a0 : 0xd8d0c4, season ? 0.6 : 0.5).setDepth(12);
     this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(80, 130), x: x + Phaser.Math.Between(10, 50), scale: 2.6, alpha: 0, duration: 2600, onComplete: () => puff.destroy() });
   }
 

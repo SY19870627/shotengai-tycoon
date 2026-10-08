@@ -23,7 +23,7 @@ import {
 } from './memory';
 import {
   futureDefaults, futureVisitors, futureMods, futureUpkeepMult, endDayFuture, dailyFutureUpdate, processionToday, nightMarket,
-  futureDone,
+  futureDone, seasonSpendMult,
 } from './future';
 
 export const DAY_START_MIN = 7 * 60;
@@ -984,7 +984,7 @@ export function completeVisit(
   const def = SHOP_BY_ID[shop.defId];
   shop.inside = Math.max(0, shop.inside - 1);
   // 外國觀光客出手比較大方，有翻譯時更願意多買
-  const foreignMult = !isForeign(origin) ? (origin === 'resident' ? RESIDENT_SPEND : 1) : 1.15 + 0.15 * moduleEff(s, 'multilingual');
+  const foreignMult = !isForeign(origin) ? (origin === 'resident' ? RESIDENT_SPEND * seasonSpendMult(s) : 1) : 1.15 + 0.15 * moduleEff(s, 'multilingual');
   if (isForeign(origin)) s.today.foreign += 1;
   // 東原：居民邊買邊聊，慢慢說出以前的事
   const memory = origin === 'resident' ? residentChat(s, def.id) : null;

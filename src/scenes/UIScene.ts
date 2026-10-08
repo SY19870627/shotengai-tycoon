@@ -17,7 +17,7 @@ import {
 } from '../core/memory';
 import {
   FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, PROCESSION_PREPS, buyPrep, processionDay, processionDaysLeft,
-  nightMarket, morningMarket, fudeToday, raceToday, processionToday,
+  nightMarket, morningMarket, fudeToday, raceToday, processionToday, longanSeason, longanSeasonDaysLeft,
 } from '../core/future';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
@@ -360,6 +360,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (s.kinship < 30) { items.push(`鄉親：${kinshipLabel(s.kinship)}`); colors[items.length - 1] = '#ff9a8a'; }
       if (canTrip(s).ok) { items.push(`龍眼窯：今晚可以放白布電影（回到 ${nextEra(s)} 年）`); colors[items.length - 1] = '#f3e3c2'; }
       if (canMovie(s).ok) { items.push('龍眼窯：今晚可以放露天電影'); colors[items.length - 1] = '#f3e3c2'; }
+      if (longanSeason(s)) { items.push('龍眼焙季：煙和香味籠罩老街，白天大家在剝龍眼'); colors[items.length - 1] = '#d8b080'; }
+      else {
+        const ls = longanSeasonDaysLeft(s);
+        if (ls !== null && ls <= 3) { items.push(`龍眼焙季：還有 ${ls} 天`); colors[items.length - 1] = '#e8c8a0'; }
+      }
       if (nightMarket(s)) { items.push('週一夜市：晚上村民都出來逛'); colors[items.length - 1] = '#f0b070'; }
       if (morningMarket(s)) { items.push('週五早市：一早就很熱鬧'); colors[items.length - 1] = '#b8e0a0'; }
       if (fudeToday(s)) { items.push('土地公的活動：拜拜、辦桌'); colors[items.length - 1] = '#f0a0a0'; }
