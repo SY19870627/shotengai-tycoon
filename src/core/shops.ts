@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95' | 'showa60';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95' | 'showa60' | 'railside';
 
 export interface ShopDef {
   id: string;
@@ -267,6 +267,37 @@ export const SHOPS: ShopDef[] = [
     hours: [0, 30], wallColor: 0xe9dcc4, awningColor: 0x6b4a3a,
     description: '傍晚旅客入住泡湯、隔天早上退房逛街。要用泉水，泉量不夠評價會變差。怕吵。',
   }),
+  // ---- 十分 ----
+  S({
+    id: 'lantern', name: '天燈店', short: '天燈', category: 'leisure',
+    spend: 250, appeal: 0.13, capacity: 8, stayMinutes: 12, upkeep: 380, baseRent: 1100,
+    hours: [9, 22], wallColor: 0xf6e2b8, awningColor: 0xd63b3b,
+    description: '十分的主角！遊客買天燈、寫願望、在鐵軌上放。每放一盞，天上就多一盞燈。',
+  }),
+  S({
+    id: 'wingrice', name: '雞翅包飯', short: '雞翅', category: 'food',
+    spend: 95, appeal: 0.11, capacity: 6, stayMinutes: 6, upkeep: 260, baseRent: 850,
+    hours: [9, 21], wallColor: 0xf0d8a8, awningColor: 0xe0862a,
+    description: '十分的招牌小吃，烤得金黃，邊走邊吃。翻桌超快。',
+  }),
+  S({
+    id: 'peanutroll', name: '花生捲冰淇淋', short: '花生捲', category: 'food',
+    spend: 60, appeal: 0.1, capacity: 5, stayMinutes: 5, upkeep: 180, baseRent: 650,
+    hours: [9, 20], wallColor: 0xf8f0dc, awningColor: 0x7fb7d6,
+    description: '刨花生糖、香菜、冰淇淋捲成一捲。便宜又快。',
+  }),
+  S({
+    id: 'railgoods', name: '鐵道紀念品', short: '鐵道', category: 'retail',
+    spend: 220, appeal: 0.06, capacity: 5, stayMinutes: 12, upkeep: 380, baseRent: 1000,
+    hours: [9, 21], wallColor: 0xdfe6ea, awningColor: 0x2f5f8f,
+    description: '小火車模型、復古車票、平溪線便當盒。鐵道迷和外國遊客最愛。',
+  }),
+  S({
+    id: 'wishshop', name: '許願竹筒', short: '竹筒', category: 'retail',
+    spend: 130, appeal: 0.075, capacity: 5, stayMinutes: 10, upkeep: 240, baseRent: 800,
+    hours: [9, 21], wallColor: 0xe8e0b8, awningColor: 0x5a8a3a,
+    description: '在竹筒上寫願望，掛在店門口。天燈放完，願望還沒寫夠的人都會來。',
+  }),
 ];
 
 export const SHOP_BY_ID: Record<string, ShopDef> = Object.fromEntries(SHOPS.map((s) => [s.id, s]));
@@ -298,7 +329,7 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   caogui: { fishball: 1.1, souvenir: 1.1 },
   teahouse: { ocarina: 1.2, taro: 1.1 },
   ocarina: { teahouse: 1.2, cafe: 1.1 },
-  cafe: { ocarina: 1.1, souvenir: 1.05, yukata: 1.1 },
+  cafe: { ocarina: 1.1, souvenir: 1.05, yukata: 1.1, railgoods: 1.15 },
   souvenir: { brownsugar: 1.1, caogui: 1.1 },
   bathhouse: { yukata: 1.2, mudspa: 1.15, onsenegg: 1.1 },
   mudspa: { bathhouse: 1.15 },
@@ -313,6 +344,11 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   barber: { pharmacy: 1.1, grocery: 1.05 },
   pharmacy: { barber: 1.1, grocery: 1.1 },
   longan: { cafe: 1.1, blacksmith: 1.05 },
+  lantern: { wingrice: 1.2, wishshop: 1.15, peanutroll: 1.1 },
+  wingrice: { lantern: 1.2, peanutroll: 1.1 },
+  peanutroll: { wingrice: 1.1, lantern: 1.1 },
+  railgoods: { cafe: 1.15, souvenir: 1.05 },
+  wishshop: { lantern: 1.15, railgoods: 1.05 },
 };
 
 /** 同一種店距離兩格以內會互搶客人 */

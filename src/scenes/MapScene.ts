@@ -118,7 +118,7 @@ export class MapScene extends Phaser.Scene {
     add(this.add.rectangle(x, y, w, 10, C.red).setOrigin(0));
     add(this.add.text(x + 24, y + 28, st.name, { fontFamily: FONT, fontSize: '30px', fontStyle: '900', color: hex(C.ink) }));
     add(this.add.text(x + 24, y + 72, st.region, { fontFamily: FONT, fontSize: '15px', color: '#6a6378' }));
-    add(this.add.text(x + w - 24, y + 36, `難度 ${'★'.repeat(st.difficulty)}${'☆'.repeat(5 - st.difficulty)}`, {
+    add(this.add.text(x + w - 24, y + 36, `難度 ${st.difficulty < 1 ? '½' : '★'.repeat(st.difficulty)}${'☆'.repeat(5 - Math.ceil(st.difficulty))}`, {
       fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: '#c8902a',
     }).setOrigin(1, 0));
     add(this.add.text(x + 24, y + 102, st.tagline, { fontFamily: FONT, fontSize: '17px', fontStyle: '700', color: '#b3262e' }));

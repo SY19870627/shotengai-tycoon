@@ -359,6 +359,18 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'cyclist', name: '單車隊隊長',
     look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),
   },
+  sfStation: {
+    id: 'sfStation', name: '站務員阿德',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x2b3f7a, pants: 0x2b2b3a, accessory: 'cap', age: 'mid' }),
+  },
+  sfMiner: {
+    id: 'sfMiner', name: '退休礦工 阿土伯',
+    look: L({ skin: 0xb07a52, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0x6a6a5a, pants: 0x3d3a36, accessory: 'hat', age: 'old' }),
+  },
+  sfCat: {
+    id: 'sfCat', name: '猴硐來的橘貓', kind: 'cat',
+    look: L({ skin: 0xe8a050, hair: 0xe8a050, hairStyle: 'short', shirt: 0xe8a050, pants: 0xe8a050, accessory: 'none', age: 'young' }),
+  },
   busGuide: {
     id: 'busGuide', name: '遊覽車導遊',
     look: L({ skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'bob', shirt: 0xd64545, pants: 0x2b2b3a, accessory: 'hat', age: 'mid' }),

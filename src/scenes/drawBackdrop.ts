@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GROUND_Y, W, lerpColor, shade } from '../theme';
 
-export type BackdropKind = 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard';
+export type BackdropKind = 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley';
 
 /** 遠景霧色：遠層顏色往此色靠攏以降低飽和度 */
 const HAZE = 0xc9d6dc;
@@ -59,6 +59,7 @@ export function drawBackdrop(scene: Phaser.Scene, kind: BackdropKind, worldW: nu
     case 'mountain-sea': return mountainSea(scene, rng, worldW);
     case 'hot-spring': return hotSpring(scene, rng, worldW);
     case 'orchard': return orchard(scene, rng, worldW);
+    case 'pingxi-valley': return pingxiValley(scene, rng, worldW);
     default: return simpleHills(scene, rng, worldW, [0xa8b8b0, 0x88a890, 0x689870], false);
   }
 }
@@ -1061,4 +1062,94 @@ export function drawSugarFactory(scene: Phaser.Scene, worldW: number): Phaser.Ga
     g.fillTriangle(x - 3, base - 10, x + 4, base - 10, x, base - 28);
   }
   return [g, n];
+}
+
+// ───────────────────────── 十分：基隆河谷、陡峭的綠山 ─────────────────────────
+
+function pingxiValley(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, worldW: number): Phaser.GameObjects.GameObject[] {
+  const f1 = 0.08, f2 = 0.2, f3 = 0.4;
+  // 遠山：又高又陡，一層一層的綠
+  const g1 = layer(scene, f1, 0.5);
+  const w1 = layerWidth(worldW, f1);
+  ridge(g1, rng, -100, w1, GROUND_Y - 230, 90, haze(0x5f9a6a, 0.6), 4, 18);
+  ridge(g1, rng, -100, w1, GROUND_Y - 170, 80, haze(0x4f8e5c, 0.45), 4, 18);
+
+  // 中景：山坡上的鐵皮屋、樹林、遠遠的吊橋
+  const g2 = layer(scene, f2, 1);
+  const n2 = nightLayer(scene, f2, 59);
+  const w2 = layerWidth(worldW, f2);
+  const top2 = ridge(g2, rng, -100, w2, GROUND_Y - 110, 70, haze(0x3f8a50, 0.25), 3, 16);
+  for (let x = 0; x < w2; x += rng.between(22, 46)) tree(g2, x, top2(x) + 10, rng.between(18, 30), haze(rng.pick([0x2f7a42, 0x3a8a48, 0x2a6e3a]), 0.2));
+  // 山腰上的小房子（鐵皮屋頂，晚上窗戶亮）
+  for (let x = 40; x < w2; x += rng.between(120, 220)) {
+    const y = top2(x) + rng.between(26, 50);
+    const hw = rng.between(26, 40), hh = rng.between(16, 24);
+    g2.fillStyle(haze(rng.pick([0xd8d0c0, 0xc8b8a0, 0xe0dcd0]), 0.2));
+    g2.fillRect(x, y - hh, hw, hh);
+    g2.fillStyle(haze(rng.pick([0x3a6a8a, 0x8a4a3a, 0x5a6a5a]), 0.2));
+    g2.fillRect(x - 3, y - hh - 5, hw + 6, 6);
+    g2.fillStyle(0x5a6068, 0.8);
+    g2.fillRect(x + 6, y - hh + 6, 6, 6);
+    n2.fillStyle(0xffd27a, 0.7);
+    n2.fillRect(x + 6, y - hh + 6, 6, 6);
+  }
+  // 遠遠的吊橋
+  const bx = Math.min(w2 - 200, 520);
+  const by = GROUND_Y - 60;
+  g2.lineStyle(2, haze(0x6a4a3a, 0.2));
+  g2.lineBetween(bx, by - 30, bx, by + 6);
+  g2.lineBetween(bx + 160, by - 30, bx + 160, by + 6);
+  g2.beginPath();
+  g2.moveTo(bx, by - 30);
+  for (let k = 0; k <= 16; k++) g2.lineTo(bx + k * 10, by - 30 + Math.sin((k / 16) * Math.PI) * 22);
+  g2.strokePath();
+  g2.lineStyle(3, haze(0x8a6a4a, 0.2));
+  g2.lineBetween(bx, by, bx + 160, by);
+
+  // 基隆河：岩石、白色水花
+  g2.fillStyle(haze(0x7fb0b8, 0.2));
+  g2.fillRect(-100, GROUND_Y - 44, w2 + 200, 18);
+  g2.fillStyle(0xffffff, 0.6);
+  for (let x = 0; x < w2; x += rng.between(30, 70)) g2.fillRect(x, GROUND_Y - 38, rng.between(8, 24), 2);
+  g2.fillStyle(haze(0x8a8a80, 0.2));
+  for (let x = 0; x < w2; x += rng.between(50, 120)) g2.fillEllipse(x, GROUND_Y - 30, rng.between(20, 40), 10);
+  g2.fillStyle(haze(0x4a8a52, 0.2));
+  g2.fillRect(-100, GROUND_Y - 26, w2 + 200, 70);
+
+  // 近景：鐵道旁的矮房子與芒草、竹子
+  const g3 = layer(scene, f3, 1.5);
+  const w3 = layerWidth(worldW, f3);
+  g3.fillStyle(0x4f8a50);
+  g3.fillRect(-100, GROUND_Y - 22, w3 + 200, 60);
+  let x = -40;
+  while (x < w3) {
+    const k = rng.between(0, 9);
+    if (k < 5) {
+      const hw = rng.between(60, 100), hh = rng.between(34, 54);
+      const base = GROUND_Y - 12;
+      const wall = rng.pick([0xd8d0c0, 0xc0b8a8, 0xe0d8c8, 0xb8a890]);
+      g3.fillStyle(wall);
+      g3.fillRect(x, base - hh, hw, hh);
+      // 鐵皮屋頂（藍、紅、灰）
+      const roof = rng.pick([0x3a6a8a, 0x9a4a3a, 0x6a7078]);
+      g3.fillStyle(roof);
+      g3.fillRect(x - 6, base - hh - 8, hw + 12, 9);
+      g3.lineStyle(1, shade(roof, -0.3), 0.8);
+      for (let rx = x - 4; rx < x + hw + 6; rx += 6) g3.lineBetween(rx, base - hh - 8, rx, base - hh + 1);
+      g3.fillStyle(shade(wall, -0.35));
+      for (let wx = x + 10; wx < x + hw - 14; wx += 24) g3.fillRect(wx, base - hh + 10, 12, 12);
+      x += hw + rng.between(14, 40);
+    } else if (k < 8) {
+      tree(g3, x + 20, GROUND_Y - 10, rng.between(40, 62), rng.pick([0x2f7a42, 0x3a8a48, 0x2a6e3a]));
+      x += rng.between(40, 70);
+    } else {
+      // 竹子
+      g3.fillStyle(0x5a9a4a);
+      for (let b = 0; b < 5; b++) g3.fillRect(x + b * 7, GROUND_Y - 90 - rng.between(0, 20), 3, 90);
+      g3.fillStyle(0x6aaa52);
+      for (let b = 0; b < 5; b++) g3.fillEllipse(x + b * 7 + 4, GROUND_Y - 96 - rng.between(0, 20), 18, 8);
+      x += 50;
+    }
+  }
+  return [g1, g2, n2, g3];
 }

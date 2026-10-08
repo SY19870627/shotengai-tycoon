@@ -49,6 +49,11 @@ function readJSON<T>(key: string): T | null {
 function loadMeta(): Meta {
   const m = readJSON<Meta>(META_KEY);
   if (!m || !Array.isArray(m.unlocked)) return defaultMeta();
+  // 後來才加的新老街：已經破關的老街，下一條直接解鎖
+  for (const id of m.completed ?? []) {
+    const next = STREETS[id]?.next;
+    if (next && !m.unlocked.includes(next)) m.unlocked.push(next);
+  }
   return m;
 }
 

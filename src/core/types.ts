@@ -398,8 +398,9 @@ export interface StreetDef {
   map: { x: number; y: number };
   playable: boolean;
   facade: FacadeStyle;
-  backdrop: 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard';
-  ground: 'brick' | 'stone';
+  backdrop: 'basin-hills' | 'mountain-sea' | 'hot-spring' | 'orchard' | 'pingxi-valley';
+  /** rail：十分，街前面有一條鐵軌 */
+  ground: 'brick' | 'stone' | 'rail';
   layout: LayoutItem[];
   landmarks: LandmarkDef[];
   startLots: number;
@@ -433,6 +434,8 @@ export interface StreetDef {
   spring?: { base: number; wellCost: number[]; wellYield: number };
   /** 固定在第幾天發生大地震 */
   quakeDay?: number;
+  /** 十分：火車班次（每幾分鐘一班、第一班與最後一班的時間、每班倒出多少人） */
+  train?: { interval: number; weekendInterval: number; first: number; last: number; burst: number };
   /** 妖怪祭當天的打烊時間 */
   festivalCloseHour?: number;
   /** 東原：用回憶點數經營（居民人潮、屋主、老店作法、一開始就在的店） */
@@ -570,6 +573,10 @@ export interface DayStats {
   residents?: number;
   tourists?: number;
   mem?: Memories;
+  /** 十分：今天放的天燈、最高的火車連擊、火車班次 */
+  lanterns?: number;
+  combo?: number;
+  trains?: number;
 }
 
 export interface DaySummary {
@@ -615,6 +622,10 @@ export interface DaySummary {
   mem?: Memories;
   kinshipBefore?: number;
   kinshipAfter?: number;
+  /** 十分 */
+  lanterns?: number;
+  combo?: number;
+  trains?: number;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
@@ -723,4 +734,10 @@ export interface GameState {
   future: Record<string, { start: number; done: boolean }>;
   /** 東原：全山頭繞境做了哪些準備 */
   procession: string[];
+  // ---- 十分（其他老街用預設值） ----
+  /** 天上飄著的天燈（每放一盞 +1，慢慢消散） */
+  skyGlow: number;
+  /** 一天最多放過幾盞、最高的火車連擊 */
+  lanternBest: number;
+  bestCombo: number;
 }

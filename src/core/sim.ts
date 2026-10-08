@@ -5,6 +5,7 @@ import {
 import { yokaiChance, rollYokai, paysLeaves, fireStopChance, registerFireVisitor, HIKE_CHANCE, HIKER_SPEND } from './onsen';
 import type { GameState, Origin, YokaiKind } from './types';
 import { SHOP_BY_ID, type Category } from './shops';
+import { isRailStreet, trainsBetween, trainBurst, trainCombo } from './shifen';
 
 const CATS: Category[] = ['food', 'retail', 'leisure', 'daily'];
 
@@ -40,6 +41,14 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
     }
     const arrivals: { origin: Origin; start?: number }[] = [];
     if (s.minute < lastSpawnMin(s)) carry += tickTraffic(s, stepMin);
+    // 十分：火車進站，一次倒出一大波遊客（從車站那頭往街裡走），火車開過去時兩邊的店連擊
+    if (isRailStreet(s)) {
+      for (const _t of trainsBetween(s, s.minute - stepMin, s.minute)) {
+        const n = trainBurst(s);
+        for (let k = 0; k < n; k++) arrivals.push({ origin: rollOrigin(s, rand), start: 0 });
+        trainCombo(s, rand);
+      }
+    }
     while (carry >= 1) {
       carry -= 1;
       arrivals.push({ origin: rollOrigin(s, rand) });
@@ -67,7 +76,8 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
       let visits = 0;
       const route = passerbyRoute(s.lots.filter((l) => l.unlocked).length, rand);
       const start = a.start ?? route.start;
-      const { dir, span } = route;
+      const dir = a.start === 0 ? 1 : route.dir;
+      const { span } = route;
       for (let k = 0; k < span; k++) {
         const i = start + dir * k;
         if (i < 0 || i >= s.lots.length) break;
@@ -86,7 +96,7 @@ export function simulateDay(s: GameState, rand: () => number = Math.random, step
     for (let k = pending.length - 1; k >= 0; k--) {
       if (pending[k].leaveAt <= s.minute) {
         const p = pending[k];
-        completeVisit(s, p.lot, (0.8 + rand() * 0.4) * p.spend, p.origin, p.yokai);
+        completeVisit(s, p.lot, (0.8 + rand() * 0.4) * p.spend, p.origin, p.yokai, rand);
         pending.splice(k, 1);
       }
     }

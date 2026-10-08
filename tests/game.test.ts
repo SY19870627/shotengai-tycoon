@@ -23,6 +23,7 @@ import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
+import { trainInterval, trainsBetween, trainCombo, decaySky } from '../src/core/shifen';
 import { STREETS } from '../src/content';
 import { NPCS } from '../src/content/npcs';
 import type { GameState, Step } from '../src/core/types';
@@ -1120,5 +1121,77 @@ describe('東原', () => {
       startNextDay(s, rand);
     }
     expect(s.lots.filter((l) => l.unlocked).length).toBeGreaterThanOrEqual(7);
+  });
+});
+
+describe('十分', () => {
+  const sf = () => createGame('shifen', seeded(5));
+
+  it('火車班次：平日 20 分鐘一班、假日 15 分鐘一班，加班車再密一點', () => {
+    const s = sf();
+    s.day = 1; // 週五
+    expect(trainInterval(s)).toBe(20);
+    s.day = 2; // 週六
+    expect(trainInterval(s)).toBe(15);
+    s.flags.push('moreTrains');
+    expect(trainInterval(s)).toBe(10);
+    expect(trainsBetween(s, 8.5 * 60 - 1, 8.5 * 60)).toEqual([8.5 * 60]);
+  });
+
+  it('火車連擊：每間開著的店立刻進客人，消費 ×2；天燈店的客人會放天燈', () => {
+    const s = sf();
+    signTenant(s, 0, 'sf-gong', 1);
+    signTenant(s, 1, 'sf-wing', 1);
+    s.minute = 12 * 60;
+    const before = s.money;
+    const { hits, combo } = trainCombo(s, seeded(2));
+    expect(hits.length).toBe(2);
+    expect(combo).toBeGreaterThanOrEqual(2);
+    expect(s.money).toBeGreaterThan(before);
+    expect(s.today.lanterns).toBeGreaterThan(0);
+    expect(s.bestCombo).toBe(combo);
+    expect(s.skyGlow).toBeGreaterThan(0);
+  });
+
+  it('天上的天燈越多，人潮越多；天燈會慢慢消散', () => {
+    const s = sf();
+    const t0 = combinedMods(s).traffic;
+    s.skyGlow = 100;
+    expect(combinedMods(s).traffic).toBeGreaterThan(t0);
+    decaySky(s, 60);
+    expect(s.skyGlow).toBeLessThan(30);
+  });
+
+  it('數值模擬：簽店、整修、辦活動，30 天內可以看到「萬燈齊放」', () => {
+    const s = sf();
+    const rand = seeded(9);
+    const run = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); };
+    let day = 0;
+    for (let d = 1; d <= 30 && !s.chapterComplete; d++) {
+      day = d;
+      for (let i = 0; i < s.lots.length; i++) {
+        if (s.lots[i].unlocked && !s.lots[i].shop && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 1);
+      }
+      if (s.money > nextLotCost(s) + 8000) unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+      if (s.money > 25000) {
+        const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
+        if (i >= 0) renovate(s, i);
+      }
+      if (canStartActivity(s, 'templeFair').ok) startActivity(s, 'templeFair', undefined, rand);
+      for (const when of ['morning', 'noon'] as const) {
+        const st = pickStory(s, when, rand);
+        if (st) run(st.steps);
+      }
+      s.minute = DAY_START_MIN;
+      simulateDay(s, rand);
+      s.minute = 18.5 * 60;
+      const ev = pickStory(s, 'evening', rand);
+      if (ev) run(ev.steps);
+      endDay(s, rand);
+      expect(s.gameOver).toBe(false);
+      startNextDay(s, rand);
+    }
+    expect(s.chapterComplete).toBe(true);
+    expect(day).toBeGreaterThan(10);
   });
 });

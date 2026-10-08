@@ -789,4 +789,5 @@ export const DONGYUAN: StreetDef = {
     { id: 'kinship', text: '鄉親認同達到 100', check: (s) => s.flags.includes('kinship100') },
     { id: 'future', text: '完成 3 個未來計畫', check: (s) => futureDoneCount(s) >= 3 },
   ],
+  next: 'shifen',
 };

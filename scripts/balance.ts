@@ -134,6 +134,7 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
     (sum.overnight ? ` 住宿${sum.overnight}(${sum.avgStars?.toFixed(1)}★)` : '') +
     (sum.kinshipAfter !== undefined ? ` 居民${sum.residents ?? 0}/遊客${sum.tourists ?? 0} 鄉親${sum.kinshipAfter} 回憶[${MEMORY_KINDS.map((k) => s.memories[k]).join(',')}]` : '') +
     (sum.spring ? ` 泉${sum.spring.supply}/${sum.spring.demand} 怨${sum.grievanceAfter} 火${s.fireLevel}(${s.fireMode})$${sum.fireIncome}` : '') +
+    (sum.lanterns !== undefined || sum.trains ? ` 天燈${sum.lanterns ?? 0} 連擊${sum.combo ?? 0} 車${sum.trains ?? 0}` : '') +
     (sum.closed?.length ? ` 靜坐:${sum.closed}` : '') + (sum.festival ? ' ★妖怪祭' : '') + (s.festival?.leafCommission ? ` 樹葉$${s.festival.leafCommission}` : ''),
   );
   for (const l of log.splice(0)) console.log(l);

@@ -25,6 +25,7 @@ import {
   futureDefaults, futureVisitors, futureMods, futureUpkeepMult, endDayFuture, dailyFutureUpdate, processionToday, nightMarket,
   futureDone, seasonSpendMult,
 } from './future';
+import { shifenDefaults, isRailStreet, skyMods, decaySky, releaseLanterns, endDayShifen, type LanternColor } from './shifen';
 
 export const DAY_START_MIN = 7 * 60;
 export const DAY_END_MIN = 23 * 60;
@@ -152,6 +153,7 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     ...onsenDefaults(),
     ...memoryDefaults(),
     ...futureDefaults(),
+    ...shifenDefaults(),
   };
   // 東原：一開始就在的老店、帶著的回憶
   if (street.memory) {
@@ -816,6 +818,8 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
   for (const b of s.buffs) all.push(b.mods);
   if (festivalActive(s)) all.push(FESTIVAL_MODS);
   if (s.future && streetOf(s).memory) all.push(futureMods(s));
+  // 十分：天上的天燈越多，人潮越多
+  if (isRailStreet(s)) all.push(skyMods(s));
   const out = {
     traffic: 1, appealAll: 1, repPerDay: 0, transport: 1, foreign: 1,
     appeal: {} as Partial<Record<Category, number>>, shopAppeal: {} as Record<string, number>,
@@ -942,6 +946,7 @@ export function strandedPerHour(s: GameState): number {
 
 /** 時間前進 dm 分鐘：回傳這段時間新到的路人數（小數），並記錄被卡在山下的人 */
 export function tickTraffic(s: GameState, dm: number): number {
+  decaySky(s, dm);
   s.today.stranded += (strandedPerHour(s) * dm) / 60;
   return (trafficPerHour(s) * dm) / 60;
 }
@@ -973,11 +978,16 @@ export interface VisitResult {
   coupon: boolean;
   /** 東原：居民聊出的回憶 */
   memory?: MemoryKind | null;
+  /** 十分：這位客人放了幾盞天燈（巨型天燈算 10 盞） */
+  lanterns?: number;
+  giant?: boolean;
+  color?: LanternColor;
 }
 
 /** 客人消費完離開 */
 export function completeVisit(
   s: GameState, index: number, spendRoll = 1, origin: Origin = 'local', yokai?: { kind: YokaiKind; leaves: boolean },
+  rand: () => number = Math.random,
 ): VisitResult {
   const shop = s.lots[index]?.shop;
   if (!shop) return { revenue: 0, income: 0, coupon: false };
@@ -1008,7 +1018,12 @@ export function completeVisit(
     s.today.yokai += 1;
     if (yokai.leaves) recordLeaves(s, shop.tenantId, revenue, commission);
   }
-  return { revenue, income: commission - couponCost, coupon, memory };
+  // 十分：天燈店的客人放天燈
+  const lantern = def.id === 'lantern' ? releaseLanterns(s, shop.level, rand) : null;
+  return {
+    revenue, income: commission - couponCost, coupon, memory,
+    ...(lantern ? { lanterns: lantern.n, giant: lantern.giant, color: lantern.color } : {}),
+  };
 }
 
 // =====================================================================
@@ -1298,6 +1313,7 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
   const closed = s.closedToday.map((i) => { const sh = s.lots[i]?.shop; return sh ? (profileOf(s, sh.tenantId)?.shopName ?? SHOP_BY_ID[sh.defId].name) : ''; }).filter(Boolean);
   const grievanceBefore = s.grievance;
   const fest = festivalActive(s);
+  if (isRailStreet(s)) endDayShifen(s);
   const rent = rentIncome(s);
   const maintenance = street.maintenance + unlockedCount(s) * 60 + ownerUpkeep(s);
   const kinshipBefore = s.kinship;
@@ -1361,6 +1377,9 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     mem: s.today.mem,
     kinshipBefore: street.memory ? kinshipBefore : undefined,
     kinshipAfter: street.memory ? s.kinship : undefined,
+    lanterns: s.today.lanterns,
+    combo: s.today.combo,
+    trains: s.today.trains,
     avgStars: avgStars(s.reviews),
     turnedAway: s.today.turnedAway,
     reputationBefore: before,
@@ -1530,7 +1549,7 @@ export function deserialize(raw: string): GameState | null {
     data.morning ??= [];
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
+    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults(), ...shifenDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
     // 東原：在回憶時光裡關掉遊戲，回到 2016 年的當晚（這一晚不能再放）
     if (data.trip) {
       data.minute = data.trip.returnMinute;

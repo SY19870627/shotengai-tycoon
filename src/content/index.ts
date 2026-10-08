@@ -3,6 +3,7 @@ import { SHENKENG } from './shenkeng';
 import { JIUFEN } from './jiufen';
 import { GUANZILING } from './guanziling';
 import { DONGYUAN } from './dongyuan';
+import { SHIFEN } from './shifen';
 
 /** 尚未開放的老街（地圖上先顯示） */
 export function comingSoon(id: string, name: string, region: string, difficulty: number, tagline: string, map: { x: number; y: number }): StreetDef {
@@ -20,7 +21,8 @@ export const STREETS: Record<string, StreetDef> = {
   jiufen: JIUFEN,
   guanziling: GUANZILING,
   dongyuan: DONGYUAN,
+  shifen: SHIFEN,
 };
 
 /** 劇情模式的順序 */
-export const CAMPAIGN = ['shenkeng', 'jiufen', 'guanziling', 'dongyuan'];
+export const CAMPAIGN = ['shenkeng', 'jiufen', 'guanziling', 'dongyuan', 'shifen'];
