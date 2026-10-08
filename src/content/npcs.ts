@@ -174,7 +174,7 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'ponytail', shirt: 0x2f6fb0, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
   },
   dySmith: {
-    id: 'dySmith', name: '打鐵的鐵伯',
+    id: 'dySmith', name: '打鐵伯',
     look: L({ skin: 0xb07a52, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'old' }),
   },
   // ---- 東原 1995（全部虛構） ----
@@ -227,7 +227,7 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'young' }),
   },
   p95Smith: {
-    id: 'p95Smith', name: '鐵伯（1995 年）',
+    id: 'p95Smith', name: '打鐵伯（1995 年）',
     look: L({ skin: 0xb07a52, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
   },
   p95Soup: {
@@ -304,7 +304,7 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xb07a52, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
   },
   p60SmithKid: {
-    id: 'p60SmithKid', name: '拉風箱的小男孩（鐵伯小時候）',
+    id: 'p60SmithKid', name: '拉風箱的小男孩（打鐵伯小時候）',
     look: L({ skin: 0xb07a52, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'kid' }),
   },
   p60Barber: {
