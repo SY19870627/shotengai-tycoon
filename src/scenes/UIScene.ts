@@ -367,7 +367,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       }
       if (nightMarket(s)) { items.push('週一夜市：晚上村民都出來逛'); colors[items.length - 1] = '#f0b070'; }
       if (sausageDay(s)) { items.push('香腸伯下午開三輪貨車來擺攤'); colors[items.length - 1] = '#f0c0a0'; }
-      if (chickenDay(s)) { items.push('禮拜三：鹹酥雞在國小擺攤'); colors[items.length - 1] = '#f0d890'; }
+      if (chickenDay(s)) { items.push('禮拜三：鹹酥雞下午在馬路上擺攤'); colors[items.length - 1] = '#f0d890'; }
       if (morningMarket(s)) { items.push('週五早市：一早就很熱鬧'); colors[items.length - 1] = '#b8e0a0'; }
       if (fudeToday(s)) { items.push('土地公的活動：拜拜、辦桌'); colors[items.length - 1] = '#f0a0a0'; }
       if (raceToday(s)) { items.push('腳踏車越野賽！'); colors[items.length - 1] = '#a0d0f0'; }
