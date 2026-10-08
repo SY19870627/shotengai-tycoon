@@ -132,7 +132,7 @@ export function pilgrimSteps(s: GameState, p: PilgrimDef): Step[] {
     appear(p.who, p.at, 40),
     say(p.who, p.line),
     emote(p.who, 'heart'),
-    effect({ kinship: 2, rep: 1, ...(p.effects ?? {}) }),
+    effect({ kinship: 1, rep: 1, ...(p.effects ?? {}) }),
     narrate(`回憶巡禮：${n} / ${total}`),
     leave(p.who),
   ];

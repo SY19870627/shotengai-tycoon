@@ -648,7 +648,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'dy-ending', street: ST, once: true, priority: 99, when: 'evening',
-    cond: (c) => (pilgrimageDone(c.s) ? {} : null),
+    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
     script: () => endingSteps(),
   },
 ];
@@ -779,5 +779,6 @@ export const DONGYUAN: StreetDef = {
   },
   goals: [
     { id: 'pilgrimage', text: `點亮所有回憶巡禮點（${PILGRIMAGE.length} 個）`, check: (s) => pilgrimageDone(s) },
+    { id: 'kinship', text: '鄉親認同達到 100', check: (s) => s.flags.includes('kinship100') },
   ],
 };

@@ -686,7 +686,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       m.add(this.text(x + 100, cy + 2, String(s.memories[k]), 20, hex(C.ink), '900'));
       m.add(this.text(x + 150, cy + 4, src[k], 13, '#4a4356').setWordWrapWidth(360, true));
     });
-    m.add(this.text(x + 30, y + 266, `鄉親認同 ${Math.round(s.kinship)}（${kinshipLabel(s.kinship)}）`, 17, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 266, `鄉親認同 ${Math.round(s.kinship)}（${kinshipLabel(s.kinship)}）${s.flags.includes('kinship100') ? '・已達成 100！' : '・過關目標：100'}`, 17, hex(C.ink), '900'));
     const share = residentShare(s);
     const dd = dailyKinshipDelta(s);
     m.add(this.text(x + 30, y + 294,
