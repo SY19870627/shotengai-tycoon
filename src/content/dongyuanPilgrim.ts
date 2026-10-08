@@ -17,10 +17,10 @@ export const PILGRIMAGE: PilgrimDef[] = [
     line: '散場的時候，人潮從戲院一路湧到街尾。我阿爸的肉圓，一下子就賣光了。',
   },
   {
-    id: 'p-snake', name: '蛇窩探險', at: lm('kiln'), need: '95-snake', era: 1995,
+    id: 'p-snake', name: '偷跑進蛇窟', at: lm('kiln'), need: '95-snake', era: 1995,
     hint: '回到 1995 年，荒廢的戲院裡好像有什麼', cost: { past: 4 },
-    caption: '1995・孩子們在荒廢的戲院比膽量', who: 'dyResident2',
-    line: '我兒子小時候也偷跑進去過！被蛇嚇到哭著跑回家，哈哈哈。',
+    caption: '1995・偷跑進蛇窟、被阿母拿藤條追的孩子', who: 'dyResident2',
+    line: '我兒子小時候也偷跑進去過！被蛇嚇到哭著跑回家，回到家又被我拿藤條修理一頓，哈哈哈。',
   },
   {
     id: 'p-tea', name: '榕樹下的奉茶', at: lm('treehouse'), need: '60-banyan', era: 1960,

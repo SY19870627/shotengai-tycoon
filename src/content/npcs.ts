@@ -243,8 +243,12 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'cap', age: 'kid' }),
   },
   p95Kid2: {
-    id: 'p95Kid2', name: '膽小的阿弟',
+    id: 'p95Kid2', name: '跟班的阿弟',
     look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x6abf69, pants: 0x2f3550, accessory: 'none', age: 'kid' }),
+  },
+  p95Mom: {
+    id: 'p95Mom', name: '阿龍的阿母',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xd35454, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
   },
   p95Adult: {
     id: 'p95Adult', name: '路過的阿伯',
