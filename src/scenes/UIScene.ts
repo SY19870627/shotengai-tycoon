@@ -641,27 +641,32 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       b.setEnabled(!got && left !== null && left > 0 && s.money >= pp.cost);
       m.add(b.root);
     });
-    // 未來計畫
-    const rowH = 64, colW = 500;
+    // 未來計畫：三欄，每格放名稱、效果、狀態、按鈕
+    const colW = Math.floor((MW - 60) / 3), cardW = colW - 10, cardH = 138;
     FUTURE_PLANS.forEach((p, n) => {
-      const cx = x + 30 + (n % 2) * (colW + 0), cy = y + 212 + Math.floor(n / 2) * (rowH + 44);
+      const cx = x + 30 + (n % 3) * colW, cy = y + 212 + Math.floor(n / 3) * (cardH + 8);
       const st = planState(s, p);
       const bg = st.state === 'done' ? 0xeaf4e4 : st.state === 'building' ? 0xfffbe8 : 0xffffff;
-      m.add(this.add.rectangle(cx, cy, colW - 12, rowH + 36, bg).setOrigin(0).setStrokeStyle(2, st.state === 'ready' ? 0x3f8f7f : 0xd8cfe0));
-      m.add(this.text(cx + 10, cy + 6, (futureDone(s, p.id) ? '✓ ' : '') + p.name, 16, hex(C.ink), '900'));
-      m.add(this.text(cx + 10, cy + 30, p.effect, 12, '#4a4356').setWordWrapWidth(colW - 160, true));
-      const sub = st.state === 'blocked' ? `條件：${st.reason}` : st.state === 'building' ? `進行中・還要 ${st.left} 天` : st.state === 'cooldown' ? `下次可以辦：${st.left} 天後` : st.state === 'done' ? '已完成' : p.desc;
-      m.add(this.text(cx + 10, cy + rowH + 14, sub, 11, st.state === 'blocked' ? '#b33a3a' : '#6a6378').setWordWrapWidth(colW - 40, true));
-      if (st.state === 'ready') {
+      m.add(this.add.rectangle(cx, cy, cardW, cardH, bg).setOrigin(0).setStrokeStyle(2, st.state === 'ready' ? 0x3f8f7f : 0xd8cfe0));
+      m.add(this.text(cx + 10, cy + 6, (futureDone(s, p.id) ? '✓ ' : '') + p.name, 15, hex(C.ink), '900').setWordWrapWidth(cardW - 20, true));
+      m.add(this.text(cx + 10, cy + 30, p.effect, 12, '#4a4356').setWordWrapWidth(cardW - 20, true).setLineSpacing(2));
+      const sub = st.state === 'blocked' ? `條件：${st.reason}`
+        : st.state === 'building' ? `進行中・還要 ${st.left} 天`
+          : st.state === 'cooldown' ? `下次可以辦：${st.left} 天後`
+            : st.state === 'done' ? '已完成'
+              : p.repeat ? `辦一天・之後每 ${p.repeat.cooldown} 天可以再辦` : `${p.days} 天完成`;
+      const ready = st.state === 'ready';
+      m.add(this.text(cx + 10, cy + cardH - 40, sub, 11, st.state === 'blocked' ? '#b33a3a' : '#6a6378', '700').setWordWrapWidth(ready ? cardW - 140 : cardW - 20, true));
+      if (ready) {
         const cost = `${money(p.cost)}${p.memory ? `＋${memoryText(p.memory)}` : ''}`;
-        const b = this.button(cx + colW - 142, cy + 8, 124, 44, `開始\n${cost}`, () => {
+        const b = this.button(cx + cardW - 122, cy + cardH - 48, 112, 40, `開始\n${cost}`, () => {
           const r = startPlan(s, p.id);
           if (!r.ok) return toast(r.reason);
           save();
           bus.emit(Ev.Changed);
-          toast(`「${p.name}」開始了！${p.days > 1 ? `${p.days} 天後完成。` : '明天舉辦。'}`);
+          toast(`「${p.name}」開始了！${p.desc}`);
           this.showFuture();
-        }, 0x3f8f7f, 12);
+        }, 0x3f8f7f, 11);
         b.setEnabled(s.money >= p.cost && (!p.memory || hasMemories(s, p.memory)));
         m.add(b.root);
       }
