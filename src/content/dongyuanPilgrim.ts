@@ -1,5 +1,6 @@
 import type { PilgrimDef, Step, GameState } from '../core/types';
 import { say, emote, narrate, focus, appear, leave, fx, effect } from './dsl';
+import { epilogueSteps } from './dongyuanFuture';
 
 /**
  * 東原的回憶巡禮：散落在 1960、1995 年的回憶，帶回 2016 年的同一個地點點亮。
@@ -139,7 +140,7 @@ export function pilgrimSteps(s: GameState, p: PilgrimDef): Step[] {
 }
 
 /** 結局：白布電影之夜 */
-export function endingSteps(): Step[] {
+export function endingSteps(s: GameState): Step[] {
   return [
     narrate('那天傍晚，整條街的人都來到龍眼窯前。'),
     focus(lm('kiln')),
@@ -161,6 +162,7 @@ export function endingSteps(): Step[] {
     emote('dy-meatball', 'heart'),
     say('dyStudent', '糖廠回不來，戲院也回不來了。可是，我們把記得的東西，一樣一樣找回來了。'),
     fx('firecracker', 'me'),
+    ...epilogueSteps(s),
     narrate('電影結束後，小穎遞來一封信。'),
     say('dyStudent', '這是寄到協會的。信封上的郵戳，是一個我們沒去過的地方。'),
     narrate('「會長您好。我們那裡也有一條老街，很多年沒有人走了……」'),

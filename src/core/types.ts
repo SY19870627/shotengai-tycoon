@@ -448,6 +448,8 @@ export interface StreetDef {
     /** 回憶時光的開場、收尾 */
     tripIntro?: (s: GameState, era: Era) => Step[];
     tripOutro?: (s: GameState, era: Era, gained: Memories) => Step[];
+    /** 三年一次的全山頭繞境在第幾天 */
+    processionDay?: number;
     /** 回憶巡禮點 */
     pilgrimage?: PilgrimDef[];
     pilgrimStory?: (s: GameState, p: PilgrimDef) => Step[];
@@ -605,6 +607,7 @@ export interface DaySummary {
   dinners?: number;
   fireflies?: boolean;
   /** 東原 */
+  groupbuy?: number;
   residents?: number;
   tourists?: number;
   mem?: Memories;
@@ -709,4 +712,13 @@ export interface GameState {
   pastDone: string[];
   /** 已點亮的回憶巡禮點 */
   lit: string[];
+  /** 每間過去的店、地標幫過幾次（最多 3 次） */
+  pastCount: Record<string, number>;
+  /** 膠卷壞掉之後：放過幾場露天電影、上次是第幾天 */
+  movies: number;
+  movieDay: number;
+  /** 東原：未來計畫的進度 */
+  future: Record<string, { start: number; done: boolean }>;
+  /** 東原：全山頭繞境做了哪些準備 */
+  procession: string[];
 }

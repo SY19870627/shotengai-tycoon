@@ -33,7 +33,7 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number, var
   switch (id) {
     case 'tree': standX = drawTree(ctx); break;
     case 'jishun': standX = drawJishun(ctx); break;
-    case 'fude': standX = drawFude(ctx); break;
+    case 'fude': standX = drawFude(ctx, variant); break;
     case 'yonganju': standX = drawYonganju(ctx); break;
     case 'viewpoint': standX = drawViewpoint(ctx); break;
     case 'stairs': standX = drawStairs(ctx); break;
@@ -480,7 +480,8 @@ function foodCart(ctx: Ctx, x: number, w: number, umbrella: number, name: string
   night.fillCircle(x + w / 2, -80, 34);
 }
 
-function drawFude(ctx: Ctx): number {
+/** 土地公廟；variant 'village'（東原）：叫土地公廟，旁邊放金爐和板凳，沒有小吃攤 */
+function drawFude(ctx: Ctx, variant?: string): number {
   const { g, night, w } = ctx;
   const cx = w / 2;
   const sl = cx - 46, sr = cx + 46;
@@ -531,11 +532,26 @@ function drawFude(ctx: Ctx): number {
   // 匾
   g.fillStyle(C.gold);
   g.fillRoundedRect(cx - 32, -96, 64, 18, 2);
-  label(ctx, cx, -87, '福德宮', 12, 0x6a2a1a);
+  label(ctx, cx, -87, variant === 'village' ? '土地公廟' : '福德宮', 12, 0x6a2a1a);
   // 小燈籠
   lantern(ctx, sl + 4, -78, 7);
   lantern(ctx, sr - 4, -78, 7);
 
+  if (variant === 'village') {
+    // 東原：金爐、長板凳
+    g.fillStyle(0x6a4a3a);
+    g.fillRect(10, -46, 28, 40);
+    g.fillStyle(0x8a3a2a);
+    g.fillRect(6, -52, 36, 8);
+    g.fillRect(18, -64, 12, 12);
+    g.fillStyle(0xf28c28, 0.8);
+    g.fillRect(16, -30, 16, 10);
+    g.fillStyle(0x8a6a4a);
+    g.fillRect(w - 64, -16, 56, 5);
+    g.fillRect(w - 60, -11, 3, 11);
+    g.fillRect(w - 15, -11, 3, 11);
+    return cx;
+  }
   // 兩側小吃攤
   foodCart(ctx, 2, 50, 0xd64545, '臭豆腐');
   foodCart(ctx, w - 52, 50, 0x3b8ad8, '豆花');

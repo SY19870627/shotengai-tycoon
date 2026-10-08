@@ -21,6 +21,10 @@ import {
   ownerRule, trustedTenant, ownerUpkeep, shopTypeOpen, dailyKinshipDelta, addKinship,
   negotiate, ownerOf,
 } from './memory';
+import {
+  futureDefaults, futureVisitors, futureMods, futureUpkeepMult, endDayFuture, dailyFutureUpdate, processionToday, nightMarket,
+  futureDone,
+} from './future';
 
 export const DAY_START_MIN = 7 * 60;
 export const DAY_END_MIN = 23 * 60;
@@ -75,7 +79,9 @@ export function useTelescope(s: GameState): number {
 /** 這條街幾點打烊（遊戲內分鐘）；妖怪祭當天延長 */
 export function dayEndMin(s: GameState): number {
   const street = streetOf(s);
-  const h = festivalActive(s) ? (street.festivalCloseHour ?? street.closeHour ?? 23) : (street.closeHour ?? 23);
+  let h = festivalActive(s) ? (street.festivalCloseHour ?? street.closeHour ?? 23) : (street.closeHour ?? 23);
+  // 東原：週一夜市、繞境當天晚一點收
+  if (street.memory && (nightMarket(s) || processionToday(s))) h = Math.max(h, 22.5);
   return h * 60;
 }
 
@@ -145,6 +151,7 @@ export function createGame(streetId: string, rand: () => number = Math.random): 
     chapterComplete: false,
     ...onsenDefaults(),
     ...memoryDefaults(),
+    ...futureDefaults(),
   };
   // 東原：一開始就在的老店、帶著的回憶
   if (street.memory) {
@@ -232,7 +239,7 @@ export function rollOrigin(s: GameState, rand: () => number): Origin {
   // 東原：照現在居民和遊客的人數比例
   if (isMemoryStreet(s)) {
     const res = residentsPerHour(s);
-    const total = res + touristsPerHour(s, touristBase(s)) * timeCurveFor(s);
+    const total = res + touristsPerHour(s, touristBase(s)) * timeCurveFor(s) + futureVisitors(s) * timeCurve(hourOf(s));
     return total > 0 && rand() < res / total ? 'resident' : 'local';
   }
   const v = streetOf(s).visitors;
@@ -392,7 +399,7 @@ export function checkInGuest(s: GameState, g: Guest, rand: () => number = Math.r
 }
 
 /** 不經過客人進出、直接算給某家店的營收（會長照樣抽成） */
-function addShopRevenue(s: GameState, lot: number, revenue: number): void {
+export function addShopRevenue(s: GameState, lot: number, revenue: number): void {
   const shop = s.lots[lot]?.shop;
   if (!shop || revenue <= 0) return;
   shop.todayRevenue += revenue;
@@ -808,6 +815,7 @@ export function combinedMods(s: GameState): Required<Pick<Mods, 'traffic' | 'app
   }
   for (const b of s.buffs) all.push(b.mods);
   if (festivalActive(s)) all.push(FESTIVAL_MODS);
+  if (s.future && streetOf(s).memory) all.push(futureMods(s));
   const out = {
     traffic: 1, appealAll: 1, repPerDay: 0, transport: 1, foreign: 1,
     appeal: {} as Partial<Record<Category, number>>, shopAppeal: {} as Record<string, number>,
@@ -899,7 +907,7 @@ export function trafficPerHour(s: GameState): number {
   const street = streetOf(s);
   const shops = s.lots.filter((l) => l.shop).length;
   const mods = combinedMods(s);
-  if (street.memory) return (residentsPerHour(s) + touristsPerHour(s, touristBase(s)) * timeCurveFor(s)) * mods.traffic;
+  if (street.memory) return (residentsPerHour(s) + touristsPerHour(s, touristBase(s)) * timeCurveFor(s) + futureVisitors(s) * timeCurve(hourOf(s))) * mods.traffic;
   let base = street.baseTraffic + shops * 3 + s.reputation * street.repTraffic;
   if (isWeekend(s)) base *= street.weekendMult;
   const guide = moduleEff(s, 'guide');
@@ -1138,7 +1146,7 @@ export function tenantProfit(s: GameState, shop: ShopInstance): number {
   // 削價競爭吃掉毛利
   const i = s.lots.findIndex((l) => l.shop === shop);
   if (neighborEffects(s, i).some((e) => e.label.endsWith('削價競爭'))) margin -= 0.06;
-  const upkeep = def.upkeep * (1 + (shop.level - 1) * 0.3) * (street.upkeepMult ?? 1);
+  const upkeep = def.upkeep * (1 + (shop.level - 1) * 0.3) * (street.upkeepMult ?? 1) * futureUpkeepMult(s, def.id);
   return Math.round(shop.todayRevenue * (margin - COMMISSION) - rent - upkeep);
 }
 
@@ -1146,6 +1154,7 @@ function dailyTenantUpdate(s: GameState): { left: string[]; unhappy: string[] } 
   const left: string[] = [];
   const unhappy: string[] = [];
   const present = presentTenants(s);
+  const street = streetOf(s);
 
   // 關係自然變化
   for (let i = 0; i < s.lots.length; i++) {
@@ -1193,7 +1202,10 @@ function dailyTenantUpdate(s: GameState): { left: string[]; unhappy: string[] } 
     d += (55 - shop.satisfaction) * 0.1;
     adjustSat(s, shop, d);
 
-    if (shop.satisfaction <= 3 || (shop.satisfaction < 15 && shop.losingDays >= 5)) {
+    // 東原：老店老闆不是為了賺錢顧店，再累也不會收（只有外地來的新租客會走）
+    const stays = !!street.memory && !!p && !p.generated;
+    if (stays && shop.satisfaction < 12) adjustSat(s, shop, 12 - shop.satisfaction);
+    if (!stays && (shop.satisfaction <= 3 || (shop.satisfaction < 15 && shop.losingDays >= 5))) {
       left.push(p?.shopName ?? def.name);
       removeTenant(s, shop.tenantId);
     } else if (shop.satisfaction < 25) {
@@ -1280,6 +1292,8 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     s.money += cart;
   }
   // 關子嶺：今天的泉量、民怨、火勢、震後恢復
+  // 東原：團購訂單、步道、土地公、繞境
+  const groupbuy = street.memory ? endDayFuture(s) : 0;
   const springToday = hasSpring(s) ? { supply: springSupply(s), demand: springDemand(s) } : undefined;
   const closed = s.closedToday.map((i) => { const sh = s.lots[i]?.shop; return sh ? (profileOf(s, sh.tenantId)?.shopName ?? SHOP_BY_ID[sh.defId].name) : ''; }).filter(Boolean);
   const grievanceBefore = s.grievance;
@@ -1341,6 +1355,7 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     swimmers: s.today.swimmers,
     dinners: s.today.dinners,
     fireflies: firefliesOut(s),
+    groupbuy: groupbuy || undefined,
     residents: s.today.residents,
     tourists: s.today.tourists,
     mem: s.today.mem,
@@ -1384,6 +1399,15 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
   if (hasSpring(s) && rand() < fireAccidentChance(s) && !s.flags.includes('fireAccident')) s.flags.push('fireAccident');
   else if (hasSpring(s) && rand() < inspectionChance(s) && !s.flags.includes('inspection')) s.flags.push('inspection');
   if (s.festival && s.festival.day < s.day && s.festival.leafCommission <= 0 && !Object.keys(s.festival.leafByTenant).length) s.festival = null;
+  // 東原：未來計畫完工、返鄉青年基地多一位應徵者、全山頭繞境
+  if (streetOf(s).memory) {
+    dailyFutureUpdate(s);
+    if (futureDone(s, 'youth')) addApplicant(s, rand);
+    if (processionToday(s)) {
+      s.activities = s.activities.filter((a) => a.id !== 'templeFair');
+      s.activities.push({ id: 'templeFair', daysLeft: 1 });
+    }
+  }
   if (rand() < 0.7) addApplicant(s, rand);
   if (s.applicants.length === 0) addApplicant(s, rand);
   for (const lot of s.lots) {
@@ -1447,7 +1471,7 @@ export function generateTenant(s: GameState, rand: () => number): TenantProfile 
     shopName: `${name.replace(/^阿|^老/, '')}${def.short}`,
     shopType,
     traits: [t1, t2],
-    skill: 2 + Math.floor(rand() * 3),
+    skill: Math.min(5, 2 + Math.floor(rand() * 3) + (street.memory && futureDone(s, 'youth') ? 1 : 0)),
     maxRentTier: rand() < 0.25 ? 2 : rand() < 0.7 ? 1 : 0,
     intro: pick([
       `我想在${street.name}開一間${def.name}，聽說這裡會長很照顧人。`,
@@ -1506,7 +1530,7 @@ export function deserialize(raw: string): GameState | null {
     data.morning ??= [];
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
-    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
+    for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
     // 東原：在回憶時光裡關掉遊戲，回到 2016 年的當晚（這一晚不能再放）
     if (data.trip) {
       data.minute = data.trip.returnMinute;
