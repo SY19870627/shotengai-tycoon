@@ -958,6 +958,26 @@ describe('東原', () => {
     expect(startPlan(s, 'race').ok).toBe(false);
   });
 
+  it('龍眼焙季（第 10～16 天）：白天居民少、傍晚多；龍眼乾舖生意好；焙季體驗要趁早辦', () => {
+    const s = dy();
+    s.day = 9;
+    s.minute = 11 * 60;
+    const before = residentsPerHour(s);
+    s.day = 11;
+    expect(residentsPerHour(s)).toBeLessThan(before);
+    s.minute = 18 * 60;
+    const evening = residentsPerHour(s);
+    s.day = 9;
+    expect(evening).toBeGreaterThan(residentsPerHour(s));
+    s.money = 999999;
+    s.day = 15;
+    expect(startPlan(s, 'longanfest').ok).toBe(false);
+    s.day = 5;
+    s.lots[3].shop = null;
+    place(s, 3, 'dy-longan');
+    expect(startPlan(s, 'longanfest').ok).toBe(true);
+  });
+
   it('全山頭繞境在第 20 天，準備越多人潮越多；老店賠錢也不會關門', () => {
     const s = dy();
     s.money = 999999;

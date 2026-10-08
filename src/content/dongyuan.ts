@@ -707,6 +707,7 @@ export const DONGYUAN: StreetDef = {
     ],
     startMemories: {},
     processionDay: 20,
+    longanSeason: [10, 16],
     past1995: PAST_1995,
     past1960: PAST_1960,
     pilgrimage: PILGRIMAGE,

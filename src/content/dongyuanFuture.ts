@@ -1,6 +1,6 @@
 import type { StoryEvent, Step, GameState } from '../core/types';
 import { isWeekend, weekdayIndex } from '../core/game';
-import { futureDone, fudeToday, raceToday, processionToday, processionDaysLeft, PLAN_BY_ID } from '../core/future';
+import { futureDone, fudeToday, raceToday, processionToday, processionDaysLeft, PLAN_BY_ID, longanSeason } from '../core/future';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt } from './dsl';
 
 /**
@@ -113,6 +113,64 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
       leave('dyResident'), leave('dy-lan'), leave('me'),
     ],
   },
+  // ---- 龍眼焙季（七、八月） ----
+  {
+    id: 'dy-longan-start', street: ST, once: true, priority: 59, when: 'morning',
+    cond: (c) => (longanSeason(c.s) ? {} : null),
+    script: (_b, c) => [
+      narrate('七月。龍眼熟了。'),
+      narrate('天還沒亮，家家戶戶的焙灶都生起了火。龍眼木的煙從屋後、從山坡上一縷一縷冒出來，整條老街都是龍眼的香味。'),
+      focus({ landmark: 'kiln' }),
+      appear(c.has('dy-longan') ? 'dy-longan' : 'dyResident2', { landmark: 'kiln' }),
+      appear('me', { landmark: 'kiln' }, -100),
+      say(c.has('dy-longan') ? 'dy-longan' : 'dyResident2', '龍眼要用龍眼木焙三天三夜，中間每隔幾個鐘頭就要翻一次。這幾天，焙灶的人都不能睡。'),
+      say(c.has('dy-longan') ? 'dy-longan' : 'dyResident2', '焙好了，全村的人都會來剝龍眼乾，賺一點零用錢。這就是東原的夏天。'),
+      emote('me', 'heart'),
+      narrate('龍眼焙季開始了（第 10～16 天）。白天居民忙著剝龍眼，傍晚領了工錢才出來逛街；香味會引來遊客。'),
+      leave(c.has('dy-longan') ? 'dy-longan' : 'dyResident2'), leave('me'),
+    ],
+  },
+  {
+    id: 'dy-longan-peel', street: ST, once: true, priority: 40, when: 'noon',
+    cond: (c) => (longanSeason(c.s) && c.has('dy-lan') ? {} : null),
+    script: () => [
+      narrate('中午，雜貨店的騎樓下擺了一圈板凳。阿嬤們、新住民媽媽們坐在一起，面前一大盆焙好的龍眼。'),
+      focus('dy-lan'),
+      appear('dy-lan'),
+      appear('dyResident', 'dy-lan', 70),
+      appear('me', 'dy-lan', -100),
+      say('dy-lan', '指甲這樣一壓，殼就開了。龍眼肉要完整剝下來，不能破，破了就不值錢。'),
+      say('dyResident', '我年輕的時候啊，剝一台斤龍眼肉十五塊，只剝殼的話一台斤六塊。一個夏天剝下來，孩子的學費就有了。'),
+      say('dy-lan', '現在也沒有多多少啦。可是大家坐在一起邊剝邊聊，一個下午很快就過了。'),
+      choice('騎樓下的大家在剝龍眼',
+        opt('坐下來，跟大家一起剝', { memory: { bond: 2, past: 1 }, kinship: 2 }, [
+          narrate('你的指甲很快就變成褐色的了。阿嬤說，剝龍眼的手，洗三天都還是香的。'),
+          say('dyResident', '會長剝得不錯喔！來，這盆也給你。'),
+          narrate('得到回憶：人情 2、往事 1。'),
+        ]),
+        opt('辦一場「剝龍眼比賽」', { kinship: 6, rep: 2 }, [
+          narrate('一聲令下，整條街的人都搶著剝。冠軍是一位剝了五十年的阿嬤，十分鐘剝了一台斤。'),
+          say('dyResident', '哈哈哈，這些少年仔，手太慢了啦！'),
+          fx('confetti', 'dy-lan'),
+        ], 2000),
+      ),
+      leave('dyResident'), leave('dy-lan'), leave('me'),
+    ],
+  },
+  {
+    id: 'dy-longan-end', street: ST, once: true, priority: 45, when: 'morning',
+    cond: (c) => {
+      const r = c.street.memory?.longanSeason;
+      return r && c.s.day === r[1] + 1 ? {} : null;
+    },
+    script: (_b, c) => [
+      narrate('焙灶的火一個一個熄了。老街上的煙散去，只剩下淡淡的龍眼香。'),
+      narrate('一箱一箱的龍眼乾封好了。騎樓下的阿嬤們數著這個夏天的工錢，笑得很開心。'),
+      ...(futureDone(c.s, 'longanfest')
+        ? [narrate('來體驗焙灶的遊客說：「明年夏天，我們還要再來！」東原的龍眼焙季，慢慢變成了在地的特色。')]
+        : [narrate('小穎說：「這麼特別的焙季，外地人都不知道，好可惜。也許可以讓大家來體驗看看……」')]),
+    ],
+  },
   // ---- 村長的叮嚀：顧居民、存錢 ----
   {
     id: 'dy-chief-advice', street: ST, once: true, priority: 52, when: 'morning',
@@ -205,6 +263,14 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
           say('dySmith', '用的是我打的鋤頭。哈哈，好久沒有這麼多人用我的鋤頭了。'),
           narrate('從老街後面上山的步道開通了。早上、傍晚，開始有人來走。'),
           leave('dyLifter'), leave('dyLifter2'), leave('dySmith'),
+        ],
+        longanfest: [
+          focus({ landmark: 'kiln' }),
+          appear('dyStudent', { landmark: 'kiln' }),
+          say('dyStudent', '焙灶參觀、剝龍眼體驗都安排好了！遊客可以戴上手套，親手翻龍眼、剝龍眼乾，再帶一包回家。'),
+          say('dyStudent', '焙季的時候，煙和香味就是最好的招牌。'),
+          emote('dyStudent', 'star'),
+          leave('dyStudent'),
         ],
         race: [
           focus({ landmark: 'kiln' }),
@@ -313,6 +379,7 @@ export function epilogueSteps(s: GameState): Step[] {
   if (futureDone(s, 'trail')) lines.push('後山的步道上，一早就有人在慢跑，有阿公阿嬤，也有從台南市區來的年輕人。');
   if (s.flags.includes('race-held')) lines.push('東原腳踏車越野賽辦到第十屆了。車友們在肉圓店門口排隊，說「沒吃這碗不算騎過東山」。');
   if (futureDone(s, 'groupbuy')) lines.push(futureDone(s, 'groupbuy2') ? '東山的龍眼乾、龍眼蜜、柳丁、冬瓜茶磚，一箱一箱寄到全台灣。' : '東山的柴燒龍眼乾，在網路上一開團就賣光。');
+  if (futureDone(s, 'longanfest')) lines.push('每年七、八月，東原的龍眼焙季成了遊客專程來的活動。煙和香味籠罩老街，大家排隊體驗剝龍眼。');
   if (futureDone(s, 'kitchen')) lines.push('社區廚房裡，新住民媽媽們的孩子，學會了做盤子碗粿和炸饅頭。');
   if (futureDone(s, 'youth')) lines.push('樹屋工作室住進了十幾個回鄉的年輕人，老街多了幾間新店。');
   if (futureDone(s, 'market')) lines.push('禮拜一的夜市、禮拜五的早市，還是一樣熱鬧。');

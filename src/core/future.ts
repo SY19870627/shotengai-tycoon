@@ -34,6 +34,33 @@ export function marketMult(s: GameState): number {
 }
 
 // =====================================================================
+// 龍眼焙季（七、八月）
+// =====================================================================
+
+/** 今天是龍眼焙季：家家戶戶生火焙龍眼、剝龍眼乾打零工 */
+export function longanSeason(s: GameState): boolean {
+  const r = streetOf(s).memory?.longanSeason;
+  return !!r && s.day >= r[0] && s.day <= r[1];
+}
+
+export function longanSeasonDaysLeft(s: GameState): number | null {
+  const r = streetOf(s).memory?.longanSeason;
+  return r && s.day < r[0] ? r[0] - s.day : null;
+}
+
+/** 焙季的居民：白天在家剝龍眼，傍晚領了工錢才出來 */
+export function seasonResidentMult(s: GameState): number {
+  if (!longanSeason(s)) return 1;
+  const h = hourOf(s);
+  return h >= 8 && h < 17 ? 0.6 : h >= 17 ? 1.4 : 1;
+}
+
+/** 焙季剝龍眼賺了工錢，居民出手大方一點 */
+export function seasonSpendMult(s: GameState): number {
+  return longanSeason(s) ? 1.2 : 1;
+}
+
+// =====================================================================
 // 未來計畫
 // =====================================================================
 
@@ -79,6 +106,16 @@ export const FUTURE_PLANS: FuturePlan[] = [
     id: 'fude', name: '土地公的活動', cost: 8000, days: 1, repeat: { cooldown: 7 },
     desc: '在老榕樹旁的土地公廟拜拜、辦桌、請戲班。全村的人都會出來。',
     effect: '舉辦那天居民大量出門，給居民的店大賺；鄉親認同大幅上升。可以重複舉辦（每 7 天一次）。',
+  },
+  {
+    id: 'longanfest', name: '龍眼焙季體驗', cost: 12000, days: 3,
+    desc: '跟興伯和焙灶的人家商量，開放焙灶參觀、剝龍眼體驗，讓外地人也能感受焙季的煙和香味。',
+    effect: '龍眼焙季期間，每天都有大批遊客專程來體驗焙灶、剝龍眼，順便逛老街。',
+    need: (s) => {
+      const r = streetOf(s).memory?.longanSeason;
+      if (r && s.day > r[1] - 3) return '今年的焙季快結束了，來不及準備';
+      return lotOfTenant(s, 'dy-longan') >= 0 || has(s, 'longan') ? null : '要先有一間龍眼乾舖（找焙龍眼的人一起辦）';
+    },
   },
   {
     id: 'kitchen', name: '社區廚房', cost: 15000, days: 4,
@@ -185,6 +222,8 @@ export function futureVisitors(s: GameState): number {
   if (futureDone(s, 'trail')) n += isWeekend(s) ? 10 : 6;
   if (s.flags.includes('race-held')) n += isWeekend(s) ? 12 : 6;
   if (raceToday(s)) n += 60;
+  // 龍眼焙季：香味引來遊客；辦了焙季體驗，平日也有人專程來
+  if (longanSeason(s)) n += futureDone(s, 'longanfest') ? (isWeekend(s) ? 40 : 22) : (isWeekend(s) ? 8 : 2);
   return n;
 }
 
@@ -195,12 +234,14 @@ export function futureMods(s: GameState): Mods {
   if (fudeToday(s)) appeal.daily = 1.2;
   if (futureDone(s, 'youth')) appeal.leisure = 1.15;
   if (processionToday(s)) traffic *= 1 + PROCESSION.base + 0.25 * s.procession.length;
-  return { appeal, traffic };
+  const shopAppeal: Record<string, number> = {};
+  if (longanSeason(s)) shopAppeal.longan = 1.5;
+  return { appeal, traffic, shopAppeal };
 }
 
 /** 居民的倍率（夜市、早市、土地公、繞境） */
 export function residentFutureMult(s: GameState): number {
-  let m = marketMult(s);
+  let m = marketMult(s) * seasonResidentMult(s);
   if (fudeToday(s)) m *= 1.8;
   if (processionToday(s)) m *= 1.6;
   // 膠卷壞掉後的露天電影：村民晚上都出來看
@@ -223,7 +264,7 @@ export function groupbuyOrders(s: GameState): { lot: number; amount: number }[] 
   return s.lots.flatMap((l, i) => {
     const o = l.shop && GROUPBUY_ORDERS[l.shop.defId];
     if (!o) return [];
-    const amount = o[0] + (big ? o[1] : 0);
+    const amount = (o[0] + (big ? o[1] : 0)) * (longanSeason(s) ? 2 : 1);
     return amount ? [{ lot: i, amount }] : [];
   });
 }
