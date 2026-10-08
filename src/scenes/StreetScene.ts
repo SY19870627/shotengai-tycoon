@@ -21,7 +21,7 @@ import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
 import { drawLandmark, drawFilmScreen, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
-import { drawBackdrop } from './drawBackdrop';
+import { drawBackdrop, drawSugarFactory } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
 import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
@@ -280,7 +280,9 @@ export class StreetScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.L.worldW, H);
 
     this.sky = this.add.graphics().setScrollFactor(0).setDepth(0);
-    for (const o of drawBackdrop(this, this.street.backdrop, this.L.worldW)) {
+    // 1960：遠方的糖廠煙囪
+    const backdrop = [...drawBackdrop(this, this.street.backdrop, this.L.worldW), ...(this.era === 1960 ? drawSugarFactory(this, this.L.worldW) : [])];
+    for (const o of backdrop) {
       // 背景裡寺廟的燈：晚上才亮
       if (o.getData('night')) this.nightLayer.push({ g: o as Phaser.GameObjects.Graphics });
     }
@@ -635,6 +637,10 @@ export class StreetScene extends Phaser.Scene {
     for (const r of art.upperWindows) view.lights.fillRect(x0 + r.x, GROUND_Y + r.y, r.width, r.height);
     view.shopLight.fillStyle(0xffe2a0, 0.4);
     view.shopLight.fillRect(x0 + art.shopWindow.x, GROUND_Y + art.shopWindow.y, art.shopWindow.width, art.shopWindow.height);
+    for (const l of art.glows ?? []) {
+      view.lights.fillStyle(l.color, 0.35);
+      view.lights.fillCircle(x0 + l.x, GROUND_Y + l.y, l.r);
+    }
     const done = s.pastDone.includes(p.id);
     const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(1) - 22, done ? `✓ ${p.task}` : `幫忙：${p.task}`, {
       fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: done ? '#5a5266' : '#2a2433',
