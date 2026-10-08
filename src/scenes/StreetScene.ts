@@ -889,7 +889,7 @@ export class StreetScene extends Phaser.Scene {
         g.fillRect(x - 42 + k * 17, y - 60, 17, 10);
       }
       if (kind === 'night') {
-        // 夜市：烤香腸、鹹酥雞、玩具，掛著燈泡
+        // 夜市：烤香腸、鹽酥雞、玩具，掛著燈泡
         for (let k = 0; k < 4; k++) {
           g.fillStyle([0xc0392b, 0xd9a03b, 0x4f86c6, 0xef8fb1][(i + k) % 4]);
           g.fillRoundedRect(x - 30 + k * 15, y - 22, 12, 10, 2);

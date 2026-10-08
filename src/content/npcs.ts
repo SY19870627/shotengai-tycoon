@@ -347,6 +347,14 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'p60Elder', name: '榕樹下奉茶的阿公',
     look: L({ skin: 0xc98e66, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0xf0ece0, pants: 0x3d3a36, accessory: 'beard', age: 'old' }),
   },
+  sausageUncle: {
+    id: 'sausageUncle', name: '香腸伯',
+    look: L({ skin: 0xb07a52, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'cap', age: 'old' }),
+  },
+  chickenBoss: {
+    id: 'chickenBoss', name: '鹽酥雞老闆',
+    look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
   cyclist: {
     id: 'cyclist', name: '單車隊隊長',
     look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),
