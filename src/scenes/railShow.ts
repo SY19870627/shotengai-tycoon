@@ -67,6 +67,7 @@ export class RailShow {
   private prankTimer = 25000;
   private recordBefore = 0;
   private festTimer = 0;
+  private finaleDone = false;
   private festAnnounced = false;
 
   constructor(scene: Phaser.Scene, L: StreetLayout, hooks: RailHooks) {
@@ -151,7 +152,9 @@ export class RailShow {
     if (active) {
       for (const _t of trainsBetween(s, prevMinute, s.minute)) this.arrive();
     }
-    if (this.train) this.moveTrain(dt * Math.max(mult, active ? 1 : 0));
+    // 火車只是演出：劇情進行中也照樣開過去（錢已經算好了）
+    if (this.train && (store.speed > 0 || store.storyRunning)) this.moveTrain(dt * Math.max(1, store.speed));
+    if (store.storyRunning && this.comboText.alpha > 0 && !this.comboHideAt) this.comboHideAt = this.now;
     // 從月台放遊客出來
     while (this.pedQueue.length && this.pedQueue[0].at <= this.now) {
       const q = this.pedQueue.shift()!;
@@ -171,6 +174,19 @@ export class RailShow {
     } else if (!full && s.skyGlow < 50) this.fullShown = false;
     this.updatePrank(dt, active);
     this.updateFestival(dt, active);
+    // 結局：萬燈齊放
+    if (!this.finaleDone && s.flags.includes('sfFinale')) {
+      this.finaleDone = true;
+      this.finale();
+    }
+  }
+
+  private finale() {
+    const cam = this.scene.cameras.main;
+    this.banner('萬燈齊放', '');
+    for (let k = 0; k < 140; k++) {
+      this.scene.time.delayedCall(k * 30, () => this.release(cam.scrollX + 30 + Math.random() * (W - 60), k === 70, pickColor()));
+    }
   }
 
   /** 元宵天燈節：開場跳標題；晚上七點以後，整條街一波一波地放天燈 */

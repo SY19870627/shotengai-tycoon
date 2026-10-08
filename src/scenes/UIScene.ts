@@ -1796,6 +1796,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     }
     if (sum.fireVisitors) notes.push(`水火同源看火 ${sum.fireVisitors} 人${sum.fireIncome ? `・攤販收入 ${money(sum.fireIncome)}` : ''}`);
     if (sum.hikers) notes.push(`爬好漢坡 ${sum.hikers} 人（下來又累又餓，吃的店生意變好）`);
+    if (sum.trains) notes.push(`火車 ${sum.trains} 班・今天最高連擊 ×${sum.combo ?? 0}・放了 ${sum.lanterns ?? 0} 盞天燈`);
     if (sum.festival) notes.push('妖怪祭辦完了！明天早上……收銀機裡會不會有樹葉？');
     if (sum.swimmers) notes.push(`溫泉泳池泳客 ${sum.swimmers} 人`);
     if (sum.dinners) notes.push(`甕缸雞晚餐套餐 ${sum.dinners} 份`);

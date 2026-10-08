@@ -475,6 +475,7 @@ const stories: StoryEvent[] = [
       narrate('三——'),
       narrate('二——'),
       narrate('一！'),
+      effect({ flag: ['sfFinale'] }),
       fx('firecracker', 'me'),
       fx('sparkle', 'sf-gong'),
       fx('confetti', 'me'),
