@@ -196,6 +196,17 @@ export function chatRate(s: GameState): number {
   return 0.012 * (0.5 + s.kinship / 100);
 }
 
+/** 東原：這種店會不會聊出回憶（招牌上的小標籤、佈告欄、租客面板用） */
+export function memoryTag(s: GameState, defId: string): { text: string; long: string; color: string } | null {
+  if (!isMemoryStreet(s)) return null;
+  const old = recipeOf(s, defId) ? '老店・' : '';
+  if (SHOP_BY_ID[defId].audience === 'tourist') {
+    return { text: '遊客店', long: '給遊客的店：居民很少來，幾乎聊不出回憶', color: '#c8c0d4' };
+  }
+  const k = chatMemory(defId);
+  return { text: `${old}回憶：${MEMORY_NAME[k]}`, long: `${old}居民來這裡邊買邊聊，會聊出「${MEMORY_NAME[k]}」`, color: MEMORY_COLOR[k] };
+}
+
 /** 居民逛完一家店：慢慢累積回憶 */
 export function residentChat(s: GameState, defId: string): MemoryKind | null {
   const k = chatMemory(defId);

@@ -12,7 +12,7 @@ import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
   kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
   canTrip, startTrip, endTrip, nextEra, tripOver, pastHelp, passPastTime, emptyMemories, PAST_HOURS, TRIP_HOUR, HELP_MINUTES,
-  pilgrimage, pilgrimState, lightPilgrim,
+  pilgrimage, pilgrimState, lightPilgrim, memoryTag,
 } from '../core/memory';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
@@ -741,6 +741,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       c.add(this.text(80, 8, prof.name, 18, '#ffffff', '900'));
       c.add(this.text(80, 33, prof.shopName, 14, hex(C.gold), '700'));
       c.add(this.text(80, 54, `${def.name}・${CAT_LABEL[def.category]}`, 13, '#cfc8e0'));
+      const mt = memoryTag(s, def.id);
+      if (mt) c.add(this.text(cardW - 8, 97, mt.text, 11, '#2a2433', '900').setOrigin(1, 0).setBackgroundColor(mt.color).setPadding(4, 1, 4, 1));
       c.add(this.text(80, 74, `經營 ${'★'.repeat(prof.skill)}${'☆'.repeat(5 - prof.skill)}`, 13, '#f2c14e'));
       c.add(this.traitChips(10, 94, prof));
       if (s.day - (a.expiresDay - 3) === 0) c.add(this.text(cardW - 8, 6, 'NEW', 12, '#2a2433', '900').setOrigin(1, 0).setBackgroundColor('#f2c14e').setPadding(4, 1, 4, 1));
@@ -1164,8 +1166,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const face = this.add.container(0, 0);
     p.add(face);
     p.add(this.text(108, 10, prof.name, 22, '#ffffff', '900'));
-    p.add(this.text(108 + prof.name.length * 23 + 10, 16, `${prof.shopName}　Lv.${shop.level}`, 15, hex(C.gold), '700'));
+    const shopLine = this.text(108 + prof.name.length * 23 + 10, 16, `${prof.shopName}　Lv.${shop.level}`, 15, hex(C.gold), '700');
+    p.add(shopLine);
     p.add(this.traitChips(108, 44, prof));
+    const mt = memoryTag(s, def.id);
+    if (mt) p.add(this.text(shopLine.x + shopLine.width + 10, 17, mt.text, 12, '#2a2433', '900').setBackgroundColor(mt.color).setPadding(5, 2, 5, 2));
     p.add(this.text(108, 72, '滿意度', 13, '#a49dbb'));
     p.add(this.add.rectangle(160, 80, 160, 12, 0x1a1724).setOrigin(0, 0.5));
     const satBar = this.add.rectangle(161, 80, 0, 10, 0x5bb36a).setOrigin(0, 0.5);
@@ -1353,6 +1358,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     m.add(g);
     m.add(this.text(x + 210, y + 56, prof.name, 30, hex(C.ink), '900'));
     m.add(this.text(x + 210, y + 98, `想開：${prof.shopName}（${def.name}・${CAT_LABEL[def.category]}）`, 17, '#6a3a3a', '700'));
+    const mt = memoryTag(S(), def.id);
+    if (mt) m.add(this.text(x + 780, y + 62, mt.long, 13, '#2a2433', '700').setOrigin(1, 0).setBackgroundColor(mt.color).setPadding(6, 2, 6, 2));
     // 自我介紹泡泡
     const intro = this.add.text(x + 222, y + 140, `「${prof.intro}」`, {
       fontFamily: FONT, fontSize: '16px', color: hex(C.ink), wordWrap: { width: 540, useAdvancedWrap: true }, lineSpacing: 4,

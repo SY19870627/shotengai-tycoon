@@ -2673,44 +2673,59 @@ function drawTheater1960(ctx: Ctx): number {
     night.fillStyle(0xffb040, 0.22);
     night.fillCircle(x, st - 5, 6);
   }
-  // 大型手繪電影看板（虛構片名）
+  // 大型手繪電影看板：台語歌仔戲電影《薛平貴與王寶釧》
   const bl = L + 20, br = R - 20, bt = -212, bb = -128;
   g.fillStyle(0x3a2e28);
   g.fillRect(bl - 4, bt - 4, br - bl + 8, bb - bt + 8);
   g.fillStyle(0xf2c86a);
   g.fillRect(bl, bt, br - bl, bb - bt);
-  // 背景：晚霞山景
+  // 背景：晚霞、寒窯
   g.fillStyle(0xe8784a);
   g.fillRect(bl, bt, br - bl, 30);
-  g.fillStyle(0x6a8a5a);
-  g.fillTriangle(bl, bb, bl + 90, bt + 26, bl + 170, bb);
-  g.fillTriangle(br - 150, bb, br - 70, bt + 34, br, bb);
-  // 主角：持劍的俠客（大臉）
-  const hx = bl + 64, hy = bt + 44;
+  g.fillStyle(0x8a6a4a);
+  g.fillRoundedRect(br - 96, bt + 24, 74, 50, { tl: 30, tr: 30, bl: 0, br: 0 });
+  g.fillStyle(0x3a2a20);
+  g.fillRoundedRect(br - 74, bt + 40, 30, 34, { tl: 14, tr: 14, bl: 0, br: 0 });
+  // 薛平貴：戴盔甲、插翎子的將軍
+  const hx = bl + 58, hy = bt + 44;
   g.fillStyle(0xf2c8a0);
-  g.fillCircle(hx, hy, 18);
+  g.fillCircle(hx, hy, 17);
   g.fillStyle(0x2a2024);
-  g.fillRect(hx - 18, hy - 20, 36, 10);
   g.fillEllipse(hx - 6, hy, 4, 3);
-  g.fillEllipse(hx + 7, hy, 4, 3);
+  g.fillEllipse(hx + 6, hy, 4, 3);
+  g.fillStyle(0xd8a838);
+  g.fillRect(hx - 19, hy - 22, 38, 10);
+  g.fillCircle(hx, hy - 24, 6);
+  g.lineStyle(3, 0xb8322a);
+  g.lineBetween(hx - 4, hy - 28, hx - 26, hy - 44);
+  g.lineBetween(hx + 4, hy - 28, hx + 26, hy - 44);
   g.fillStyle(0xb8322a);
-  g.fillRect(hx - 20, hy + 18, 40, 24);
-  g.lineStyle(3, 0xd8dcdc);
-  g.lineBetween(hx + 20, hy + 30, hx + 52, hy - 14);
-  // 十二生肖剪影繞一圈
-  const zcols = [0xb8322a, 0x3b5a8a, 0x3f8a4a, 0x8a3a8a, 0xd87a2a, 0x2a2a3a];
-  for (let i = 0; i < 12; i++) {
-    const zx = bl + 120 + (i % 6) * 20, zy = bt + 30 + Math.floor(i / 6) * 22;
-    g.fillStyle(zcols[i % zcols.length]);
-    g.fillCircle(zx, zy, 7);
-    g.fillTriangle(zx - 6, zy - 3, zx - 2, zy - 11, zx + 1, zy - 4);
-    g.fillTriangle(zx + 6, zy - 3, zx + 2, zy - 11, zx - 1, zy - 4);
-  }
+  g.fillRect(hx - 22, hy + 17, 44, 26);
+  g.fillStyle(0xd8a838);
+  g.fillRect(hx - 22, hy + 24, 44, 4);
+  // 王寶釧：梳髻、粉色戲服，望著寒窯
+  const wx = bl + 128, wy = bt + 48;
+  g.fillStyle(0xf6d6c0);
+  g.fillCircle(wx, wy, 15);
+  g.fillStyle(0x1a1418);
+  g.fillCircle(wx, wy - 15, 9);
+  g.fillRect(wx - 15, wy - 12, 30, 6);
+  g.fillStyle(0xd8392f);
+  g.fillCircle(wx + 8, wy - 18, 2.5);
+  g.fillStyle(0x2a2024);
+  g.fillEllipse(wx - 5, wy, 3.5, 2.5);
+  g.fillEllipse(wx + 5, wy, 3.5, 2.5);
+  g.fillStyle(0xef9fb8);
+  g.fillRect(wx - 18, wy + 15, 36, 24);
+  g.fillStyle(0xf6f0f4);
+  g.fillRect(wx - 24, wy + 20, 8, 18);
+  g.fillRect(wx + 16, wy + 20, 8, 18);
   // 片名
   g.fillStyle(0xfbf6ec, 0.9);
   g.fillRect(bl + 6, bb - 26, br - bl - 12, 22);
-  label(ctx, cx, bb - 15, '十二生肖大冒險', 17, 0xb8322a, '900', 0xfbf6ec);
+  label(ctx, cx, bb - 15, '薛平貴與王寶釧', 17, 0xb8322a, '900', 0xfbf6ec);
   label(ctx, br - 34, bt + 12, '本日上映', 10, 0xfbf6ec, '900', 0x6a1a14);
+  label(ctx, bl + 26, bt + 12, '台語片', 10, 0xfbf6ec, '900', 0x2a4a6a);
   night.fillStyle(0xfff0c0, 0.3);
   night.fillRect(bl, bt, br - bl, bb - bt);
   // 售票口
