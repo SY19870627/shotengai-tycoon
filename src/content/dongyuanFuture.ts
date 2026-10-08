@@ -113,6 +113,24 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
       leave('dyResident'), leave('dy-lan'), leave('me'),
     ],
   },
+  // ---- 村長的叮嚀：顧居民、存錢 ----
+  {
+    id: 'dy-chief-advice', street: ST, once: true, priority: 52, when: 'morning',
+    cond: (c) => (c.s.day >= 2 ? {} : null),
+    script: () => [
+      focus({ landmark: 'fude' }),
+      appear('dyChief', { landmark: 'fude' }),
+      appear('me', { landmark: 'fude' }, -100),
+      say('dyChief', '會長，我是村長阿土叔。你剛來，有兩件事我先跟你講。'),
+      say('dyChief', '第一，這條街是村裡人在過日子的地方。雜貨店、理髮店、藥局、包子店，阿公阿嬤天天要用。'),
+      say('dyChief', '店要先顧居民。開太多給觀光客的店，大家會覺得老街不是自己的了。'),
+      say('dyChief', '第二，錢要省著用。東原的老店很難賺錢，會長手上的錢，以後要拿來做讓老街有明天的事。'),
+      say('dyChief', '裝潢、辦活動，先不要急。過幾天，我們再好好討論。'),
+      emote('me', 'idea'),
+      narrate('提示：多開給居民的店（招牌上標「回憶」的店），鄉親認同才會上升；錢先存起來，之後要用在未來計畫和全山頭繞境。'),
+      leave('dyChief'), leave('me'),
+    ],
+  },
   // ---- 介紹未來計畫與繞境 ----
   {
     id: 'dy-future-intro', street: ST, once: true, priority: 51, when: 'morning',
@@ -122,10 +140,10 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
       appear('dyChief', { landmark: 'fude' }),
       appear('dyStudent', { landmark: 'fude' }, 70),
       appear('me', { landmark: 'fude' }, -100),
-      say('dyChief', '會長，我是村長阿土叔。你讓老店一間一間開回來，大家都很感謝。'),
+      say('dyChief', '會長，你讓老店一間一間開回來，大家都很感謝。'),
       say('dyChief', '不過……老實說，老店開了，還是賺不了錢。平日根本沒有人。'),
       say('dyStudent', '找回過去很重要，可是老街也要有明天。我們想了幾個計畫：團購龍眼乾、開步道、辦腳踏車越野賽、社區廚房……'),
-      say('dyStudent', '這些都要花錢。會長手上的錢，就拿來投資老街的未來吧！'),
+      say('dyStudent', '這些都要花錢。會長之前存下來的錢，就拿來投資老街的未來吧！'),
       say('dyChief', `還有，再過 ${processionDaysLeft(c.s) ?? 15} 天，就是三年一次的全山頭繞境。神轎會從整個山頭繞過來，經過我們老街。`),
       say('dyChief', '到時候外地的信眾都會來。準備得越好，老街就越熱鬧。'),
       emote('me', 'star'),
