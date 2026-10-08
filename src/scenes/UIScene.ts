@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { endingEvent } from '../core/story';
+import { isRailStreet, nextTrain, lanternFestToday } from '../core/shifen';
 import {
   unlockLot, nextLotCost, neighborEffects, signTenant, rejectApplicant, postAd, AD_COST, profileOf, renovate,
   giveGift, GIFT_COST, evict, setRentTier, startNextDay, startActivity, canStartActivity, activityCost, getRel,
@@ -377,6 +378,16 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         const left = processionDaysLeft(s);
         if (left !== null && left <= 7) { items.push(`全山頭繞境：還有 ${left} 天`); colors[items.length - 1] = '#ffc890'; }
       }
+    }
+    if (isRailStreet(s)) {
+      const nt = nextTrain(s);
+      items.push(nt !== null ? `下一班車 ${clock(nt)}` : '今天的火車都開完了');
+      colors[items.length - 1] = '#a8d0f0';
+      items.push(`今天天燈 ${s.today.lanterns ?? 0} 盞（最多 ${Math.max(s.lanternBest, s.today.lanterns ?? 0)}）`);
+      colors[items.length - 1] = '#ffd08a';
+      items.push(`最高連擊 ×${s.bestCombo}`);
+      colors[items.length - 1] = '#f2c14e';
+      if (lanternFestToday(s)) { items.push('元宵天燈節：天燈雙倍！'); colors[items.length - 1] = '#ff9a8a'; }
     }
     if (s.mascot) items.push(`吉祥物：${streetOf(s).activities.mascots.find((m) => m.id === s.mascot)?.name}`);
     const sig = items.join('|');
@@ -1572,7 +1583,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
         m.add(this.text(cx + cardW - 10, cy + 20, '需要！', 13, '#ffffff', '900').setOrigin(1, 0).setBackgroundColor('#b3262e').setPadding(5, 1, 5, 1));
       }
       m.add(this.text(cx + 14, cy + 20, name, 20, hex(C.ink), '900'));
-      m.add(this.text(cx + 14, cy + 56, a.description, 14, '#4a4356').setWordWrapWidth(cardW - 28, true).setLineSpacing(4));
+      const desc = a.id === 'templeFair' ? (street.activities.templeFair.desc ?? a.description) : a.description;
+      m.add(this.text(cx + 14, cy + 56, desc, 14, '#4a4356').setWordWrapWidth(cardW - 28, true).setLineSpacing(4));
       const meta: string[] = [];
       if (!a.hasVariants) meta.push(`費用 ${money(a.cost)}`);
       else if (a.id === 'mascot') meta.push(`費用 ${money(a.cost)}（一次）`);

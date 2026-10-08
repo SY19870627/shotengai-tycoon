@@ -27,6 +27,7 @@ import { ensureMascotTexture } from './drawMascots';
 import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
+import { RailShow } from './railShow';
 import { PED_VARIANTS } from './BootScene';
 import { nightMarket, morningMarket, longanSeason, sausageHere, chickenDay, chickenHere, CHICKEN_ROUND } from '../core/future';
 import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
@@ -205,6 +206,8 @@ export class StreetScene extends Phaser.Scene {
   private lastSkyHour = -1;
   private lastNow = 0;
   private drag = { down: false, startX: 0, scrollX: 0, moved: false };
+  /** 十分：鐵軌、火車連擊、天燈 */
+  private rail: RailShow | null = null;
   private keys?: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] };
   private storyChecks = { morning: false, noon: false, evening: false, night: false };
   private ambientTimer = 4000;
@@ -328,6 +331,11 @@ export class StreetScene extends Phaser.Scene {
     this.parades = 0;
     this.paradeObjs = [];
     this.drawStreetFloor();
+    this.rail = this.street.ground === 'rail' ? new RailShow(this, this.L, {
+      floatText: (x, y, t, c, sz) => this.floatText(x, y, t, c, sz),
+      spawnTrainPed: (x, origin) => { this.createPed(0, 1, 6 + Math.floor(Math.random() * 4), origin, false, false, true, x); },
+      canTap: () => !this.drag.moved && !store.storyRunning && !store.waitingNextDay,
+    }) : null;
     this.vista = null;
     this.lastSkyHour = -1;
     for (const it of this.L.items) {
@@ -465,7 +473,7 @@ export class StreetScene extends Phaser.Scene {
   private createLandmark(id: string, x: number, width: number) {
     // 東原：龍眼窯、樹屋、診所在不同年代長得不一樣
     const eraVariant = ['kiln', 'treehouse', 'clinic'].includes(id) ? String(this.era) : undefined;
-    const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : eraVariant;
+    const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : id === 'mine' && this.street.ground === 'rail' ? 'coal' : eraVariant;
     const art = drawLandmark(this, id, width, mode);
     const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
@@ -1297,6 +1305,7 @@ export class StreetScene extends Phaser.Scene {
       this.updateLonganSeason(dt, running && !store.storyRunning);
     }
 
+    const prevMinute = s.minute;
     if (running) {
       this.checkStories();
       if (!store.storyRunning) {
@@ -1311,6 +1320,7 @@ export class StreetScene extends Phaser.Scene {
       }
     }
     const active = running && !store.storyRunning;
+    this.rail?.update(dt, active, prevMinute);
     this.updatePeds(dt, active);
     this.updateActors(dt);
     this.updateEnvironment(dt);
@@ -1565,6 +1575,7 @@ export class StreetScene extends Phaser.Scene {
     }
     const yk = p.yokai ? { kind: p.yokai.kind, leaves: p.yokai.leaves && !p.yokai.revealed } : undefined;
     const r = completeVisit(s, i, spend, p.origin, yk);
+    this.rail?.onVisit(i, r);
     if (r.income > 0) this.floatText(this.L.doorX(i), GROUND_Y - 112, `+$${r.income}`, hex(C.gold), 17);
     if (r.memory) this.floatText(this.L.doorX(i) + 26, GROUND_Y - 138, `+${MEMORY_NAME[r.memory]}`, MEMORY_COLOR[r.memory], 17);
     if (def) this.afterOnsenVisit(p, def.id, i);
@@ -2361,7 +2372,7 @@ export class StreetScene extends Phaser.Scene {
     const x0 = this.L.startX - 300;
     const c = this.add.container(x0, ACTOR_Y).setDepth(47);
     const fairName = this.street.activities.templeFair.name;
-    const flag = drawFlag(this, fairName.slice(0, 3), 0xd64545);
+    const flag = drawFlag(this, this.rail ? '天燈節' : fairName.slice(0, 3), 0xd64545);
     flag.setPosition(160, 0);
     c.add(flag);
     // 旗手、鑼鼓手、扛轎的人
@@ -3439,6 +3450,7 @@ export class StreetScene extends Phaser.Scene {
   }
 
   private onDayStarted() {
+    this.rail?.onDayStarted();
     for (let k = this.peds.length - 1; k >= 0; k--) this.removePed(k);
     this.busQueue = [];
     this.queueLayer.removeAll(true);

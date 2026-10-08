@@ -44,6 +44,23 @@ const tenants: TenantProfile[] = [
     },
   }),
   T({
+    id: 'sf-sisters', name: '天燈三姊妹', shopName: '三姊妹彩繪天燈', shopType: 'lantern',
+    traits: ['friendly', 'creative'], skill: 4, maxRentTier: 1,
+    intro: '我們三姊妹從小在阿公的店裡幫忙糊天燈。大姊畫圖、二姊寫字、小妹負責招呼客人！',
+    look: look({ skin: 0xf6d6bd, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0xf29ac0, pants: 0x54627a, accessory: 'none', age: 'young' }),
+    relations: { 'sf-gong': 25, 'sf-zhe': 10 },
+    arrive: { minDay: 5 },
+    lines: {
+      hello: '三個人一起顧店，速度是別人的三倍！',
+      happy: ['今天畫了一百盞！手好痠但好開心！', '有客人指定要畫他家的狗！'],
+      unhappy: ['顏料又用完了……', '二姊跟小妹又吵架了。'],
+      idle: ['要畫什麼？我們都畫得出來！', '四面寫四個願望，最划算！'],
+      rival: ['我們畫的比較好看啦！', '哼，不跟你好了。'],
+      friend: ['送你一盞我們畫的！', '阿公說我們的燈飛最穩！'],
+      refuse: '這個租金……三個人的薪水都不夠耶。',
+    },
+  }),
+  T({
     id: 'sf-wing', name: '雞翅哥', shopName: '火車頭雞翅包飯', shopType: 'wingrice',
     traits: ['hardworking', 'hothead'], skill: 4, maxRentTier: 2,
     intro: '火車一進站，我十秒可以出十份。不是吹的，是練的。',
@@ -188,7 +205,7 @@ const stories: StoryEvent[] = [
       say('sfStation', '先跟你說最重要的事：這條街，火車是從正中間開過去的。'),
       emote('me', 'shock'),
       say('me', '正、正中間？'),
-      say('sfStation', '對啊。平溪線每二十分鐘一班，每一班都倒一大車遊客進來。'),
+      say('sfStation', '對啊。平溪線差不多一個小時一班，每一班都倒一大車遊客進來。'),
       say('sfStation', '噹噹噹一響，在鐵軌上拍照的人就會跳開，擠進兩邊的店——大家都叫它「火車連擊」。'),
       appear('sf-gong', { landmark: 'station' }, 90),
       say('sf-gong', '還有天燈。在鐵軌上寫願望，放上天。一天放幾百盞，天空會整片都是燈。'),
@@ -197,6 +214,7 @@ const stories: StoryEvent[] = [
       say('me', '好！十分的天空，我們一起把它填滿！'),
       narrate('十分的遊客很多，不太需要擔心客人不夠。店開得越多、越好，火車連擊就越高。'),
       narrate('天燈店的客人會把天燈放上天。天上的燈越多，遠遠看到的人就越多。'),
+      narrate('想要滿天都是燈，就多開幾間天燈店，再把它們整修升級。'),
       leave('sf-gong'), leave('sfStation'), leave('me'),
       effect({ applicant: ['sf-gong'], flag: ['intro'] }),
     ],
@@ -210,7 +228,7 @@ const stories: StoryEvent[] = [
       appear('me', { landmark: 'station' }, -90),
       say('sfStation', '會長，剛剛那班車你有看到嗎？火車一開過去，兩邊的店同時收錢！'),
       say('me', '叮叮叮叮的，好像打電動。'),
-      say('sfStation', '哈哈哈！店越多、等級越高，連擊越長。聽說最高紀錄是三十五連擊。'),
+      say('sfStation', '哈哈哈！店越多、等級越高，連擊越長。聽說最高紀錄是三十連擊。'),
       fx('coins', 'me'),
       emote('me', 'star'),
       effect({ rep: 2, money: 1000 }),
@@ -329,7 +347,7 @@ const stories: StoryEvent[] = [
       say('sfStation', '只要老街出一點宣傳費，平日、假日都會再密一點。'),
       choice('要請台鐵加開班次嗎？',
         opt('加開！火車越多越好', { flag: ['moreTrains'], rep: 2 }, [
-          say('sfStation', '太好了！以後每十五分鐘一班，假日十分鐘一班！'),
+          say('sfStation', '太好了！以後平日四十五分鐘一班，假日半小時一班！'),
           fx('firecracker', 'sfStation'),
           narrate('平溪線加班車：火車更密，連擊次數變多了。'),
         ], 15000),
@@ -478,7 +496,7 @@ const stories: StoryEvent[] = [
 // =====================================================================
 
 export const LANTERN_GOAL = 3000;
-export const COMBO_GOAL = 35;
+export const COMBO_GOAL = 30;
 export const REVENUE_GOAL = 8_000_000;
 
 export const SHIFEN: StreetDef = {
@@ -520,12 +538,12 @@ export const SHIFEN: StreetDef = {
   closeHour: 22,
   weather: { rain: 0.18, fog: 0 },
   visitors: { jp: 0.22, kr: 0.18 },
-  train: { interval: 20, weekendInterval: 15, first: 8.5, last: 21, burst: 8 },
+  train: { interval: 60, weekendInterval: 45, first: 8.5, last: 21, burst: 24 },
   shopTypes: ['lantern', 'wingrice', 'peanutroll', 'railgoods', 'wishshop', 'snack', 'cafe', 'souvenir', 'fishball'],
   tenants,
   stories,
   activities: {
-    templeFair: { name: '元宵天燈節', temple: '十分' },
+    templeFair: { name: '元宵天燈節', temple: '十分', desc: '全街一起辦天燈節！台鐵加開班次、人潮大增，當天每一位客人都放雙倍的天燈，晚上整條街一波一波地放燈。' },
     mascots: [
       { id: 'sfLantern', name: '小天燈', description: '一盞會飄來飄去的小天燈，肚子上寫著「好運」。天燈店 +20%。', mods: { shopAppeal: { lantern: 1.2 } } },
       { id: 'sfTrain', name: '平溪線小火車', description: '藍白色的小火車頭，嘟嘟嘟地跟遊客合照。人潮額外 +10%。', mods: { traffic: 1.1 } },

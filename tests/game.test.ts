@@ -1127,14 +1127,14 @@ describe('東原', () => {
 describe('十分', () => {
   const sf = () => createGame('shifen', seeded(5));
 
-  it('火車班次：平日 20 分鐘一班、假日 15 分鐘一班，加班車再密一點', () => {
+  it('火車班次：平日 60 分鐘一班、假日 45 分鐘一班，加班車再密一點', () => {
     const s = sf();
     s.day = 1; // 週五
-    expect(trainInterval(s)).toBe(20);
+    expect(trainInterval(s)).toBe(60);
     s.day = 2; // 週六
-    expect(trainInterval(s)).toBe(15);
+    expect(trainInterval(s)).toBe(45);
     s.flags.push('moreTrains');
-    expect(trainInterval(s)).toBe(10);
+    expect(trainInterval(s)).toBe(30);
     expect(trainsBetween(s, 8.5 * 60 - 1, 8.5 * 60)).toEqual([8.5 * 60]);
   });
 
@@ -1162,15 +1162,17 @@ describe('十分', () => {
     expect(s.skyGlow).toBeLessThan(30);
   });
 
-  it('數值模擬：簽店、整修、辦活動，30 天內可以看到「萬燈齊放」', () => {
+  it('數值模擬：簽店、整修、辦活動，40 天內可以看到「萬燈齊放」', () => {
     const s = sf();
     const rand = seeded(9);
     const run = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); };
     let day = 0;
-    for (let d = 1; d <= 30 && !s.chapterComplete; d++) {
+    for (let d = 1; d <= 40 && !s.chapterComplete; d++) {
       day = d;
       for (let i = 0; i < s.lots.length; i++) {
-        if (s.lots[i].unlocked && !s.lots[i].shop && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 1);
+        // 天燈店優先（過關要靠天燈）
+        const a = s.applicants.find((x) => profileOf(s, x.tenantId)?.shopType === 'lantern') ?? s.applicants[0];
+        if (s.lots[i].unlocked && !s.lots[i].shop && a) signTenant(s, i, a.tenantId, 1);
       }
       if (s.money > nextLotCost(s) + 8000) unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
       if (s.money > 25000) {

@@ -465,7 +465,8 @@ export interface StreetDef {
   tenants: TenantProfile[];
   stories: StoryEvent[];
   activities: {
-    templeFair: { name: string; temple: string };
+    /** desc：這條街的廟會說明（不填用預設的「廟會遶境」說明） */
+    templeFair: { name: string; temple: string; desc?: string };
     mascots: ActivityVariant[];
     legends: ActivityVariant[];
   };

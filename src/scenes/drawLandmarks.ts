@@ -38,7 +38,10 @@ export function drawLandmark(scene: Phaser.Scene, id: string, width: number, var
     case 'viewpoint': standX = drawViewpoint(ctx); break;
     case 'stairs': standX = drawStairs(ctx); break;
     case 'theater': standX = drawTheater(ctx); break;
-    case 'mine': standX = drawMine(ctx); break;
+    case 'mine': standX = drawMine(ctx, variant); break;
+    case 'station': standX = drawStation(ctx); break;
+    case 'bridge': standX = drawSuspension(ctx); break;
+    case 'falls': standX = drawFalls(ctx); break;
     case 'haohan': standX = drawHaohan(ctx); break;
     case 'spring': standX = drawSpring(ctx); break;
     case 'fire': standX = drawFire(ctx, variant ?? 'protect'); break;
@@ -964,8 +967,10 @@ function drawTheater(ctx: Ctx): number {
 
 // ───────────────────────── 九份：八番坑與台車 ─────────────────────────
 
-function drawMine(ctx: Ctx): number {
+function drawMine(ctx: Ctx, variant?: string): number {
   const { g, night, w } = ctx;
+  // 十分：運煤的老煤礦（黑黑的煤、不閃金光）
+  const coal = variant === 'coal';
   const rock = 0x8a7d6c;
   // 山坡
   g.fillStyle(rock);
@@ -1031,7 +1036,7 @@ function drawMine(ctx: Ctx): number {
   g.fillRoundedRect(ax - 36, -ah - 30, 72, 26, 3);
   g.fillStyle(0xe8dcc0);
   g.fillRoundedRect(ax - 33, -ah - 27, 66, 20, 2);
-  label(ctx, ax, -ah - 17, '八番坑', 14, 0x3a2a20);
+  label(ctx, ax, -ah - 17, coal ? '十分煤礦' : '八番坑', coal ? 12 : 14, 0x3a2a20);
 
   // 鐵軌（從坑口延伸到右側街道）
   g.fillStyle(0x5a4030);
@@ -1050,12 +1055,12 @@ function drawMine(ctx: Ctx): number {
   g.fillCircle(cl + 14, -12, 2.5);
   g.fillCircle(cr - 14, -12, 2.5);
   // 礦石堆
-  g.fillStyle(0x6a5a4a);
+  g.fillStyle(coal ? 0x2a2a2e : 0x6a5a4a);
   g.fillEllipse((cl + cr) / 2, -50, cr - cl - 6, 26);
-  g.fillStyle(0x857260);
+  g.fillStyle(coal ? 0x3a3a40 : 0x857260);
   for (const [dx, dy] of [[-20, -54], [-6, -60], [10, -56], [22, -50], [0, -48]]) g.fillCircle((cl + cr) / 2 + dx, dy, 6);
   // 金色碎塊
-  for (const [dx, dy] of [[-12, -57], [8, -62], [20, -54]]) {
+  for (const [dx, dy] of coal ? [] : [[-12, -57], [8, -62], [20, -54]]) {
     g.fillStyle(0xf2c14e);
     g.fillCircle((cl + cr) / 2 + dx, dy, 3);
     g.fillStyle(0xfff4c0);
@@ -1071,7 +1076,7 @@ function drawMine(ctx: Ctx): number {
   g.fillStyle(0x3a3e46);
   for (const rx of [cl + 10, (cl + cr) / 2, cr - 10]) g.fillCircle(rx, -30, 1.6);
   // 閃光
-  for (const [sx, sy, s] of [[cl + 26, -70, 5], [cr - 18, -66, 4], [cl + 44, -76, 3.5]]) {
+  for (const [sx, sy, s] of coal ? [] : [[cl + 26, -70, 5], [cr - 18, -66, 4], [cl + 44, -76, 3.5]]) {
     g.fillStyle(0xfff4c0);
     g.fillTriangle(sx - s, sy, sx + s, sy, sx, sy - s * 2.2);
     g.fillTriangle(sx - s, sy, sx + s, sy, sx, sy + s * 2.2);
@@ -3208,4 +3213,206 @@ export function drawFilmScreen(scene: Phaser.Scene): {
   }
 
   return { objects: objs, beam, screenRect: { x: sx, y: sy, w: sw, h: sh } };
+}
+
+// ───────────────────────── 十分 ─────────────────────────
+
+/** 十分車站：木造站房、月台雨棚、站名牌、時鐘 */
+function drawStation(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  // 月台
+  g.fillStyle(0xb8b0a0);
+  g.fillRect(0, -18, w, 18);
+  g.fillStyle(0xe8d870);
+  g.fillRect(0, -18, w, 3);
+  // 站房
+  const sx = 30, sw = 190, sh = 170;
+  g.fillStyle(0xe8e0cc);
+  g.fillRect(sx, -18 - sh, sw, sh);
+  g.fillStyle(0x6a4a30);
+  g.fillRect(sx, -18 - sh, sw, 10);
+  for (let x = sx + 14; x < sx + sw; x += 44) g.fillRect(x, -18 - sh, 6, sh);
+  // 屋頂（藍灰色日式屋瓦）
+  g.fillStyle(0x4a5a6a);
+  g.fillPoints([{ x: sx - 22, y: -18 - sh }, { x: sx + sw + 22, y: -18 - sh }, { x: sx + sw - 20, y: -18 - sh - 54 }, { x: sx + 20, y: -18 - sh - 54 }], true);
+  g.lineStyle(1.5, 0x3a4652, 0.8);
+  for (let k = 1; k < 6; k++) g.lineBetween(sx - 22 + k * 8, -18 - sh - k * 9, sx + sw + 22 - k * 8, -18 - sh - k * 9);
+  // 站名牌
+  g.fillStyle(0xffffff);
+  g.fillRoundedRect(sx + 34, -18 - sh + 18, sw - 68, 40, 4);
+  g.lineStyle(2, 0x2a5a9a);
+  g.strokeRoundedRect(sx + 34, -18 - sh + 18, sw - 68, 40, 4);
+  label(ctx, sx + sw / 2, -18 - sh + 32, '十分車站', 18, 0x2a2433);
+  label(ctx, sx + sw / 2, -18 - sh + 50, 'SHIFEN', 10, 0x2a5a9a);
+  // 時鐘
+  g.fillStyle(0xffffff);
+  g.fillCircle(sx + sw / 2, -18 - sh - 26, 13);
+  g.lineStyle(2, 0x2a2433);
+  g.strokeCircle(sx + sw / 2, -18 - sh - 26, 13);
+  g.lineBetween(sx + sw / 2, -18 - sh - 26, sx + sw / 2, -18 - sh - 35);
+  g.lineBetween(sx + sw / 2, -18 - sh - 26, sx + sw / 2 + 7, -18 - sh - 26);
+  // 售票口、窗
+  for (const [wx, ww] of [[sx + 20, 44], [sx + sw - 64, 44]] as const) {
+    g.fillStyle(0x6a4a30);
+    g.fillRect(wx - 3, -110, ww + 6, 56);
+    g.fillStyle(0xbfd8e2);
+    g.fillRect(wx, -107, ww, 50);
+    night.fillStyle(0xffe2a0, 0.6);
+    night.fillRect(wx, -107, ww, 50);
+  }
+  g.fillStyle(0x2a5a9a);
+  g.fillRect(sx + sw / 2 - 30, -86, 60, 18);
+  label(ctx, sx + sw / 2, -77, '售票', 12, 0xffffff);
+  // 月台雨棚（右邊延伸到街上）
+  const rx = sx + sw;
+  g.fillStyle(0x6a7078);
+  for (const px of [rx + 20, w - 20]) g.fillRect(px - 3, -150, 6, 132);
+  g.fillStyle(0x3a6a8a);
+  g.fillRect(rx - 4, -158, w - rx + 4, 10);
+  g.fillStyle(0x2a5a7a);
+  g.fillRect(rx - 4, -150, w - rx + 4, 4);
+  // 平交道號誌
+  const cx = w - 46;
+  g.fillStyle(0xf0f0f0);
+  g.fillRect(cx - 2, -128, 4, 110);
+  g.fillStyle(0x2a2433);
+  g.fillRect(cx - 18, -112, 36, 14);
+  g.fillStyle(0xd63b3b);
+  g.fillCircle(cx - 10, -105, 5);
+  g.fillCircle(cx + 10, -105, 5);
+  g.lineStyle(5, 0xf2c94c);
+  g.lineBetween(cx - 20, -128, cx + 20, -118);
+  g.lineStyle(5, 0x2a2433);
+  g.lineBetween(cx - 20, -118, cx + 20, -128);
+  night.fillStyle(0xff4a3a, 0.5);
+  night.fillCircle(cx - 10, -105, 9);
+  // 長椅
+  g.fillStyle(0x8a5a3a);
+  g.fillRect(rx + 30, -40, 60, 6);
+  g.fillRect(rx + 34, -34, 4, 16);
+  g.fillRect(rx + 82, -34, 4, 16);
+  // 天燈造型的站燈
+  for (const lx of [rx + 40, rx + 100]) {
+    g.fillStyle(0xf6e2b8);
+    g.fillRect(lx - 7, -140, 14, 16);
+    g.fillStyle(0xd63b3b);
+    g.fillRect(lx - 7, -140, 14, 3);
+    night.fillStyle(0xffc070, 0.7);
+    night.fillCircle(lx, -132, 14);
+  }
+  return sx + sw + 40;
+}
+
+/** 靜安吊橋：兩座橋塔、懸索、橋下的基隆河 */
+function drawSuspension(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  // 河岸與河
+  g.fillStyle(0x6a8a5a);
+  g.fillRect(0, -60, w, 60);
+  g.fillStyle(0x6fa8b8);
+  g.fillRect(20, -44, w - 40, 44);
+  g.fillStyle(0xffffff, 0.6);
+  for (let x = 30; x < w - 40; x += 34) g.fillRect(x, -30 + (x % 3) * 6, 14, 2);
+  g.fillStyle(0x8a8478);
+  for (const [x, y, ew] of [[40, -10, 30], [w - 60, -14, 36], [w / 2, -6, 24]]) g.fillEllipse(x, y, ew, 12);
+  // 橋塔
+  const t1 = 36, t2 = w - 36, top = -250;
+  for (const tx of [t1, t2]) {
+    g.fillStyle(0x9a3a2a);
+    g.fillRect(tx - 9, top, 18, -top - 50);
+    g.fillStyle(0x7a2a1a);
+    g.fillRect(tx + 4, top, 5, -top - 50);
+    g.fillStyle(0xe8dcc0);
+    g.fillRect(tx - 12, top - 10, 24, 12);
+  }
+  // 主纜
+  g.lineStyle(3, 0x3a3a42);
+  g.beginPath();
+  g.moveTo(t1, top);
+  const deckY = -96;
+  for (let k = 0; k <= 30; k++) {
+    const x = t1 + ((t2 - t1) * k) / 30;
+    const sag = Math.sin((k / 30) * Math.PI) * (deckY - top - 30);
+    g.lineTo(x, top + sag);
+  }
+  g.strokePath();
+  // 吊索
+  g.lineStyle(1, 0x3a3a42, 0.8);
+  for (let k = 1; k < 15; k++) {
+    const x = t1 + ((t2 - t1) * k) / 15;
+    const sag = Math.sin((k / 15) * Math.PI) * (deckY - top - 30);
+    g.lineBetween(x, top + sag, x, deckY);
+  }
+  // 橋面
+  g.fillStyle(0x8a6a4a);
+  g.fillRect(t1 - 6, deckY, t2 - t1 + 12, 8);
+  g.lineStyle(1, 0x5a4030);
+  for (let x = t1; x < t2; x += 10) g.lineBetween(x, deckY, x, deckY + 8);
+  g.lineStyle(2, 0x5a5a62);
+  g.lineBetween(t1, deckY - 16, t2, deckY - 16);
+  // 橋墩到地面
+  g.fillStyle(0x8a8478);
+  g.fillRect(t1 - 14, -60, 28, 60);
+  g.fillRect(t2 - 14, -60, 28, 60);
+  // 橋名
+  g.fillStyle(0x2a2433);
+  g.fillRoundedRect(w / 2 - 54, top - 4, 108, 28, 4);
+  label(ctx, w / 2, top + 10, '靜安吊橋', 15, 0xf2c14e);
+  // 夜裡橋上的小燈
+  for (let k = 1; k < 8; k++) {
+    const x = t1 + ((t2 - t1) * k) / 8;
+    g.fillStyle(0xfff0c0);
+    g.fillCircle(x, deckY - 18, 2.5);
+    night.fillStyle(0xffd27a, 0.6);
+    night.fillCircle(x, deckY - 18, 8);
+  }
+  return w / 2;
+}
+
+/** 十分瀑布：寬寬的簾幕式瀑布、水霧、彩虹 */
+function drawFalls(ctx: Ctx): number {
+  const { g, night, w } = ctx;
+  const rock = 0x6a6458;
+  // 岩壁
+  g.fillStyle(rock);
+  g.fillPoints([{ x: 0, y: 0 }, { x: 0, y: -260 }, { x: 60, y: -300 }, { x: 160, y: -310 }, { x: 260, y: -296 }, { x: w - 30, y: -270 }, { x: w, y: -200 }, { x: w, y: 0 }], true);
+  g.fillStyle(0x4f8a48);
+  for (const [x, y] of [[20, -262], [90, -300], [180, -306], [260, -292], [w - 40, -262]]) {
+    g.fillEllipse(x, y, 60, 22);
+    g.fillEllipse(x + 16, y - 8, 34, 14);
+  }
+  // 瀑布本體（寬簾幕）
+  const fx0 = 50, fx1 = w - 60, fy0 = -230, fy1 = -60;
+  g.fillStyle(0xe8f4f6);
+  g.fillRect(fx0, fy0, fx1 - fx0, fy1 - fy0);
+  g.fillStyle(0xbfe0e8);
+  for (let x = fx0 + 6; x < fx1; x += 14) g.fillRect(x, fy0, 5, fy1 - fy0);
+  g.fillStyle(0xffffff, 0.8);
+  for (let x = fx0 + 12; x < fx1; x += 22) g.fillRect(x, fy0 + 20 + (x % 40), 3, 70);
+  // 上方的河口
+  g.fillStyle(0x7fb0b8);
+  g.fillRect(fx0 - 10, fy0 - 10, fx1 - fx0 + 20, 12);
+  // 潭與水霧
+  g.fillStyle(0x5f98a8);
+  g.fillEllipse(w / 2, -30, w - 30, 60);
+  g.fillStyle(0xffffff, 0.55);
+  for (let k = 0; k < 9; k++) g.fillEllipse(fx0 + 20 + k * ((fx1 - fx0) / 8), fy1 + 4, 70, 30);
+  // 彩虹
+  const cx = w / 2, cy = -40;
+  const colors = [0xff6a6a, 0xffb84a, 0xfff06a, 0x6ad06a, 0x6aa8ff, 0xa06aff];
+  colors.forEach((c, k) => {
+    g.lineStyle(4, c, 0.35);
+    g.beginPath();
+    g.arc(cx, cy, 150 - k * 5, Math.PI * 1.08, Math.PI * 1.92, false);
+    g.strokePath();
+  });
+  // 告示牌
+  g.fillStyle(0x6b4a30);
+  g.fillRect(w - 50, -90, 6, 90);
+  g.fillStyle(0x2a2433);
+  g.fillRoundedRect(w - 110, -120, 120, 34, 4);
+  label(ctx, w - 50, -103, '十分瀑布', 15, 0xf2c14e);
+  night.fillStyle(0xbfe8ff, 0.18);
+  night.fillRect(fx0, fy0, fx1 - fx0, fy1 - fy0);
+  return w / 2;
 }

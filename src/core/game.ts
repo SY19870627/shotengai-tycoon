@@ -1236,7 +1236,8 @@ export function reputationDelta(s: GameState): number {
   const traitRep = shops.reduce((sum, x) => sum + TRAITS_OF(s, x.tenantId).rep, 0);
   const unhappy = shops.filter((x) => x.satisfaction < 25).length;
   const fromVisitors = Math.min(2, s.today.visitors / 150);
-  const crowding = Math.min(4, s.today.turnedAway * 0.03);
+  // 十分：人本來就多，客滿不太會被罵
+  const crowding = isRailStreet(s) ? Math.min(1, s.today.turnedAway * 0.002) : Math.min(4, s.today.turnedAway * 0.03);
   let d = fromVisitors + variety * 0.15 + traitRep - crowding - unhappy * 0.3 - 0.4 - (shops.length === 0 ? 1 : 0);
   if (d > 0) d *= 1 - s.reputation / 120;
   d += combinedMods(s).repPerDay;

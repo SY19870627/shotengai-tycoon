@@ -37,6 +37,9 @@ function drawMascot(g: G, id: string, f: number): void {
     case 'longan': drawLonganKid(g, f); break;
     case 'sugar': drawBrownSugar(g, f); break;
     case 'tricycle': drawTricycle(g, f); break;
+    case 'sfLantern': drawSkyLanternKid(g, f); break;
+    case 'sfTrain': drawTrainHead(g, f); break;
+    case 'sfCart': drawMineCart(g, f); break;
     default: drawGeneric(g, f); break;
   }
 }
@@ -766,4 +769,71 @@ function drawGeneric(g: G, f: number): void {
   g.fillEllipse(cx + 5, 26 + bob, 10, 6);
   g.lineStyle(2, 0x3f8a48);
   g.lineBetween(cx, 29 + bob, cx, 33 + bob);
+}
+
+/** 十分：小天燈（梯形的紙燈、肚子寫「好運」、底下有小火苗） */
+function drawSkyLanternKid(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1.5;
+  g.fillStyle(0xffc060, 0.16);
+  g.fillCircle(cx, 44 + bob, 32);
+  feet(g, cx, 84, 0x3a2a24, f, 7, 4);
+  const top = 14 + bob, bot = 70 + bob;
+  g.fillStyle(0xe04848);
+  g.fillPoints([{ x: cx - 26, y: top }, { x: cx + 26, y: top }, { x: cx + 18, y: bot }, { x: cx - 18, y: bot }], true);
+  g.fillStyle(0xf2c94c);
+  g.fillPoints([{ x: cx - 10, y: top }, { x: cx + 10, y: top }, { x: cx + 7, y: bot }, { x: cx - 7, y: bot }], true);
+  g.lineStyle(1, 0x8a2a2a, 0.6);
+  g.lineBetween(cx - 10, top, cx - 7, bot);
+  g.lineBetween(cx + 10, top, cx + 7, bot);
+  // 底下的火苗
+  g.fillStyle(0xffe070);
+  g.fillEllipse(cx, bot + 4, 10, 8);
+  g.fillStyle(0xff8a3a);
+  g.fillEllipse(cx, bot + 5, 5, 4);
+  arms(g, cx, 46 + bob, 22, 0x3a2a24, f);
+  face(g, cx - 3, 32 + bob, 1, 0xffb08a);
+  g.fillStyle(0x8a2a2a);
+  g.fillRect(cx - 4, 46 + bob, 8, 2);
+  g.fillRect(cx - 4, 52 + bob, 8, 2);
+  g.fillRect(cx - 1, 44 + bob, 2, 14);
+}
+
+/** 十分：平溪線小火車頭（藍白車身、大眼睛） */
+function drawTrainHead(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1;
+  feet(g, cx, 84, 0x2a2a30, f, 9, 6);
+  g.fillStyle(0xf0f0ec);
+  g.fillRoundedRect(cx - 24, 18 + bob, 48, 36, { tl: 14, tr: 14, bl: 0, br: 0 });
+  g.fillStyle(0x2f5f9f);
+  g.fillRect(cx - 24, 54 + bob, 48, 26);
+  g.fillStyle(0xd63b3b);
+  g.fillRect(cx - 24, 52 + bob, 48, 4);
+  // 駕駛窗當眼睛
+  g.fillStyle(0x3a4a5a);
+  g.fillRoundedRect(cx - 18, 26 + bob, 36, 16, 4);
+  face(g, cx - 3, 34 + bob, 1, 0xffb08a);
+  // 大燈
+  g.fillStyle(0xfff4c0);
+  g.fillCircle(cx - 14, 66 + bob, 4);
+  g.fillCircle(cx + 14, 66 + bob, 4);
+  arms(g, cx, 62 + bob, 24, 0x2a2a30, f);
+}
+
+/** 十分：礦坑小台車（載滿「黑金」巧克力） */
+function drawMineCart(g: G, f: number): void {
+  const cx = 32;
+  const bob = f === 0 ? 0 : 1;
+  feet(g, cx, 84, 0x3a2a24, f, 10, 6);
+  g.fillStyle(0x2a2a2e);
+  for (const [dx, dy] of [[-14, 28], [-4, 24], [8, 26], [16, 30], [0, 30]]) g.fillCircle(cx + dx, dy + bob, 8);
+  g.fillStyle(0x6a4a30);
+  g.fillCircle(cx - 4, 22 + bob, 3);
+  g.fillStyle(0x6a6e76);
+  g.fillPoints([{ x: cx - 26, y: 34 + bob }, { x: cx + 26, y: 34 + bob }, { x: cx + 20, y: 74 + bob }, { x: cx - 20, y: 74 + bob }], true);
+  g.fillStyle(0x8a8e96);
+  g.fillRect(cx - 28, 32 + bob, 56, 6);
+  face(g, cx - 3, 52 + bob, 1, 0xffb08a);
+  arms(g, cx, 50 + bob, 24, 0x3a2a24, f);
 }

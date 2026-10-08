@@ -21,7 +21,7 @@ export function shifenDefaults(): Pick<GameState, 'skyGlow' | 'lanternBest' | 'b
 export function trainInterval(s: GameState): number {
   const t = streetOf(s).train!;
   const base = isWeekend(s) ? t.weekendInterval : t.interval;
-  return s.flags.includes('moreTrains') ? Math.max(10, base - 5) : base;
+  return s.flags.includes('moreTrains') ? Math.max(20, base - 15) : base;
 }
 
 /** 今天所有火車進站的時間（分鐘） */
@@ -48,7 +48,7 @@ export function nextTrain(s: GameState): number | null {
 export function trainBurst(s: GameState): number {
   const t = streetOf(s).train!;
   const shops = s.lots.filter((l) => l.shop).length;
-  let n = t.burst + shops * 0.6 + s.reputation * 0.12;
+  let n = t.burst + shops * 1.8 + s.reputation * 0.36;
   if (isWeekend(s)) n *= 1.4;
   if (s.weather === 'rain') n *= 0.75;
   n *= combinedMods(s).traffic;
@@ -64,12 +64,12 @@ export interface ComboHit {
   lanterns: number;
 }
 
-/** 火車連擊時，進店的客人消費 ×2 */
-export const COMBO_SPEND = 2;
+/** 火車連擊時，進店的客人消費 ×3 */
+export const COMBO_SPEND = 3;
 
 /**
  * 火車穿過老街：鐵軌上的人跳開、擠進兩邊的店。
- * 每間開著、有空位的店立刻進 1～(等級+1) 組客人，消費 ×2。
+ * 每間開著、有空位的店立刻進 等級～等級+1 組客人，消費 ×3。
  */
 export function trainCombo(s: GameState, rand: () => number = Math.random): { hits: ComboHit[]; combo: number } {
   const hits: ComboHit[] = [];
@@ -116,7 +116,7 @@ export const LANTERN_COLOR: Record<LanternColor, { name: string; wish: string; c
 
 /** 巨型天燈：三級天燈店才有，一次算 10 盞 */
 export const GIANT_LANTERNS = 10;
-export const GIANT_CHANCE = 0.12;
+export const GIANT_CHANCE = 0.08;
 
 /** 元宵天燈節（十分的廟會）當天，每位客人放雙倍的天燈 */
 export function lanternFestToday(s: GameState): boolean {
