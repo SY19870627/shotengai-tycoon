@@ -16,8 +16,9 @@ import {
 import {
   negotiate, negotiateBlock, ownerOf, learnRecipe, residentsPerHour, touristsPerHour, dailyKinshipDelta,
   canTrip, startTrip, endTrip, tripOver, pastHelp, passPastTime, pastShops, simulateTrip, recipeCost, recipeOf, PAST_HOURS,
-  pilgrimage, pilgrimState, lightPilgrim, pilgrimageDone,
+  pilgrimage, pilgrimState, lightPilgrim, pilgrimageDone, startMovie, MOVIE_COST,
 } from '../src/core/memory';
+import { FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, fudeToday, buyPrep } from '../src/core/future';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, flattenEffects } from '../src/core/story';
@@ -913,6 +914,69 @@ describe('東原', () => {
     }
   });
 
+  it('每間店最多幫 3 次；兩個年代都幫完，膠卷壞掉，改成花錢放露天電影', () => {
+    const s = dy();
+    s.flags.push('film');
+    s.minute = 19 * 60;
+    startTrip(s);
+    expect(pastHelp(s, 0)).not.toBeNull();
+    expect(pastHelp(s, 0)).not.toBeNull();
+    expect(pastHelp(s, 0)).not.toBeNull();
+    expect(pastHelp(s, 0)).toBeNull();
+    endTrip(s);
+    // 把所有店、地標都用完
+    const m = STREETS.dongyuan.memory!;
+    for (const p of [...m.past1995!, ...m.past1960!]) s.pastCount[p.id] = 3;
+    for (const era of [1995, 1960]) for (const id of ['kiln', 'treehouse']) s.pastCount[`${era}-lm-${id}`] = 3;
+    s.day += 1;
+    s.minute = 19 * 60;
+    expect(canTrip(s).ok).toBe(false);
+    s.flags.push('film-broken');
+    s.money = 10000;
+    expect(startMovie(s).ok).toBe(true);
+    expect(s.money).toBe(10000 - MOVIE_COST);
+    expect(startMovie(s).ok).toBe(false);
+  });
+
+  it('未來計畫：花錢開始、幾天後完工；團購每天有訂單；土地公可以重複辦', () => {
+    const s = dy();
+    s.money = 999999;
+    expect(startPlan(s, 'groupbuy').ok).toBe(false);
+    s.lots[3].shop = null;
+    place(s, 3, 'dy-longan');
+    expect(startPlan(s, 'groupbuy').ok).toBe(true);
+    expect(futureDone(s, 'groupbuy')).toBe(false);
+    for (let d = 0; d < 3; d++) startNextDay(s, seeded(d));
+    expect(futureDone(s, 'groupbuy')).toBe(true);
+    const sum = endDay(s, seeded(1));
+    expect(sum.groupbuy).toBeGreaterThan(0);
+    expect(startPlan(s, 'fude').ok).toBe(true);
+    startNextDay(s, seeded(9));
+    expect(fudeToday(s)).toBe(true);
+    expect(futureDoneCount(s)).toBe(2);
+    expect(startPlan(s, 'fude').ok).toBe(false);
+    expect(startPlan(s, 'race').ok).toBe(false);
+  });
+
+  it('全山頭繞境在第 20 天，準備越多人潮越多；老店賠錢也不會關門', () => {
+    const s = dy();
+    s.money = 999999;
+    s.day = 20;
+    s.minute = 14 * 60;
+    const base = trafficPerHour(s);
+    s.day = 19;
+    expect(buyPrep(s, 'banquet').ok).toBe(true);
+    expect(buyPrep(s, 'street').ok).toBe(true);
+    s.day = 20;
+    expect(trafficPerHour(s)).toBeGreaterThan(base);
+    expect(buyPrep(s, 'drums').ok).toBe(false);
+    const shop = s.lots[0].shop!;
+    shop.satisfaction = 2;
+    shop.losingDays = 9;
+    endDay(s, seeded(3));
+    expect(presentTenants(s)).toContain('dy-meatball');
+  });
+
   it('在回憶時光裡關掉遊戲，讀檔回到 2016 年', () => {
     const s = dy();
     s.flags.push('film');
@@ -977,6 +1041,7 @@ describe('東原', () => {
       unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
       for (const r of STREETS.dongyuan.memory!.recipes) learnRecipe(s, r.shop);
       for (const p of pilgrimage(s)) if (lightPilgrim(s, p.id).ok) run(STREETS.dongyuan.memory!.pilgrimStory!(s, p));
+      for (const p of FUTURE_PLANS) if (!p.repeat && planState(s, p).state === 'ready' && s.money > p.cost + 6000) startPlan(s, p.id);
       for (const when of ['morning', 'noon'] as const) {
         const st = pickStory(s, when, rand);
         if (st) run(st.steps);

@@ -28,7 +28,8 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { MEMORY_NAME, MEMORY_COLOR, memoryTag, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
+import { nightMarket, morningMarket } from '../core/future';
+import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
@@ -244,6 +245,9 @@ export class StreetScene extends Phaser.Scene {
   private tripEndSent = false;
   private filmView: { c: Phaser.GameObjects.Container; beam: Phaser.GameObjects.Graphics } | null = null;
   private pilgrimLayer?: Phaser.GameObjects.Container;
+  private marketLayer?: Phaser.GameObjects.Container;
+  private marketKind = '';
+  private marketGlow?: Phaser.GameObjects.Graphics;
   private pilgrimSig = '';
   private wellLayer!: Phaser.GameObjects.Container;
   private wellSig = '';
@@ -273,6 +277,9 @@ export class StreetScene extends Phaser.Scene {
     this.filmView = null;
     this.pilgrimLayer = undefined;
     this.pilgrimSig = '';
+    this.marketLayer = undefined;
+    this.marketKind = '';
+    this.marketGlow = undefined;
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -435,7 +442,7 @@ export class StreetScene extends Phaser.Scene {
   private createLandmark(id: string, x: number, width: number) {
     // 東原：龍眼窯、樹屋、診所在不同年代長得不一樣
     const eraVariant = ['kiln', 'treehouse', 'clinic'].includes(id) ? String(this.era) : undefined;
-    const mode = id === 'fire' ? S().fireMode : eraVariant;
+    const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : eraVariant;
     const art = drawLandmark(this, id, width, mode);
     const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
@@ -653,8 +660,10 @@ export class StreetScene extends Phaser.Scene {
       view.lights.fillStyle(l.color, 0.35);
       view.lights.fillCircle(x0 + l.x, GROUND_Y + l.y, l.r);
     }
-    const done = s.pastDone.includes(p.id);
-    const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(1) - 22, done ? `✓ ${p.task}` : `幫忙：${p.task}`, {
+    const left = helpsLeft(s, p.id);
+    const done = left <= 0;
+    const label = done ? '✓ 已經幫完了' : s.pastDone.includes(p.id) ? `${p.task}（還能幫 ${left} 次）` : `幫忙：${p.task}`;
+    const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(1) - 22, label, {
       fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: done ? '#5a5266' : '#2a2433',
       backgroundColor: done ? '#d8d2e0' : '#f2c14e', padding: { x: 7, y: 3 },
     }).setOrigin(0.5).setDepth(40);
@@ -791,6 +800,68 @@ export class StreetScene extends Phaser.Scene {
     });
   }
 
+  /** 東原：週一夜市、週五早市在馬路上擺攤 */
+  private updateMarketStalls() {
+    const s = S();
+    const h = hourOf(s);
+    const kind = nightMarket(s) && h >= 17 ? 'night' : morningMarket(s) && h >= 6 && h < 11 ? 'morning' : '';
+    if (kind === this.marketKind) return;
+    this.marketKind = kind;
+    if (this.marketGlow) this.nightLayer = this.nightLayer.filter((l) => l.g !== this.marketGlow);
+    this.marketLayer?.destroy();
+    this.marketLayer = undefined;
+    this.marketGlow = undefined;
+    if (!kind) return;
+    const layer = this.add.container(0, 0).setDepth(31);
+    const glow = this.add.graphics().setDepth(61).setBlendMode(Phaser.BlendModes.ADD);
+    const y = GROUND_Y + SIDEWALK_H + 40;
+    const stripes = kind === 'night' ? [0xd64545, 0xf2c14e, 0x3f8f4f, 0x4f86c6] : [0x3f8f4f, 0xe8e0c8, 0x4f86c6];
+    for (let i = 0; i < this.lotViews.length; i++) {
+      if (!s.lots[i].unlocked && i % 2) continue;
+      const x = this.L.lotX(i) + LOT_W / 2 + (i % 2 ? 30 : -30);
+      const g = this.add.graphics();
+      const col = stripes[i % stripes.length];
+      // 桌子、支架、帆布棚
+      g.fillStyle(0x6a5a4a);
+      g.fillRect(x - 36, y - 12, 72, 6);
+      g.fillRect(x - 32, y - 6, 3, 10);
+      g.fillRect(x + 29, y - 6, 3, 10);
+      g.fillStyle(0x8a8a90);
+      g.fillRect(x - 40, y - 52, 2, 40);
+      g.fillRect(x + 38, y - 52, 2, 40);
+      for (let k = 0; k < 5; k++) {
+        g.fillStyle(k % 2 ? 0xffffff : col);
+        g.fillRect(x - 42 + k * 17, y - 60, 17, 10);
+      }
+      if (kind === 'night') {
+        // 夜市：烤香腸、鹹酥雞、玩具，掛著燈泡
+        for (let k = 0; k < 4; k++) {
+          g.fillStyle([0xc0392b, 0xd9a03b, 0x4f86c6, 0xef8fb1][(i + k) % 4]);
+          g.fillRoundedRect(x - 30 + k * 15, y - 22, 12, 10, 2);
+        }
+        g.fillStyle(0xfff0b0);
+        g.fillCircle(x - 20, y - 48, 2.5);
+        g.fillCircle(x + 20, y - 48, 2.5);
+        for (const [r, a] of [[22, 0.06], [14, 0.1], [7, 0.18]] as const) {
+          glow.fillStyle(0xffd080, a);
+          glow.fillCircle(x - 20, y - 46, r);
+          glow.fillCircle(x + 20, y - 46, r);
+        }
+      } else {
+        // 早市：柳丁、龍眼、青菜
+        for (let k = 0; k < 7; k++) {
+          g.fillStyle(k % 3 === 0 ? 0xf28c28 : k % 3 === 1 ? 0xa87a4a : 0x6aa84f);
+          g.fillCircle(x - 28 + k * 9, y - 16 - (k % 2) * 3, 4.5);
+        }
+      }
+      layer.add(g);
+    }
+    this.nightLayer.push({ g: glow });
+    this.marketGlow = glow;
+    this.lastSkyHour = -1;
+    this.marketLayer = layer;
+  }
+
   /** 東原 2016：傍晚以後，龍眼窯前搭著白布 */
   private updateFilmScreen() {
     const s = S();
@@ -810,7 +881,8 @@ export class StreetScene extends Phaser.Scene {
     if (this.filmView) {
       // 今晚還能放：放映機的光一閃一閃
       const ready = canTrip(s).ok;
-      this.filmView.beam.setAlpha(ready ? 0.5 + 0.25 * Math.sin(performance.now() / 300) : 0);
+      // 露天電影放映中：光一直亮著
+      this.filmView.beam.setAlpha(movieTonight(s) ? 0.8 + 0.15 * Math.sin(performance.now() / 120) : ready ? 0.5 + 0.25 * Math.sin(performance.now() / 300) : 0);
     }
   }
 
@@ -951,6 +1023,7 @@ export class StreetScene extends Phaser.Scene {
     if (this.street.memory) {
       this.updateFilmScreen();
       this.updatePilgrimMarkers();
+      this.updateMarketStalls();
     }
 
     if (running) {

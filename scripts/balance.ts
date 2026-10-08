@@ -3,7 +3,8 @@
  * 模擬一個「有空店面就簽應徵者（標準租金）、有錢就整修店面、偶爾辦活動」的會長，跑 30 天。
  * 劇情一律選第一個選項。
  */
-import { learnRecipe, MEMORY_KINDS, simulateTrip, memoryText, pilgrimage, lightPilgrim } from '../src/core/memory';
+import { learnRecipe, MEMORY_KINDS, simulateTrip, memoryText, pilgrimage, lightPilgrim, startMovie } from '../src/core/memory';
+import { FUTURE_PLANS, planState, startPlan, PROCESSION_PREPS, buyPrep, futureDoneCount } from '../src/core/future';
 import {
   createGame, endDay, startNextDay, unlockLot, nextLotCost, signTenant, profileOf, applyEffects,
   startActivity, canStartActivity, goalsDone, renovate, presentTenants, buildFacility, installModule, setStaff,
@@ -84,18 +85,28 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   }
   // 東原：回憶夠了就學老店作法
   for (const r of street.memory?.recipes ?? []) if (learnRecipe(s, r.shop).ok) log.push(`  [回憶] 學會${r.name}`);
+  // 東原：有錢就推動未來計畫（土地公只辦一次）、準備繞境
+  if (street.memory) {
+    for (const p of FUTURE_PLANS) {
+      if (p.repeat && s.flags.includes(`future-${p.id}`)) continue;
+      if (planState(s, p).state === 'ready' && s.money > p.cost + 6000 && startPlan(s, p.id).ok) log.push(`  [未來] ${p.name}（完成 ${futureDoneCount(s)}）`);
+    }
+    for (const pp of PROCESSION_PREPS) if (s.money > pp.cost + 20000 && buyPrep(s, pp.id).ok) log.push(`  [繞境準備] ${pp.name}`);
+  }
   for (const p of pilgrimage(s)) {
     if (!lightPilgrim(s, p.id).ok) continue;
     log.push(`  [巡禮] ${p.name}（${s.lit.length}/${pilgrimage(s).length}）`);
     for (const st of flattenEffects(street.memory!.pilgrimStory!(s, p))) if (st.t === 'effect') applyEffects(s, st.effects, rand);
   }
-  if (s.money > 25000) {
+  // 東原：先存錢做未來計畫（完成 3 個以前不裝修、不辦一般活動）
+  const saving = !!street.memory && futureDoneCount(s) < 3;
+  if (s.money > 25000 && !saving) {
     const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
     if (i >= 0) renovate(s, i);
   }
   for (const act of ['yokaiFest', 'coupon', 'templeFair', 'legend', 'influencer', 'mascot'] as const) {
     const v = act === 'legend' ? street.activities.legends[0].id : act === 'mascot' ? street.activities.mascots[0].id : act === 'influencer' ? 'foodie' : undefined;
-    if (canStartActivity(s, act, v).ok && s.money > 15000) { startActivity(s, act, v, rand); log.push(`  [活動] ${act}`); break; }
+    if (canStartActivity(s, act, v).ok && s.money > 15000 && !saving) { startActivity(s, act, v, rand); log.push(`  [活動] ${act}`); break; }
   }
   runStories('morning');
   s.minute = 12 * 60; // 簡化：中午劇情在營業前檢查
@@ -105,6 +116,7 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   if (street.memory && process.env.TRIPS !== '0') {
     const g = simulateTrip(s, (steps) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); });
     if (g) log.push(`  [回憶時光] ${memoryText(g) || '無'}`);
+    else if (s.money > 15000 && !saving) { s.minute = 18.5 * 60; if (startMovie(s).ok) log.push('  [露天電影]'); }
     s.minute = 7 * 60;
   }
   simulateDay(s, rand);

@@ -12,8 +12,13 @@ import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
   kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
   canTrip, startTrip, endTrip, nextEra, tripOver, pastHelp, passPastTime, emptyMemories, PAST_HOURS, TRIP_HOUR, HELP_MINUTES,
-  pilgrimage, pilgrimState, lightPilgrim, memoryTag,
+  pilgrimage, pilgrimState, lightPilgrim, memoryTag, pastLandmarkHelp, PAST_LANDMARKS, landmarkHelpsLeft, pastShopAt,
+  filmBroken, canMovie, startMovie, movieTitle, MOVIE_COST,
 } from '../core/memory';
+import {
+  FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, PROCESSION_PREPS, buyPrep, processionDay, processionDaysLeft,
+  nightMarket, morningMarket, fudeToday, raceToday, processionToday,
+} from '../core/future';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
   canHavePlans, RYOKAN_PLANS, PLAN_IDS, planSlots, canAddPlan, addPlan, removePlan, hasPlan, POOL_TICKET, DINNER_SHARE, type PlanId,
@@ -354,6 +359,16 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       colors[items.length - 1] = isWeekend(s) ? '#f0c890' : '#b8d8b0';
       if (s.kinship < 30) { items.push(`鄉親：${kinshipLabel(s.kinship)}`); colors[items.length - 1] = '#ff9a8a'; }
       if (canTrip(s).ok) { items.push(`龍眼窯：今晚可以放白布電影（回到 ${nextEra(s)} 年）`); colors[items.length - 1] = '#f3e3c2'; }
+      if (canMovie(s).ok) { items.push('龍眼窯：今晚可以放露天電影'); colors[items.length - 1] = '#f3e3c2'; }
+      if (nightMarket(s)) { items.push('週一夜市：晚上村民都出來逛'); colors[items.length - 1] = '#f0b070'; }
+      if (morningMarket(s)) { items.push('週五早市：一早就很熱鬧'); colors[items.length - 1] = '#b8e0a0'; }
+      if (fudeToday(s)) { items.push('土地公的活動：拜拜、辦桌'); colors[items.length - 1] = '#f0a0a0'; }
+      if (raceToday(s)) { items.push('腳踏車越野賽！'); colors[items.length - 1] = '#a0d0f0'; }
+      if (processionToday(s)) { items.push('三年一次的全山頭繞境！'); colors[items.length - 1] = '#ff9a8a'; }
+      else {
+        const left = processionDaysLeft(s);
+        if (left !== null && left <= 7) { items.push(`全山頭繞境：還有 ${left} 天`); colors[items.length - 1] = '#ffc890'; }
+      }
     }
     if (s.mascot) items.push(`吉祥物：${streetOf(s).activities.mascots.find((m) => m.id === s.mascot)?.name}`);
     const sig = items.join('|');
@@ -379,21 +394,25 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private buildSideButtons() {
     this.sideButtons = this.add.container(W - 92, 104);
     if (S().trip) return;
+    // 東原的按鈕比較多，排緊一點
+    const many = isMemoryStreet(S());
+    const step = many ? 60 : 66;
     const mk = (y: number, label: string, color: number, fn: () => void) => {
-      const b = this.button(0, y, 80, 58, label, fn, color, 15);
+      const b = this.button(0, y, 80, many ? 54 : 58, label, fn, color, 15);
       this.sideButtons.add(b.root);
       return b;
     };
     let y = 0;
     mk(y, '活動', 0xb3262e, () => this.showActivities());
-    if (streetOf(S()).transport) mk((y += 66), '交通', 0xd9824a, () => this.showTransport());
-    if (isMemoryStreet(S())) {
-      mk((y += 66), '回憶', 0x9a6a3a, () => this.showMemories());
-      this.pilgrimButton = mk((y += 66), '巡禮', 0xb08a3a, () => this.showPilgrimage());
+    if (streetOf(S()).transport) mk((y += step), '交通', 0xd9824a, () => this.showTransport());
+    if (many) {
+      mk((y += step), '回憶', 0x9a6a3a, () => this.showMemories());
+      this.pilgrimButton = mk((y += step), '巡禮', 0xb08a3a, () => this.showPilgrimage());
+      mk((y += step), '未來', 0x3f8f7f, () => this.showFuture());
     }
-    mk((y += 66), '租客\n關係', 0x3f6f8f, () => this.showRelations());
-    this.goalButton = mk((y += 66), '目標', 0x3f8f4f, () => this.showGoals());
-    mk((y += 66), '地圖', 0x4a4460, () => this.confirmBackToMap());
+    mk((y += step), '租客\n關係', 0x3f6f8f, () => this.showRelations());
+    this.goalButton = mk((y += step), '目標', 0x3f8f4f, () => this.showGoals());
+    mk((y += step), '地圖', 0x4a4460, () => this.confirmBackToMap());
   }
 
   // =================================================================== 下方面板
@@ -516,7 +535,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x4a3a2a, 15));
     });
     this.chips = this.add.container(16, 72);
-    const chip = this.text(0, 0, '點店家進去幫忙（每次 1 個半小時）・點戲院、老榕樹看看・第一次幫忙的店找回最多回憶', 13, '#2a2433', '700')
+    const chip = this.text(0, 0, '點店家進去幫忙（每次 1 個半小時，每間店最多 3 次）・點戲院、老榕樹看看・第一次幫忙找回最多回憶', 13, '#2a2433', '700')
       .setBackgroundColor('#f3e3c2').setPadding(8, 3, 8, 3);
     this.chips.add(chip);
     if (s.trip!.payday) {
@@ -543,6 +562,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   /** 2016 年：點龍眼窯，放白布電影 */
   private showFilm() {
     const s = S();
+    if (filmBroken(s)) return this.showMovie();
     const r = canTrip(s);
     const MW = 640, MH = 330;
     const { m, x, y } = this.openModal(MW, MH);
@@ -559,6 +579,88 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const b = this.button(x + MW / 2 - 140, y + MH - 84, 280, 56, r.ok ? `放映：回到 ${era} 年` : r.reason, () => this.beginTrip(), 0x9a6a3a, r.ok ? 18 : 14);
     b.setEnabled(r.ok);
     m.add(b.root);
+  }
+
+  /** 膠卷壞掉之後：花錢放一場免費的露天電影 */
+  private showMovie() {
+    const s = S();
+    const r = canMovie(s);
+    const MW = 640, MH = 320;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 24, '露天電影之夜', 24, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 72,
+      `老膠卷已經斷了，再也回不去了。不過，我們可以像以前一樣，搭一塊白布，放免費的電影給大家看。\n\n今晚的片子：《${movieTitle(s)}》\n村民晚上都會出來看，順便買點東西；鄉親認同上升。每晚一場。`,
+      15, '#4a4356').setWordWrapWidth(MW - 60, true).setLineSpacing(4));
+    const b = this.button(x + MW / 2 - 150, y + MH - 80, 300, 56, r.ok ? `放映　${money(MOVIE_COST)}` : r.reason, () => {
+      const res = startMovie(s);
+      if (!res.ok) return toast(res.reason);
+      this.closeModal();
+      save();
+      bus.emit(Ev.Changed);
+      bus.emit(Ev.Story, [
+        { t: 'focus', on: { landmark: 'kiln' } },
+        { t: 'narrate', text: `白布前擺滿了板凳。放映機喀啦喀啦地轉，今晚放的是《${movieTitle({ ...s, movies: s.movies - 1 })}》。` },
+        { t: 'narrate', text: '阿公阿嬤搬著椅子來，孩子們坐在最前面。電影放到一半，肉圓店和冰店前面排起了隊。' },
+      ]);
+    }, 0x9a6a3a, r.ok ? 18 : 14);
+    b.setEnabled(r.ok);
+    m.add(b.root);
+  }
+
+  /** 東原：老街的明天（未來計畫、全山頭繞境） */
+  private showFuture() {
+    const s = S();
+    const MW = 1060, MH = 660;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    m.add(this.text(x + 30, y + 22, `老街的明天　完成 ${futureDoneCount(s)} 個計畫`, 26, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 58, '找回過去，老店也要有明天。把手上的錢投資在老街上，讓老店真的有生意。（過關目標：完成 3 個）', 14, '#6a6378'));
+    // 全山頭繞境
+    const left = processionDaysLeft(s);
+    const py = y + 86;
+    m.add(this.add.rectangle(x + 30, py, MW - 60, 112, 0xfbf0e0).setOrigin(0).setStrokeStyle(2, 0xd8b890));
+    m.add(this.text(x + 44, py + 8, left === null ? '全山頭繞境（已經結束）' : left === 0 ? '今天：三年一次的全山頭繞境！' : `三年一次的全山頭繞境：還有 ${left} 天（第 ${processionDay(s)} 天）`, 17, '#8a3b2a', '900'));
+    m.add(this.text(x + 44, py + 34, `準備越多，繞境當天越熱鬧。已準備 ${s.procession.length} / ${PROCESSION_PREPS.length} 項`, 13, '#6a5040'));
+    PROCESSION_PREPS.forEach((pp, k) => {
+      const bx = x + 44 + k * 248, by = py + 56;
+      const got = s.procession.includes(pp.id);
+      const b = this.button(bx, by, 236, 46, got ? `✓ ${pp.name}` : `${pp.name}　${money(pp.cost)}`, () => {
+        const r = buyPrep(s, pp.id);
+        if (!r.ok) return toast(r.reason);
+        save();
+        bus.emit(Ev.Changed);
+        toast(pp.desc);
+        this.showFuture();
+      }, got ? 0x6b8f6b : 0xb3262e, 13);
+      b.setEnabled(!got && left !== null && left > 0 && s.money >= pp.cost);
+      m.add(b.root);
+    });
+    // 未來計畫
+    const rowH = 64, colW = 500;
+    FUTURE_PLANS.forEach((p, n) => {
+      const cx = x + 30 + (n % 2) * (colW + 0), cy = y + 212 + Math.floor(n / 2) * (rowH + 44);
+      const st = planState(s, p);
+      const bg = st.state === 'done' ? 0xeaf4e4 : st.state === 'building' ? 0xfffbe8 : 0xffffff;
+      m.add(this.add.rectangle(cx, cy, colW - 12, rowH + 36, bg).setOrigin(0).setStrokeStyle(2, st.state === 'ready' ? 0x3f8f7f : 0xd8cfe0));
+      m.add(this.text(cx + 10, cy + 6, (futureDone(s, p.id) ? '✓ ' : '') + p.name, 16, hex(C.ink), '900'));
+      m.add(this.text(cx + 10, cy + 30, p.effect, 12, '#4a4356').setWordWrapWidth(colW - 160, true));
+      const sub = st.state === 'blocked' ? `條件：${st.reason}` : st.state === 'building' ? `進行中・還要 ${st.left} 天` : st.state === 'cooldown' ? `下次可以辦：${st.left} 天後` : st.state === 'done' ? '已完成' : p.desc;
+      m.add(this.text(cx + 10, cy + rowH + 14, sub, 11, st.state === 'blocked' ? '#b33a3a' : '#6a6378').setWordWrapWidth(colW - 40, true));
+      if (st.state === 'ready') {
+        const cost = `${money(p.cost)}${p.memory ? `＋${memoryText(p.memory)}` : ''}`;
+        const b = this.button(cx + colW - 142, cy + 8, 124, 44, `開始\n${cost}`, () => {
+          const r = startPlan(s, p.id);
+          if (!r.ok) return toast(r.reason);
+          save();
+          bus.emit(Ev.Changed);
+          toast(`「${p.name}」開始了！${p.days > 1 ? `${p.days} 天後完成。` : '明天舉辦。'}`);
+          this.showFuture();
+        }, 0x3f8f7f, 12);
+        b.setEnabled(s.money >= p.cost && (!p.memory || hasMemories(s, p.memory)));
+        m.add(b.root);
+      }
+    });
   }
 
   /** 換年代：整個畫面淡成白色，重新建立街景和介面 */
@@ -593,7 +695,10 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (store.storyRunning || this.returning || !s.trip) return;
     if (tripOver(s)) return;
     const steps = pastHelp(s, i);
-    if (!steps) return;
+    if (!steps) {
+      if (pastShopAt(s, i)) toast('這間店已經幫完了（每間店最多幫 3 次）');
+      return;
+    }
     this.pastPending = HELP_MINUTES;
     this.pastLot = i;
     bus.emit(Ev.Story, steps);
@@ -602,10 +707,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private onPastLandmark(id: string) {
     const s = S();
     if (this.returning || tripOver(s)) return;
-    const steps = streetOf(s).memory?.pastLandmark?.(s, s.trip!.era, id);
+    const steps = pastLandmarkHelp(s, id);
     if (!steps) {
       const def = streetOf(s).landmarks.find((l) => l.id === id);
-      if (def) toast(`${def.name}（${s.trip!.era} 年）`);
+      const done = PAST_LANDMARKS.includes(id) && landmarkHelpsLeft(s, s.trip!.era, id) <= 0;
+      if (def) toast(done ? `${def.name}：這裡的回憶都找完了` : `${def.name}（${s.trip!.era} 年）`);
       return;
     }
     this.pastPending = HELP_MINUTES / 2;
@@ -1652,6 +1758,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       if (Math.round(ga) !== Math.round(gb) || ga >= 30) notes.push(`民怨 ${Math.round(gb)} → ${Math.round(ga)}${ga >= 80 ? '（明天可能有店被靜坐）' : ''}`);
     }
     if (sum.closed?.length) notes.push(`抗議靜坐，暫停營業：${sum.closed.join('、')}`);
+    if (sum.groupbuy) notes.push(`團購訂單：${money(sum.groupbuy)}（算進店家營收）`);
     if (sum.kinshipAfter !== undefined) {
       notes.push(`居民 ${sum.residents ?? 0} 人・遊客 ${sum.tourists ?? 0} 人`);
       const got = sum.mem ? memoryText(sum.mem) : '';

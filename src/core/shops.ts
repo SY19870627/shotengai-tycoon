@@ -171,13 +171,13 @@ export const SHOPS: ShopDef[] = [
   }),
   S({
     id: 'pharmacy', name: '藥局', short: '藥局', category: 'daily', audience: 'resident',
-    spend: 120, appeal: 0.045, capacity: 3, stayMinutes: 10, upkeep: 250, baseRent: 500,
+    spend: 120, appeal: 0.045, capacity: 3, stayMinutes: 10, upkeep: 250, baseRent: 700,
     hours: [8, 21], wallColor: 0xeef0e6, awningColor: 0x3f8f4f,
     description: '藥不常賣，賣最好的是感冒糖漿；還有量血壓、聽街坊說心事。居民很需要，遊客用不到。',
   }),
   S({
     id: 'icepop', name: '冰店', short: '冰店', category: 'food',
-    spend: 45, appeal: 0.085, capacity: 6, stayMinutes: 12, upkeep: 150, baseRent: 400,
+    spend: 45, appeal: 0.085, capacity: 6, stayMinutes: 12, upkeep: 150, baseRent: 500,
     hours: [10, 21], wallColor: 0xf3ead6, awningColor: 0x5fa8c9,
     description: '招牌是四果冰，還有自己煮的紅茶、冬瓜茶。要先找回作法才能重新開張。',
   }),
@@ -189,13 +189,13 @@ export const SHOPS: ShopDef[] = [
   }),
   S({
     id: 'mantou', name: '炸饅頭', short: '饅頭', category: 'food',
-    spend: 55, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 400,
+    spend: 50, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 500,
     hours: [7, 18], wallColor: 0xf2e8d2, awningColor: 0xd9a03b,
     description: '饅頭下鍋炸到金黃酥脆。要先找回作法才能重新開張。',
   }),
   S({
     id: 'baozi', name: '包子店', short: '包子', category: 'food', audience: 'resident',
-    spend: 55, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 400,
+    spend: 45, appeal: 0.08, capacity: 4, stayMinutes: 6, upkeep: 150, baseRent: 500,
     hours: [6, 17], wallColor: 0xf4ecdc, awningColor: 0xd35454,
     description: '一大早就冒著蒸氣，居民上班上學前買兩顆。',
   }),

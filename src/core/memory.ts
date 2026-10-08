@@ -1,6 +1,7 @@
 import { SHOP_BY_ID } from './shops';
 import type { GameState, Memories, MemoryKind, OwnerDef, RecipeDef, Origin, TenantProfile, Era, PastShop, Step, PilgrimDef } from './types';
 import { streetOf, hourOf, isWeekend, unlockedCount, dayEndMin, type Result } from './game';
+import { residentFutureMult, recipeDiscount } from './future';
 
 /**
  * 東原的特殊系統：回憶點數、找屋主、老店作法、居民與遊客、鄉親認同。
@@ -119,10 +120,11 @@ export function shopTypeOpen(s: GameState, shop: string): boolean {
 
 /** 找回作法要付的回憶（在 1995 年親手學過的會比較少） */
 export function recipeCost(s: GameState, r: RecipeDef): Partial<Memories> {
-  if (!r.discount || !s.flags.includes(`p95-${r.shop}`)) return r.cost;
+  const learned = !!r.discount && s.flags.includes(`p95-${r.shop}`);
+  const mult = recipeDiscount(s);
   const c: Partial<Memories> = {};
   for (const k of MEMORY_KINDS) {
-    const v = Math.max(0, (r.cost[k] ?? 0) - (r.discount[k] ?? 0));
+    const v = Math.max(0, Math.ceil(((r.cost[k] ?? 0) - (learned ? r.discount?.[k] ?? 0 : 0)) * mult));
     if (v) c[k] = v;
   }
   return c;
@@ -162,7 +164,7 @@ export function touristWave(hour: number): number {
 export function residentsPerHour(s: GameState): number {
   const m = streetOf(s).memory;
   if (!m) return 0;
-  let n = m.residents * (0.5 + s.kinship / 100) * (1 + 0.06 * returnedOwners(s));
+  let n = m.residents * (0.5 + s.kinship / 100) * (1 + 0.06 * returnedOwners(s)) * residentFutureMult(s);
   if (s.weather === 'rain') n *= 0.75;
   return n * residentCurve(hourOf(s));
 }
@@ -182,7 +184,7 @@ export function audiencePref(defId: string, origin: Origin): number {
 }
 
 /** 居民消費比較省 */
-export const RESIDENT_SPEND = 0.75;
+export const RESIDENT_SPEND = 0.6;
 
 /** 居民在這種店聊天時，會說出哪一種回憶 */
 export function chatMemory(defId: string): MemoryKind {
@@ -248,8 +250,11 @@ export function kinshipLabel(v: number): string {
   return v >= 75 ? '像一家人' : v >= 50 ? '熟悉' : v >= 30 ? '有點陌生' : '不像我們的街了';
 }
 
-export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship' | 'trip' | 'trips' | 'lastTripDay' | 'pastDone' | 'lit'> {
-  return { memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50, trip: null, trips: 0, lastTripDay: 0, pastDone: [], lit: [] };
+export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship' | 'trip' | 'trips' | 'lastTripDay' | 'pastDone' | 'lit' | 'pastCount' | 'movies' | 'movieDay'> {
+  return {
+    memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50, trip: null, trips: 0, lastTripDay: 0, pastDone: [], lit: [],
+    pastCount: {}, movies: 0, movieDay: 0,
+  };
 }
 
 // =====================================================================
@@ -312,15 +317,51 @@ export function eraOf(s: GameState): 2016 | Era {
   return s.trip?.era ?? 2016;
 }
 
-/** 下一次白布電影會回到哪一年：1995 → 1960 → 1995…… */
-export function nextEra(s: GameState): Era {
-  return !ERA_1960_READY || s.trips % 2 === 0 ? 1995 : 1960;
+/** 每間店、每個地標最多幫 3 次 */
+export const MAX_HELPS = 3;
+/** 過去可以點的地標 */
+export const PAST_LANDMARKS = ['kiln', 'treehouse'];
+
+const landmarkKey = (era: Era, id: string) => `${era}-lm-${id}`;
+
+/** 某個年代還剩幾次可以幫忙 */
+export function eraRemaining(s: GameState, era: Era): number {
+  const m = streetOf(s).memory;
+  if (!m) return 0;
+  const shops = (era === 1995 ? m.past1995 : m.past1960) ?? [];
+  let n = 0;
+  for (const p of shops) n += Math.max(0, MAX_HELPS - (s.pastCount[p.id] ?? 0));
+  for (const id of PAST_LANDMARKS) n += Math.max(0, MAX_HELPS - (s.pastCount[landmarkKey(era, id)] ?? 0));
+  return n;
+}
+
+export function helpsLeft(s: GameState, id: string): number {
+  return Math.max(0, MAX_HELPS - (s.pastCount[id] ?? 0));
+}
+
+export function landmarkHelpsLeft(s: GameState, era: Era, id: string): number {
+  return helpsLeft(s, landmarkKey(era, id));
+}
+
+/** 下一次白布電影會回到哪一年：1995 → 1960 → 1995……（某個年代幫完了就只去另一個）；全部幫完回傳 null */
+export function nextEra(s: GameState): Era | null {
+  const want: Era = !ERA_1960_READY || s.trips % 2 === 0 ? 1995 : 1960;
+  const other: Era = want === 1995 ? 1960 : 1995;
+  if (eraRemaining(s, want) > 0) return want;
+  if (ERA_1960_READY && eraRemaining(s, other) > 0) return other;
+  return null;
+}
+
+/** 膠卷壞掉了：所有回憶都找完了 */
+export function filmBroken(s: GameState): boolean {
+  return s.flags.includes('film-broken');
 }
 
 export function canTrip(s: GameState): Result {
   if (!isMemoryStreet(s)) return { ok: false, reason: '這條街沒有白布電影' };
   if (s.trip) return { ok: false, reason: '已經在回憶時光裡了' };
   if (!s.flags.includes('film')) return { ok: false, reason: '還沒找到老膠卷' };
+  if (filmBroken(s) || nextEra(s) === null) return { ok: false, reason: '老膠卷已經損壞，不能再放了' };
   if (s.lastTripDay >= s.day) return { ok: false, reason: '今晚已經放過了，明天傍晚再來' };
   if (hourOf(s) < TRIP_HOUR) return { ok: false, reason: `白布電影要等天黑（${TRIP_HOUR}:00 以後）才看得清楚` };
   if (s.minute > dayEndMin(s) - 30) return { ok: false, reason: '太晚了，大家都回家了' };
@@ -331,7 +372,7 @@ export function canTrip(s: GameState): Result {
 export function startTrip(s: GameState): Result {
   const r = canTrip(s);
   if (!r.ok) return r;
-  const era = nextEra(s);
+  const era = nextEra(s)!;
   s.trip = { era, returnMinute: s.minute, weather: s.weather, start: { ...s.memories } };
   // 1960：每三趟有一趟剛好遇到糖廠發薪日（第二趟開始）
   if (era === 1960) s.trip.payday = Math.floor(s.trips / 2) % 3 === 1;
@@ -355,6 +396,8 @@ export function endTrip(s: GameState): Memories {
   s.trip = null;
   s.trips += 1;
   s.lastTripDay = s.day;
+  // 兩個年代都幫完了：膠卷再也放不動了
+  if (nextEra(s) === null && !s.flags.includes('film-broken')) s.flags.push('film-broken');
   return gained;
 }
 
@@ -372,10 +415,56 @@ export function pastShopAt(s: GameState, lot: number): PastShop | undefined {
 /** 在過去的店幫忙：第一次是完整的故事，之後是短短的閒聊 */
 export function pastHelp(s: GameState, lot: number): Step[] | null {
   const p = pastShopAt(s, lot);
-  if (!p || !s.trip) return null;
+  if (!p || !s.trip || helpsLeft(s, p.id) <= 0) return null;
+  s.pastCount[p.id] = (s.pastCount[p.id] ?? 0) + 1;
   if (s.pastDone.includes(p.id)) return p.again(s);
   s.pastDone.push(p.id);
   return p.first(s);
+}
+
+/** 點過去的地標（每個地標每個年代最多 3 次） */
+export function pastLandmarkHelp(s: GameState, id: string): Step[] | null {
+  const m = streetOf(s).memory;
+  if (!m?.pastLandmark || !s.trip) return null;
+  const key = landmarkKey(s.trip.era, id);
+  if (!PAST_LANDMARKS.includes(id) || helpsLeft(s, key) <= 0) return null;
+  const steps = m.pastLandmark(s, s.trip.era, id);
+  if (steps) s.pastCount[key] = (s.pastCount[key] ?? 0) + 1;
+  return steps;
+}
+
+// =====================================================================
+// 膠卷壞掉之後：花錢放免費的露天電影
+// =====================================================================
+
+export const MOVIE_COST = 3000;
+export const MOVIE_TITLES = ['十二生肖', '薛平貴與王寶釧', '月光下的大埔街', '龍眼樹下的約定', '阿公的腳踏車', '十八重溪的夏天'];
+
+export function movieTitle(s: GameState): string {
+  return MOVIE_TITLES[s.movies % MOVIE_TITLES.length];
+}
+
+export function canMovie(s: GameState): Result {
+  if (!filmBroken(s)) return { ok: false, reason: '老膠卷還能放' };
+  if (s.movieDay >= s.day) return { ok: false, reason: '今晚已經放過了，明天傍晚再來' };
+  if (hourOf(s) < TRIP_HOUR) return { ok: false, reason: `露天電影要等天黑（${TRIP_HOUR}:00 以後）` };
+  if (s.minute > dayEndMin(s) - 60) return { ok: false, reason: '太晚了，大家都回家了' };
+  if (s.money < MOVIE_COST) return { ok: false, reason: `資金不足（需要 $${MOVIE_COST.toLocaleString('en-US')}）` };
+  return { ok: true };
+}
+
+/** 今晚放一場免費的露天電影：村民晚上都出來看，順便買東西 */
+export function startMovie(s: GameState): Result {
+  const r = canMovie(s);
+  if (!r.ok) return r;
+  s.money -= MOVIE_COST;
+  s.movieDay = s.day;
+  s.movies += 1;
+  return { ok: true };
+}
+
+export function movieTonight(s: GameState): boolean {
+  return s.movieDay === s.day && hourOf(s) >= TRIP_HOUR;
 }
 
 /** 幫完忙，過去的時鐘往前走 */
@@ -406,11 +495,12 @@ export function simulateTrip(s: GameState, apply: (steps: Step[]) => void): Memo
   while (!tripOver(s) && k < 30) {
     const lm = k % 3 === 1 ? lms.shift() : undefined;
     if (lm) {
-      const steps = m.pastLandmark?.(s, s.trip!.era, lm);
+      const steps = pastLandmarkHelp(s, lm);
       if (steps) apply(steps);
       passPastTime(s, HELP_MINUTES / 2);
     } else {
-      const p = order[k % order.length];
+      const p = order.find((x) => helpsLeft(s, x.id) > 0);
+      if (!p) break;
       const steps = pastHelp(s, p.lot);
       if (steps) apply(steps);
       passPastTime(s);

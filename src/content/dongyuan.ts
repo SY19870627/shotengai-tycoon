@@ -4,6 +4,8 @@ import { PAST_1995, tripIntro, tripOutro, pastLandmark } from './dongyuan1995';
 import { PAST_1960, tripIntro1960, pastLandmark1960 } from './dongyuan1960';
 import { PILGRIMAGE, pilgrimSteps, endingSteps } from './dongyuanPilgrim';
 import { pilgrimageDone } from '../core/memory';
+import { futureDoneCount } from '../core/future';
+import { DONGYUAN_FUTURE } from './dongyuanFuture';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt, look } from './dsl';
 
 /**
@@ -649,7 +651,7 @@ const stories: StoryEvent[] = [
   {
     id: 'dy-ending', street: ST, once: true, priority: 99, when: 'evening',
     cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
-    script: () => endingSteps(),
+    script: (_b, c) => endingSteps(c.s),
   },
 ];
 
@@ -671,6 +673,7 @@ export const DONGYUAN: StreetDef = {
   ground: 'brick',
   layout: [
     { kind: 'landmark', id: 'treehouse' },
+    { kind: 'landmark', id: 'fude' },
     { kind: 'lot' }, { kind: 'lot' }, { kind: 'lot' },
     { kind: 'landmark', id: 'clinic' },
     { kind: 'landmark', id: 'kiln' },
@@ -679,6 +682,7 @@ export const DONGYUAN: StreetDef = {
   ],
   landmarks: [
     { id: 'treehouse', name: '老榕樹樹屋', description: '大學生團隊和村民一起在老榕樹上搭的樹屋。夏天傍晚，國中生會爬上去寫功課。', width: 300 },
+    { id: 'fude', name: '東原土地公廟', description: '老榕樹旁的小土地公廟。村裡的大小事，都會來跟土地公說一聲。', width: 180 },
     { id: 'clinic', name: '街角小診所', description: '老街上的小診所，已經很久沒開門了。玻璃門上的紅十字褪成了粉紅色。', width: 200 },
     { id: 'kiln', name: '戲院原址・龍眼窯', description: '這裡曾經是東原戲院。荒廢多年後，改建成烘焙龍眼乾的窯。窯上還留著一塊寫著「東原戲院」的舊木頭。', width: 320 },
   ],
@@ -688,8 +692,7 @@ export const DONGYUAN: StreetDef = {
   baseTraffic: 6,
   repTraffic: 0.35,
   weekendMult: 1.8,
-  rentMult: 0.4,
-  upkeepMult: 0.5,
+  rentMult: 0.6,
   maintenance: 300,
   lotCost: 0,
   weather: { rain: 0.2, fog: 0.05 },
@@ -703,6 +706,7 @@ export const DONGYUAN: StreetDef = {
       { lot: 2, tenant: 'dy-barber', tier: 0 },
     ],
     startMemories: {},
+    processionDay: 20,
     past1995: PAST_1995,
     past1960: PAST_1960,
     pilgrimage: PILGRIMAGE,
@@ -765,7 +769,7 @@ export const DONGYUAN: StreetDef = {
   },
   shopTypes: ['meatball', 'grocery', 'barber', 'pharmacy', 'baozi', 'ribsoup', 'longan', 'cafe', 'icepop', 'platekoe', 'mantou', 'blacksmith'],
   tenants,
-  stories,
+  stories: [...stories, ...DONGYUAN_FUTURE],
   activities: {
     templeFair: { name: '大鼓舞龍踩街', temple: '東原國中' },
     mascots: [
@@ -781,5 +785,6 @@ export const DONGYUAN: StreetDef = {
   goals: [
     { id: 'pilgrimage', text: `點亮所有回憶巡禮點（${PILGRIMAGE.length} 個）`, check: (s) => pilgrimageDone(s) },
     { id: 'kinship', text: '鄉親認同達到 100', check: (s) => s.flags.includes('kinship100') },
+    { id: 'future', text: '完成 3 個未來計畫', check: (s) => futureDoneCount(s) >= 3 },
   ],
 };
