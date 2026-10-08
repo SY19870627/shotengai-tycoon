@@ -242,6 +242,7 @@ const stories: StoryEvent[] = [
       focus('dy-meatball'),
       appear('dy-meatball'),
       say('dy-meatball', '少年仔，坐。先吃一碗肉圓。'),
+      say('dy-meatball', '你運氣好，今天禮拜五，剛好有早市，阿公阿嬤一早就出來買菜。'),
       say('dy-meatball', '平常街上都是村裡的人，買菜、剪頭髮、拿藥。週末才會有騎腳踏車的、坐遊覽車的來。'),
       say('dy-meatball', '村裡的人邊吃邊聊，以前的事，就會慢慢講出來。'),
       say('dyStudent', '居民在店裡聊天，就會累積回憶點數。給居民的店越多，大家越把這條街當成自己的。'),

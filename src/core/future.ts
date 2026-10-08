@@ -24,12 +24,36 @@ export function morningMarket(s: GameState): boolean {
   return isMemoryStreet(s) && weekdayIndex(s) === 4;
 }
 
-/** 夜市、早市時段的居民倍率 */
+/** 週二、週四：香腸伯開改裝的三輪貨車來擺攤（香腸、黑輪） */
+export function sausageDay(s: GameState): boolean {
+  const w = weekdayIndex(s);
+  return isMemoryStreet(s) && (w === 1 || w === 3);
+}
+
+/** 香腸伯在街上的時間 */
+export function sausageHere(s: GameState): boolean {
+  const h = hourOf(s);
+  return sausageDay(s) && h >= 14 && h < 20;
+}
+
+/** 週三：鹹酥雞在國小擺攤，下午先開車繞全村叫賣 */
+export function chickenDay(s: GameState): boolean {
+  return isMemoryStreet(s) && weekdayIndex(s) === 2;
+}
+
+/** 鹹酥雞的車繞村叫賣的時間 */
+export const CHICKEN_ROUND: [number, number] = [14, 15];
+
+/** 夜市、早市、香腸伯、鹹酥雞時段的居民倍率 */
 export function marketMult(s: GameState): number {
   const h = hourOf(s);
   const up = futureDone(s, 'market') ? 1.4 : 1;
   if (nightMarket(s) && h >= 17.5) return 1.8 * up;
   if (morningMarket(s) && h >= 6 && h < 10.5) return 2 * up;
+  // 圍過來買香腸，順便逛老街
+  if (sausageHere(s)) return 1.2;
+  // 傍晚去國小買完鹹酥雞，回家路上經過老街
+  if (chickenDay(s) && h >= 17 && h < 19.5) return 1.25;
   return 1;
 }
 

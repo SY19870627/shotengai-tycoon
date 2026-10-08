@@ -1,6 +1,6 @@
 import type { StoryEvent, Step, GameState } from '../core/types';
 import { isWeekend, weekdayIndex } from '../core/game';
-import { futureDone, fudeToday, raceToday, processionToday, processionDaysLeft, PLAN_BY_ID, longanSeason } from '../core/future';
+import { futureDone, fudeToday, raceToday, processionToday, processionDaysLeft, PLAN_BY_ID, longanSeason, sausageDay, chickenDay } from '../core/future';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt } from './dsl';
 
 /**
@@ -86,7 +86,7 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
   // ---- 東原的日常：週一夜市、週五早市 ----
   {
     id: 'dy-nightmarket', street: ST, once: true, priority: 30, when: 'evening',
-    cond: (c) => (weekdayIndex(c.s) === 0 && c.s.day >= 3 ? {} : null),
+    cond: (c) => (weekdayIndex(c.s) === 0 ? {} : null),
     script: () => [
       narrate('禮拜一晚上。街上一攤一攤亮起燈：烤香腸、鹹酥雞、套圈圈、賣衣服的、賣碗盤的。'),
       focus('dy-meatball'),
@@ -100,9 +100,9 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
   },
   {
     id: 'dy-morningmarket', street: ST, once: true, priority: 30, when: 'morning',
-    cond: (c) => (weekdayIndex(c.s) === 4 && c.s.day >= 3 ? {} : null),
+    cond: (c) => (weekdayIndex(c.s) === 4 && c.s.day > 1 && c.has('dy-lan') ? {} : null),
     script: () => [
-      narrate('禮拜五一大早，老街擠滿了人。農民把自己種的柳丁、龍眼、青菜擺在路邊賣。'),
+      narrate('禮拜五早上，老街擠滿了人。農民把自己種的柳丁、龍眼、青菜擺在路邊賣。'),
       focus('dy-lan'),
       appear('dy-lan'),
       appear('dyResident', 'dy-lan', 80),
@@ -187,6 +187,38 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
       emote('me', 'idea'),
       narrate('提示：多開給居民的店（招牌上標「回憶」的店），鄉親認同才會上升；錢先存起來，之後要用在未來計畫和全山頭繞境。'),
       leave('dyChief'), leave('me'),
+    ],
+  },
+  {
+    id: 'dy-sausage', street: ST, once: true, priority: 30, when: 'noon',
+    cond: (c) => (sausageDay(c.s) ? {} : null),
+    script: () => [
+      narrate('下午，一台改裝的三輪貨車「噗噗噗」地開進老街，車斗上架著烤爐和一鍋冒著熱氣的黑輪。'),
+      focus('dy-meatball'),
+      appear('sausageUncle', 'dy-meatball', 90),
+      appear('dyLifter', 'dy-meatball', 170),
+      appear('me', 'dy-meatball', -100),
+      say('sausageUncle', '香腸、黑輪喔——！'),
+      say('dyLifter', '香腸伯！兩支香腸，一支要蒜頭！'),
+      say('sausageUncle', '好啦好啦，舉重隊的吃多一點，才舉得起來！'),
+      narrate('每個禮拜二、禮拜四，香腸伯都會開著三輪貨車來。村裡的人圍過來買香腸，也順便逛逛老街。'),
+      leave('dyLifter'), leave('sausageUncle'), leave('me'),
+    ],
+  },
+  {
+    id: 'dy-chicken', street: ST, once: true, priority: 30, when: 'noon',
+    cond: (c) => (chickenDay(c.s) ? {} : null),
+    script: () => [
+      narrate('禮拜三下午，遠遠傳來喇叭的聲音，一台小貨車慢慢繞著全村開——'),
+      narrate('「禮拜三喔——來養那攤鹹酥雞——！」'),
+      focus('dy-barber'),
+      appear('dy-barber'),
+      appear('me', 'dy-barber', -100),
+      say('me', '「來養」那攤鹹酥雞？'),
+      say('dy-barber', '哈哈，意思就是請大家來買啦！大家來捧場，養鹹酥雞老闆一家人。'),
+      say('dy-barber', '他每個禮拜三下午都在國小門口擺攤。傍晚大家買完鹹酥雞回家，都會經過老街。'),
+      emote('me', 'music'),
+      leave('dy-barber'), leave('me'),
     ],
   },
   // ---- 介紹未來計畫與繞境 ----
