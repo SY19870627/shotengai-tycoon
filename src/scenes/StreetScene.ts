@@ -978,7 +978,7 @@ export class StreetScene extends Phaser.Scene {
     return c;
   }
 
-  /** 週二、週四：香腸伯的三輪貨車停在街上；週三下午：鹹酥雞的車繞村叫賣 */
+  /** 週二、週四：香腸伯的三輪貨車停在街上；週三白天：鹹酥雞的車繞村叫賣 */
   private updateWeekdayVendors(dt: number, running: boolean) {
     const s = S();
     const here = sausageHere(s);
@@ -1006,7 +1006,7 @@ export class StreetScene extends Phaser.Scene {
         if (Math.random() < 0.25) this.floatText(this.sausageCart.x, sy - 20, '香腸、黑輪喔～', '#ffe0c0', 14);
       }
     }
-    // 鹹酥雞的叫賣車：下午兩點出發，一個小時從街頭開到街尾
+    // 鹹酥雞的叫賣車：早上十點出發，慢慢開五個小時從街頭到街尾
     const h = hourOf(s);
     const [a, b] = CHICKEN_ROUND;
     const rounding = chickenDay(s) && h >= a && h < b;
@@ -1042,7 +1042,13 @@ export class StreetScene extends Phaser.Scene {
         this.shoutTimer -= dt;
         if (this.shoutTimer <= 0) {
           this.shoutTimer = 1600;
-          this.floatText(this.chickenTruck.x + 20, this.chickenTruck.y - 80, '禮拜三喔——來養那攤鹹酥雞——！', '#fff0a0', 15);
+          // 廣播的字掛在車子上方，跟著車一起走
+          const truck = this.chickenTruck;
+          const shout = this.add.text(0, -76, '禮拜三喔——來養那攤鹹酥雞——！', {
+            fontFamily: FONT, fontSize: '13px', fontStyle: '900', color: '#fff0a0', stroke: '#2a2433', strokeThickness: 4,
+          }).setOrigin(0.5);
+          truck.add(shout);
+          this.tweens.add({ targets: shout, y: -100, alpha: 0, duration: 1400, ease: 'Cubic.easeOut', onComplete: () => shout.destroy() });
         }
       }
     }

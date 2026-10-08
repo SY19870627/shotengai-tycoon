@@ -36,13 +36,13 @@ export function sausageHere(s: GameState): boolean {
   return sausageDay(s) && h >= 14 && h < 20;
 }
 
-/** 週三：鹹酥雞在國小擺攤，下午先開車繞全村叫賣 */
+/** 週三：鹹酥雞在國小擺攤，白天先開車繞全村叫賣 */
 export function chickenDay(s: GameState): boolean {
   return isMemoryStreet(s) && weekdayIndex(s) === 2;
 }
 
-/** 鹹酥雞的車繞村叫賣的時間 */
-export const CHICKEN_ROUND: [number, number] = [14, 15];
+/** 鹹酥雞的車繞村叫賣的時間：早上十點出發，慢慢開五個小時到街尾 */
+export const CHICKEN_ROUND: [number, number] = [10, 15];
 
 /** 鹹酥雞攤直接擺在老街的馬路上（叫賣完到晚上） */
 export function chickenHere(s: GameState): boolean {
