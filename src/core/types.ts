@@ -170,6 +170,28 @@ export interface PastShop {
   again: (s: GameState) => Step[];
 }
 
+/** 東原：回憶巡禮點 */
+export interface PilgrimDef {
+  id: string;
+  name: string;
+  /** 在 2016 年街上的位置 */
+  at: { lot: number } | { landmark: string };
+  /** 要先在過去找回的那段回憶（pastDone 的 id） */
+  need: string;
+  era: Era;
+  /** 還沒找到時的提示 */
+  hint: string;
+  /** 點亮要用掉的回憶 */
+  cost: Partial<Memories>;
+  /** 浮現的老照片標題，例如「1960・東原戲院散場的人潮」 */
+  caption: string;
+  /** 點亮時走過來說話的人 */
+  who: string;
+  line: string;
+  /** 額外的改變 */
+  effects?: Effects;
+}
+
 /** 東原：四種回憶點數 */
 export type MemoryKind = 'past' | 'taste' | 'bond' | 'craft';
 export type Memories = Record<MemoryKind, number>;
@@ -424,6 +446,9 @@ export interface StreetDef {
     /** 回憶時光的開場、收尾 */
     tripIntro?: (s: GameState, era: Era) => Step[];
     tripOutro?: (s: GameState, era: Era, gained: Memories) => Step[];
+    /** 回憶巡禮點 */
+    pilgrimage?: PilgrimDef[];
+    pilgrimStory?: (s: GameState, p: PilgrimDef) => Step[];
     /** 點過去的地標（戲院蛇窩探險…） */
     pastLandmark?: (s: GameState, era: Era, id: string) => Step[] | null;
   };
@@ -680,4 +705,6 @@ export interface GameState {
   lastTripDay: number;
   /** 在過去做過的事（第一次幫忙的回憶比較多） */
   pastDone: string[];
+  /** 已點亮的回憶巡禮點 */
+  lit: string[];
 }

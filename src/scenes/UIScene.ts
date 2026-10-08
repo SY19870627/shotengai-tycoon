@@ -12,6 +12,7 @@ import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
   kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
   canTrip, startTrip, endTrip, nextEra, tripOver, pastHelp, passPastTime, emptyMemories, PAST_HOURS, TRIP_HOUR, HELP_MINUTES,
+  pilgrimage, pilgrimState, lightPilgrim,
 } from '../core/memory';
 import {
   hasSpring, springSupply, springDemand, springRatio, shopSpringUse, protestStage, PROTEST_STAGES, wellCost, wellGrievance,
@@ -73,6 +74,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private toastText!: Phaser.GameObjects.Text;
   private liveRefresh?: () => void;
   private memText?: Phaser.GameObjects.Text;
+  private pilgrimButton?: Button;
   private pastBar?: Phaser.GameObjects.Rectangle;
   /** 回憶時光：剛演完的劇情要讓過去的時鐘往前走幾分鐘、要不要回到 2016 */
   private pastPending = 0;
@@ -100,6 +102,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.grievanceBar = undefined;
     this.grievanceText = undefined;
     this.memText = undefined;
+    this.pilgrimButton = undefined;
     this.pastBar = undefined;
     this.pastPending = 0;
     this.pastLot = -1;
@@ -129,6 +132,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     on(Ev.Story, (steps: Step[]) => this.director.play(steps));
     on(Ev.StoryDone, () => this.afterStory());
     on(Ev.PastTap, (i: number) => this.onPastTap(i));
+    on(Ev.Pilgrim, () => {
+      if (!store.storyRunning && !store.waitingNextDay && !S().trip) this.showPilgrimage();
+    });
     on(Ev.TripEnd, () => this.onTripEnd());
     on(Ev.Landmark, (id: string) => {
       if (store.storyRunning || store.waitingNextDay) return;
@@ -310,6 +316,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.kinBar!.setFillStyle(k >= 75 ? 0x7cc37a : k >= 50 ? 0xa8d080 : k >= 30 ? 0xf2c14e : 0xe08a5a);
       this.kinText!.setText(String(Math.round(k)));
     }
+    if (this.pilgrimButton) this.pilgrimButton.setText(`巡禮\n${s.lit.length}/${pilgrimage(s).length}`);
     const done = streetOf(s).goals.filter((g) => g.check(s)).length;
     this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
 
@@ -380,7 +387,10 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     let y = 0;
     mk(y, '活動', 0xb3262e, () => this.showActivities());
     if (streetOf(S()).transport) mk((y += 66), '交通', 0xd9824a, () => this.showTransport());
-    if (isMemoryStreet(S())) mk((y += 66), '回憶', 0x9a6a3a, () => this.showMemories());
+    if (isMemoryStreet(S())) {
+      mk((y += 66), '回憶', 0x9a6a3a, () => this.showMemories());
+      this.pilgrimButton = mk((y += 66), '巡禮', 0xb08a3a, () => this.showPilgrimage());
+    }
     mk((y += 66), '租客\n關係', 0x3f6f8f, () => this.showRelations());
     this.goalButton = mk((y += 66), '目標', 0x3f8f4f, () => this.showGoals());
     mk((y += 66), '地圖', 0x4a4460, () => this.confirmBackToMap());
@@ -619,6 +629,41 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     endTrip(s);
     save();
     this.switchEra();
+  }
+
+  /** 東原：回憶巡禮 */
+  private showPilgrimage() {
+    const s = S();
+    const MW = 1040, MH = 640;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.closeButton(m, x + MW - 54, y + 18);
+    const all = pilgrimage(s);
+    m.add(this.text(x + 30, y + 22, `回憶巡禮　${s.lit.length} / ${all.length}`, 26, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 58, '在白布電影裡找回的回憶，帶回 2016 年的同一個地方點亮。全部點亮就能過關。', 14, '#6a6378'));
+    const rowH = 58, colW = 490;
+    all.forEach((p, n) => {
+      const cx = x + 30 + (n % 2) * (colW + 0), cy = y + 88 + Math.floor(n / 2) * rowH;
+      const st = pilgrimState(s, p);
+      const bg = st === 'lit' ? 0xf3e7c8 : st === 'ready' ? 0xfffbe8 : 0xffffff;
+      m.add(this.add.rectangle(cx, cy, colW - 12, rowH - 6, bg).setOrigin(0).setStrokeStyle(2, st === 'ready' ? C.gold : 0xd8cfe0));
+      m.add(this.text(cx + 10, cy + 6, `${p.era}`, 12, '#ffffff', '900').setBackgroundColor(p.era === 1960 ? '#8a6a4a' : '#4a7a8a').setPadding(4, 1, 4, 1));
+      m.add(this.text(cx + 54, cy + 5, (st === 'lit' ? '✦ ' : '') + p.name, 16, st === 'unfound' ? '#9a92a8' : hex(C.ink), '900'));
+      const sub = st === 'lit' ? p.caption : st === 'unfound' ? `提示：${p.hint}` : st === 'owner' ? '找到了！但這間房子的屋主還沒談好' : `需要 ${memoryText(p.cost)}`;
+      m.add(this.text(cx + 10, cy + 29, sub, 12, st === 'owner' ? '#b33a3a' : '#6a6378').setWordWrapWidth(colW - 150, true));
+      if (st === 'ready' || st === 'poor') {
+        const b = this.button(cx + colW - 120, cy + 8, 100, 36, '點亮', () => {
+          const r = lightPilgrim(s, p.id);
+          if (!r.ok) return toast(r.reason);
+          this.closeModal();
+          save();
+          bus.emit(Ev.Changed);
+          const steps = streetOf(s).memory?.pilgrimStory?.(s, p) ?? [];
+          if (steps.length) bus.emit(Ev.Story, steps);
+        }, 0xb08a3a, 15);
+        b.setEnabled(st === 'ready');
+        m.add(b.root);
+      }
+    });
   }
 
   /** 東原：回憶點數、老店作法、屋主 */

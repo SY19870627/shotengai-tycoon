@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { MEMORY_NAME, MEMORY_COLOR, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet } from '../core/memory';
+import { MEMORY_NAME, MEMORY_COLOR, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
 /** 1 倍速時，每真實秒經過的遊戲分鐘數（一天約 2 分鐘） */
@@ -243,6 +243,8 @@ export class StreetScene extends Phaser.Scene {
   private caneCart: { img: Phaser.GameObjects.Image; key: string; dir: 1 | -1; t: number } | null = null;
   private tripEndSent = false;
   private filmView: { c: Phaser.GameObjects.Container; beam: Phaser.GameObjects.Graphics } | null = null;
+  private pilgrimLayer?: Phaser.GameObjects.Container;
+  private pilgrimSig = '';
   private wellLayer!: Phaser.GameObjects.Container;
   private wellSig = '';
   private festGlow!: Phaser.GameObjects.Container;
@@ -269,6 +271,8 @@ export class StreetScene extends Phaser.Scene {
     this.caneCart = null;
     this.tripEndSent = false;
     this.filmView = null;
+    this.pilgrimLayer = undefined;
+    this.pilgrimSig = '';
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -718,6 +722,67 @@ export class StreetScene extends Phaser.Scene {
     }
   }
 
+  /** 東原 2016：回憶巡禮點。點亮的地方浮著一張老照片，可以點亮的地方閃著星星 */
+  private updatePilgrimMarkers() {
+    const s = S();
+    const all = pilgrimage(s);
+    const states = all.map((p) => pilgrimState(s, p));
+    const sig = states.join(',');
+    if (sig === this.pilgrimSig) return;
+    this.pilgrimSig = sig;
+    this.pilgrimLayer?.destroy();
+    this.pilgrimLayer = this.add.container(0, 0).setDepth(41);
+    const slot = new Map<string, number>();
+    all.forEach((p, n) => {
+      const st = states[n];
+      if (st !== 'lit' && st !== 'ready') return;
+      const key = 'lot' in p.at ? `lot${p.at.lot}` : p.at.landmark;
+      const k = slot.get(key) ?? 0;
+      slot.set(key, k + 1);
+      let cx: number, top: number;
+      if ('lot' in p.at) {
+        const shop = s.lots[p.at.lot]?.shop;
+        cx = this.L.lotX(p.at.lot) + LOT_W / 2;
+        top = GROUND_Y - buildingHeight(shop?.level ?? 1) - 60;
+      } else {
+        const box = this.landmarkBox.get(p.at.landmark);
+        if (!box) return;
+        cx = box.x + box.w / 2;
+        top = GROUND_Y - 330;
+      }
+      const x = cx + (k === 0 ? -34 : 34);
+      if (st === 'lit') {
+        // 泛黃的老照片
+        const c = this.add.container(x, top - k * 6);
+        const g = this.add.graphics();
+        g.fillStyle(0xfaf3e0, 1);
+        g.fillRect(-30, -24, 60, 50);
+        g.fillStyle(p.era === 1960 ? 0xb89a72 : 0xc9b48e, 1);
+        g.fillRect(-25, -19, 50, 34);
+        g.fillStyle(0x6a5440, 0.8);
+        g.fillTriangle(-25, -2, -8, -14, 9, -2);
+        g.fillRect(4, -10, 16, 10);
+        for (const fx of [-16, -6, 6, 16]) g.fillCircle(fx, 8, 3);
+        g.lineStyle(1, 0x8a7a60, 0.8);
+        g.strokeRect(-30, -24, 60, 50);
+        const t = this.add.text(0, 19, String(p.era), { fontFamily: FONT, fontSize: '9px', fontStyle: '900', color: '#6a5440' }).setOrigin(0.5);
+        c.add([g, t]).setAngle(k === 0 ? -6 : 5);
+        const hit = this.add.zone(0, 0, 60, 50).setInteractive({ useHandCursor: true });
+        hit.on('pointerup', () => !this.drag.moved && bus.emit(Ev.Toast, `${p.name}：${p.caption}`));
+        c.add(hit);
+        this.tweens.add({ targets: c, y: c.y - 5, yoyo: true, repeat: -1, duration: 1600 + k * 300, ease: 'Sine.easeInOut' });
+        this.pilgrimLayer!.add(c);
+      } else {
+        const tag = this.add.text(cx, top - 4 - k * 30, '✦ 巡禮點', {
+          fontFamily: FONT, fontSize: '13px', fontStyle: '900', color: '#2a2433', backgroundColor: '#f3e3c2', padding: { x: 6, y: 3 },
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        tag.on('pointerup', () => !this.drag.moved && bus.emit(Ev.Pilgrim));
+        this.tweens.add({ targets: tag, alpha: 0.55, yoyo: true, repeat: -1, duration: 700 });
+        this.pilgrimLayer!.add(tag);
+      }
+    });
+  }
+
   /** 東原 2016：傍晚以後，龍眼窯前搭著白布 */
   private updateFilmScreen() {
     const s = S();
@@ -875,7 +940,10 @@ export class StreetScene extends Phaser.Scene {
       }
       return;
     }
-    if (this.street.memory) this.updateFilmScreen();
+    if (this.street.memory) {
+      this.updateFilmScreen();
+      this.updatePilgrimMarkers();
+    }
 
     if (running) {
       this.checkStories();

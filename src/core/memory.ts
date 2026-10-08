@@ -1,5 +1,5 @@
 import { SHOP_BY_ID } from './shops';
-import type { GameState, Memories, MemoryKind, OwnerDef, RecipeDef, Origin, TenantProfile, Era, PastShop, Step } from './types';
+import type { GameState, Memories, MemoryKind, OwnerDef, RecipeDef, Origin, TenantProfile, Era, PastShop, Step, PilgrimDef } from './types';
 import { streetOf, hourOf, isWeekend, unlockedCount, dayEndMin, type Result } from './game';
 
 /**
@@ -235,8 +235,50 @@ export function kinshipLabel(v: number): string {
   return v >= 75 ? '像一家人' : v >= 50 ? '熟悉' : v >= 30 ? '有點陌生' : '不像我們的街了';
 }
 
-export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship' | 'trip' | 'trips' | 'lastTripDay' | 'pastDone'> {
-  return { memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50, trip: null, trips: 0, lastTripDay: 0, pastDone: [] };
+export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'recipes' | 'kinship' | 'trip' | 'trips' | 'lastTripDay' | 'pastDone' | 'lit'> {
+  return { memories: emptyMemories(), memFrac: emptyMemories(), recipes: [], kinship: 50, trip: null, trips: 0, lastTripDay: 0, pastDone: [], lit: [] };
+}
+
+// =====================================================================
+// 回憶巡禮
+// =====================================================================
+
+export function pilgrimage(s: GameState): PilgrimDef[] {
+  return streetOf(s).memory?.pilgrimage ?? [];
+}
+
+export function pilgrimOf(s: GameState, id: string): PilgrimDef | undefined {
+  return pilgrimage(s).find((p) => p.id === id);
+}
+
+/** lit 已點亮、ready 可以點亮、poor 回憶不夠、owner 屋主還沒談好、unfound 還沒在過去找到 */
+export type PilgrimState = 'lit' | 'ready' | 'poor' | 'owner' | 'unfound';
+
+export function pilgrimState(s: GameState, p: PilgrimDef): PilgrimState {
+  if (s.lit.includes(p.id)) return 'lit';
+  if (!s.pastDone.includes(p.need)) return 'unfound';
+  if ('lot' in p.at && !s.lots[p.at.lot]?.unlocked) return 'owner';
+  return hasMemories(s, p.cost) ? 'ready' : 'poor';
+}
+
+/** 點亮巡禮點（回傳之後要演的劇情由介面組） */
+export function lightPilgrim(s: GameState, id: string): Result {
+  const p = pilgrimOf(s, id);
+  if (!p) return { ok: false, reason: '沒有這個巡禮點' };
+  if (s.trip) return { ok: false, reason: '回到 2016 年才能點亮' };
+  const st = pilgrimState(s, p);
+  if (st === 'lit') return { ok: false, reason: '已經點亮了' };
+  if (st === 'unfound') return { ok: false, reason: p.hint };
+  if (st === 'owner') return { ok: false, reason: '這間房子的屋主還沒談好' };
+  if (st === 'poor') return { ok: false, reason: `回憶不夠（需要 ${memoryText(p.cost)}）` };
+  payMemories(s, p.cost);
+  s.lit.push(p.id);
+  return { ok: true };
+}
+
+export function pilgrimageDone(s: GameState): boolean {
+  const all = pilgrimage(s);
+  return all.length > 0 && all.every((p) => s.lit.includes(p.id));
 }
 
 // =====================================================================
@@ -342,6 +384,8 @@ export function simulateTrip(s: GameState, apply: (steps: Step[]) => void): Memo
     return null;
   }
   const m = streetOf(s).memory!;
+  const intro = m.tripIntro?.(s, s.trip!.era);
+  if (intro) apply(intro);
   const shops = pastShops(s);
   const order = [...shops.filter((p) => !s.pastDone.includes(p.id)), ...shops];
   const lms = ['kiln', 'treehouse'];

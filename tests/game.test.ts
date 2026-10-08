@@ -16,6 +16,7 @@ import {
 import {
   negotiate, negotiateBlock, ownerOf, learnRecipe, residentsPerHour, touristsPerHour, dailyKinshipDelta,
   canTrip, startTrip, endTrip, tripOver, pastHelp, passPastTime, pastShops, simulateTrip, recipeCost, recipeOf, PAST_HOURS,
+  pilgrimage, pilgrimState, lightPilgrim, pilgrimageDone,
 } from '../src/core/memory';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
@@ -935,6 +936,63 @@ describe('東原', () => {
     expect(totals[0]).toBeGreaterThan(totals[5]);
     expect(totals[5]).toBeGreaterThan(0);
     expect(s.trips).toBe(6);
+  });
+
+  it('回憶巡禮：要先在過去找到、屋主談好、付回憶才能點亮', () => {
+    const s = dy();
+    const all = pilgrimage(s);
+    expect(all.length).toBeGreaterThanOrEqual(15);
+    // 每個巡禮點需要的回憶，都真的能在過去找到
+    const m = STREETS.dongyuan.memory!;
+    const findable = new Set([...m.past1995!, ...m.past1960!].map((p) => p.id));
+    for (const id of ['95-snake', '95-banyan', '60-theater', '60-banyan', '60-payday']) findable.add(id);
+    for (const p of all) expect(findable.has(p.need), p.id).toBe(true);
+    const stall = all.find((p) => p.id === 'p-stall')!;
+    expect(pilgrimState(s, stall)).toBe('unfound');
+    s.pastDone.push('60-meatball');
+    expect(pilgrimState(s, stall)).toBe('poor');
+    s.memories = { past: 99, taste: 99, bond: 99, craft: 99 };
+    expect(pilgrimState(s, stall)).toBe('ready');
+    const photo = all.find((p) => p.id === 'p-photo')!;
+    s.pastDone.push('60-photo');
+    expect(pilgrimState(s, photo)).toBe('owner');
+    expect(lightPilgrim(s, 'p-stall').ok).toBe(true);
+    expect(s.memories.bond).toBe(99 - (stall.cost.bond ?? 0));
+    expect(lightPilgrim(s, 'p-stall').ok).toBe(false);
+    expect(pilgrimageDone(s)).toBe(false);
+    expect(STREETS.dongyuan.goals[0].check(s)).toBe(false);
+  });
+
+  it('數值模擬：每晚穿越、說服屋主、點亮巡禮點，40 天內可以看到結局', () => {
+    const s = dy();
+    const rand = seeded(11);
+    const run = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); };
+    let day = 0;
+    for (let d = 1; d <= 40 && !s.chapterComplete; d++) {
+      day = d;
+      for (let i = 0; i < s.lots.length; i++) {
+        if (s.lots[i].unlocked && !s.lots[i].shop && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 0);
+      }
+      unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
+      for (const r of STREETS.dongyuan.memory!.recipes) learnRecipe(s, r.shop);
+      for (const p of pilgrimage(s)) if (lightPilgrim(s, p.id).ok) run(STREETS.dongyuan.memory!.pilgrimStory!(s, p));
+      for (const when of ['morning', 'noon'] as const) {
+        const st = pickStory(s, when, rand);
+        if (st) run(st.steps);
+      }
+      s.minute = DAY_START_MIN;
+      simulateTrip(s, run);
+      s.minute = DAY_START_MIN;
+      simulateDay(s, rand);
+      s.minute = 18.5 * 60;
+      const ev = pickStory(s, 'evening', rand);
+      if (ev) run(ev.steps);
+      endDay(s, rand);
+      expect(s.gameOver).toBe(false);
+      startNextDay(s, rand);
+    }
+    expect(s.chapterComplete).toBe(true);
+    expect(day).toBeGreaterThan(12);
   });
 
   it('數值模擬：只靠 2016 年的經營也能慢慢說服屋主，不會破產', () => {

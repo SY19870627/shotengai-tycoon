@@ -2,6 +2,8 @@ import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
 import { isWeekend } from '../core/game';
 import { PAST_1995, tripIntro, tripOutro, pastLandmark } from './dongyuan1995';
 import { PAST_1960, tripIntro1960, pastLandmark1960 } from './dongyuan1960';
+import { PILGRIMAGE, pilgrimSteps, endingSteps } from './dongyuanPilgrim';
+import { pilgrimageDone } from '../core/memory';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt, look } from './dsl';
 
 /**
@@ -612,18 +614,24 @@ const stories: StoryEvent[] = [
     ],
   },
   {
-    id: 'dy-wait', street: ST, once: true, priority: 30, when: 'morning',
-    cond: (c) => (c.s.day >= 10 ? {} : null),
+    id: 'dy-pilgrim-map', street: ST, once: true, priority: 52, when: 'morning',
+    cond: (c) => (c.s.trips >= 1 ? {} : null),
     script: () => [
       focus({ landmark: 'kiln' }),
       appear('dyStudent', { landmark: 'kiln' }),
       appear('me', { landmark: 'kiln' }, -90),
       say('dyStudent', '會長，我做了一張「回憶巡禮地圖」。戲院原址、冰鋪、碗粿店、打鐵舖、老榕樹……'),
-      say('dyStudent', '每個地方，都藏著一段以前的故事。要把它們一個一個找回來，才算真的讓東原活過來。'),
-      say('dyStudent', '有些回憶，只有回到那個年代才找得到。'),
-      narrate('（回憶巡禮會在下一階段開放。）'),
+      say('dyStudent', '每個地方，都藏著一段以前的故事。你在白布電影裡找回的回憶，帶回來這裡，就可以把那個地方「點亮」。'),
+      say('dyStudent', '房子還關著的地方，要先說服屋主才行。全部點亮的那天……我們來辦一場真正的白布電影之夜吧。'),
+      emote('me', 'star'),
+      narrate('右邊的「巡禮」可以看到所有巡禮點。點亮全部巡禮點就能過關。'),
       leave('dyStudent'), leave('me'),
     ],
+  },
+  {
+    id: 'dy-ending', street: ST, once: true, priority: 99, when: 'evening',
+    cond: (c) => (pilgrimageDone(c.s) ? {} : null),
+    script: () => endingSteps(),
   },
 ];
 
@@ -678,6 +686,8 @@ export const DONGYUAN: StreetDef = {
     startMemories: {},
     past1995: PAST_1995,
     past1960: PAST_1960,
+    pilgrimage: PILGRIMAGE,
+    pilgrimStory: pilgrimSteps,
     tripIntro: (s, era) => (era === 1960 ? tripIntro1960(s) : tripIntro(s, era)),
     tripOutro,
     pastLandmark: (s, era, id) => (era === 1960 ? pastLandmark1960(s, id) : pastLandmark(s, era, id)),
@@ -750,6 +760,6 @@ export const DONGYUAN: StreetDef = {
     ],
   },
   goals: [
-    { id: 'pilgrimage', text: '點亮所有回憶巡禮點（下一階段開放）', check: () => false },
+    { id: 'pilgrimage', text: `點亮所有回憶巡禮點（${PILGRIMAGE.length} 個）`, check: (s) => pilgrimageDone(s) },
   ],
 };

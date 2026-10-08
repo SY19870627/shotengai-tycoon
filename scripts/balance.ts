@@ -3,7 +3,7 @@
  * 模擬一個「有空店面就簽應徵者（標準租金）、有錢就整修店面、偶爾辦活動」的會長，跑 30 天。
  * 劇情一律選第一個選項。
  */
-import { learnRecipe, MEMORY_KINDS, simulateTrip, memoryText } from '../src/core/memory';
+import { learnRecipe, MEMORY_KINDS, simulateTrip, memoryText, pilgrimage, lightPilgrim } from '../src/core/memory';
 import {
   createGame, endDay, startNextDay, unlockLot, nextLotCost, signTenant, profileOf, applyEffects,
   startActivity, canStartActivity, goalsDone, renovate, presentTenants, buildFacility, installModule, setStaff,
@@ -80,6 +80,11 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   }
   // 東原：回憶夠了就學老店作法
   for (const r of street.memory?.recipes ?? []) if (learnRecipe(s, r.shop).ok) log.push(`  [回憶] 學會${r.name}`);
+  for (const p of pilgrimage(s)) {
+    if (!lightPilgrim(s, p.id).ok) continue;
+    log.push(`  [巡禮] ${p.name}（${s.lit.length}/${pilgrimage(s).length}）`);
+    for (const st of flattenEffects(street.memory!.pilgrimStory!(s, p))) if (st.t === 'effect') applyEffects(s, st.effects, rand);
+  }
   if (s.money > 25000) {
     const i = s.lots.findIndex((l) => l.shop && l.shop.level < 3);
     if (i >= 0) renovate(s, i);
