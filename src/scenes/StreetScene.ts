@@ -256,6 +256,9 @@ export class StreetScene extends Phaser.Scene {
   private vendorTimer = 0;
   private shoutTimer = 0;
   private seasonTimer = 0;
+  /** 騎樓下剝龍眼的人的位置（跳工錢用） */
+  private peelers: { x: number; y: number }[] = [];
+  private peelTimer = 0;
   private seasonLayer?: Phaser.GameObjects.Container;
   private seasonHaze?: Phaser.GameObjects.Rectangle;
   private seasonClouds?: Phaser.GameObjects.Container;
@@ -833,6 +836,7 @@ export class StreetScene extends Phaser.Scene {
       this.seasonClouds?.destroy();
       this.seasonClouds = undefined;
       this.seasonCloudList = [];
+      this.peelers = [];
       if (on) {
         this.seasonHaze = this.add.rectangle(0, 0, W, H, 0xa07848, 0.17).setOrigin(0).setScrollFactor(0).setDepth(49);
         // 一大團一大團的龍眼煙，從屋頂一路罩到馬路，慢慢飄過老街
@@ -865,6 +869,7 @@ export class StreetScene extends Phaser.Scene {
           for (let n = 0; n < 9; n++) g.fillCircle(x + 16 + (n % 5) * 5, y - 7 - Math.floor(n / 5) * 3, 2.6);
           const person = this.add.image(x, y - 10, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setCrop(0, 0, CHAR_W, 59);
           layer.add([g, person]);
+          this.peelers.push({ x, y: y - 10 });
         });
         this.seasonLayer = layer;
       }
@@ -877,6 +882,16 @@ export class StreetScene extends Phaser.Scene {
     }
     if (!on || !running) return;
     const mult = store.speed;
+    // 白天剝龍眼：每剝好一斤龍眼乾，工錢十幾塊（東山在地的計件行情）
+    const h = hourOf(s);
+    if (h >= 8 && h < 17 && this.peelers.length) {
+      this.peelTimer -= dt * mult;
+      if (this.peelTimer <= 0) {
+        this.peelTimer = 2500 + Math.random() * 2500;
+        const p = this.peelers[Math.floor(Math.random() * this.peelers.length)];
+        this.floatText(p.x, p.y - 70, `+$${Phaser.Math.Between(12, 18)}`, '#ffe066', 14);
+      }
+    }
     this.seasonTimer -= dt * mult;
     if (this.seasonTimer > 0) return;
     this.seasonTimer = 500 + Math.random() * 600;
