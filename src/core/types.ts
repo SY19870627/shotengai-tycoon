@@ -148,6 +148,8 @@ export interface Trip {
   weather: Weather;
   /** 出發時的回憶點數（用來算這趟找回多少） */
   start: Memories;
+  /** 1960：今天剛好是糖廠發薪日 */
+  payday?: boolean;
 }
 
 /** 東原：過去的老街上，一間能幫忙的店 */
@@ -416,8 +418,9 @@ export interface StreetDef {
     recipes: RecipeDef[];
     startTenants: { lot: number; tenant: string; tier: number }[];
     startMemories: Partial<Memories>;
-    /** 1995 年的老街 */
+    /** 1995、1960 年的老街 */
     past1995?: PastShop[];
+    past1960?: PastShop[];
     /** 回憶時光的開場、收尾 */
     tripIntro?: (s: GameState, era: Era) => Step[];
     tripOutro?: (s: GameState, era: Era, gained: Memories) => Step[];

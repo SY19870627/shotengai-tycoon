@@ -21,7 +21,7 @@ import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
 import { drawLandmark, drawFilmScreen, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
-import { drawBackdrop } from './drawBackdrop';
+import { drawBackdrop, drawSugarFactory } from './drawBackdrop';
 import { drawVista, VISTA_PAD, type VistaFrame } from './drawVista';
 import { ensureMascotTexture } from './drawMascots';
 import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
@@ -81,6 +81,19 @@ const PAST95_LOOKS: Look[] = [
   { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'bun', shirt: 0x9b6bc9, pants: 0x3d3a36, accessory: 'none', age: 'old' },
   { skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'long', shirt: 0xf2b84b, pants: 0x4f86c6, accessory: 'none', age: 'young' },
   { skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0x4f86c6, pants: 0x3d3a36, accessory: 'cap', age: 'young' },
+];
+
+/** 1960 年的大埔街：汗衫短褲的工人、戴斗笠的蔗農、洋裝的太太、光腳的孩子、糖廠的制服 */
+const PAST60_LOOKS: Look[] = [
+  { skin: 0xb07a52, hair: 0x111111, hairStyle: 'short', shirt: 0xf0ece0, pants: 0x3d3a36, accessory: 'none', age: 'mid' },
+  { skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xd9c49a, pants: 0x5a4a3a, accessory: 'hat', age: 'mid' },
+  { skin: 0xe8b48f, hair: 0x111111, hairStyle: 'bun', shirt: 0x6b8f9a, pants: 0x6b8f9a, accessory: 'none', age: 'mid' },
+  { skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0xc86a6a, pants: 0xc86a6a, accessory: 'none', age: 'young' },
+  { skin: 0xc98e66, hair: 0x111111, hairStyle: 'short', shirt: 0xf0ece0, pants: 0x3d3a36, accessory: 'none', age: 'kid' },
+  { skin: 0xb07a52, hair: 0x111111, hairStyle: 'spiky', shirt: 0xd9c49a, pants: 0x3d3a36, accessory: 'none', age: 'kid' },
+  { skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x5a6a4a, pants: 0x5a6a4a, accessory: 'cap', age: 'young' },
+  { skin: 0xe8b48f, hair: 0xb7b1a8, hairStyle: 'bun', shirt: 0x3d3a46, pants: 0x3d3a46, accessory: 'none', age: 'old' },
+  { skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x54627a, accessory: 'hat', age: 'mid' },
 ];
 
 /** 角色站的位置（比路人前面一點） */
@@ -226,6 +239,8 @@ export class StreetScene extends Phaser.Scene {
   private pastWalkers: { sprite: Phaser.GameObjects.Image; key: string; dir: 1 | -1; speed: number; animT: number; pause: number; stopped?: boolean }[] = [];
   private pastWalkTimer = 0;
   private pastFilled = false;
+  private caneTimer = 3000;
+  private caneCart: { img: Phaser.GameObjects.Image; key: string; dir: 1 | -1; t: number } | null = null;
   private tripEndSent = false;
   private filmView: { c: Phaser.GameObjects.Container; beam: Phaser.GameObjects.Graphics } | null = null;
   private wellLayer!: Phaser.GameObjects.Container;
@@ -250,6 +265,8 @@ export class StreetScene extends Phaser.Scene {
     this.pastWalkers = [];
     this.pastWalkTimer = 0;
     this.pastFilled = false;
+    this.caneTimer = 3000;
+    this.caneCart = null;
     this.tripEndSent = false;
     this.filmView = null;
     this.L = buildLayout(this.street);
@@ -263,7 +280,9 @@ export class StreetScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.L.worldW, H);
 
     this.sky = this.add.graphics().setScrollFactor(0).setDepth(0);
-    for (const o of drawBackdrop(this, this.street.backdrop, this.L.worldW)) {
+    // 1960：遠方的糖廠煙囪
+    const backdrop = [...drawBackdrop(this, this.street.backdrop, this.L.worldW), ...(this.era === 1960 ? drawSugarFactory(this, this.L.worldW) : [])];
+    for (const o of backdrop) {
       // 背景裡寺廟的燈：晚上才亮
       if (o.getData('night')) this.nightLayer.push({ g: o as Phaser.GameObjects.Graphics });
     }
@@ -609,15 +628,19 @@ export class StreetScene extends Phaser.Scene {
     const x0 = this.L.lotX(i);
     const p = pastShopAt(s, i);
     if (!p) {
-      view.container.add(drawEmptyLot(this, 'retro95', 0));
+      view.container.add(drawEmptyLot(this, this.era === 1960 ? 'showa60' : 'retro95', 0));
       return;
     }
-    const art = drawShopFacade(this, SHOP_BY_ID[p.shop], 1, p.name, 'retro95');
+    const art = drawShopFacade(this, SHOP_BY_ID[p.shop], 1, p.name, this.era === 1960 ? 'showa60' : 'retro95');
     view.container.add(art.objects);
     view.lights.fillStyle(0xffd27a, 0.55);
     for (const r of art.upperWindows) view.lights.fillRect(x0 + r.x, GROUND_Y + r.y, r.width, r.height);
     view.shopLight.fillStyle(0xffe2a0, 0.4);
     view.shopLight.fillRect(x0 + art.shopWindow.x, GROUND_Y + art.shopWindow.y, art.shopWindow.width, art.shopWindow.height);
+    for (const l of art.glows ?? []) {
+      view.lights.fillStyle(l.color, 0.35);
+      view.lights.fillCircle(x0 + l.x, GROUND_Y + l.y, l.r);
+    }
     const done = s.pastDone.includes(p.id);
     const tag = this.add.text(x0 + LOT_W / 2, GROUND_Y - buildingHeight(1) - 22, done ? `✓ ${p.task}` : `幫忙：${p.task}`, {
       fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: done ? '#5a5266' : '#2a2433',
@@ -634,11 +657,15 @@ export class StreetScene extends Phaser.Scene {
     // 一開始街上就有人（1995 年的老街很熱鬧）
     const prefill = !this.pastFilled;
     this.pastFilled = true;
-    for (let n = prefill ? 16 : running && this.pastWalkTimer <= 0 && this.pastWalkers.length < 36 ? 1 : 0; n > 0; n--) {
-      this.pastWalkTimer = 300 + Math.random() * 500;
+    // 1960 年糖廠發薪日：街上擠得水洩不通
+    const payday = !!S().trip?.payday;
+    const cap = payday ? 60 : 36;
+    const looks = this.era === 1960 ? PAST60_LOOKS : PAST95_LOOKS;
+    for (let n = prefill ? (payday ? 30 : 16) : running && this.pastWalkTimer <= 0 && this.pastWalkers.length < cap ? 1 : 0; n > 0; n--) {
+      this.pastWalkTimer = (payday ? 150 : 300) + Math.random() * 500;
       const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
-      const k = Math.floor(Math.random() * PAST95_LOOKS.length);
-      const key = ensureCharTexture(this, `past95_${k}`, PAST95_LOOKS[k]);
+      const k = Math.floor(Math.random() * looks.length);
+      const key = ensureCharTexture(this, `past${this.era}_${k}`, looks[k]);
       const y = GROUND_Y + 8 + Math.random() * (SIDEWALK_H - 18);
       const x = prefill ? this.L.startX + Math.random() * (this.L.endX - this.L.startX) : dir === 1 ? this.L.startX - 60 : this.L.endX + 60;
       const sprite = this.add.image(x, y, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setDepth(30 + y / 1000).setFlipX(dir === -1);
@@ -663,6 +690,31 @@ export class StreetScene extends Phaser.Scene {
         w.sprite.destroy();
         this.pastWalkers.splice(k, 1);
       }
+    }
+  }
+
+  /** 1960：運甘蔗的農用三輪車，慢慢地開過老街 */
+  private updateCaneTricycle(dt: number, running: boolean) {
+    if (this.era !== 1960) return;
+    const mult = running ? store.speed : 0;
+    this.caneTimer -= dt * mult;
+    if (running && this.caneTimer <= 0 && !this.caneCart) {
+      this.caneTimer = 14000 + Math.random() * 10000;
+      const key = ensureMascotTexture(this, 'tricycle');
+      const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+      const y = GROUND_Y + SIDEWALK_H + 34;
+      const img = this.add.image(dir === 1 ? this.L.startX - 120 : this.L.endX + 120, y, `${key}_0`)
+        .setOrigin(0.5, 1).setDepth(31 + y / 1000).setFlipX(dir === -1);
+      this.caneCart = { img, key, dir, t: 0 };
+    }
+    const c = this.caneCart;
+    if (!c) return;
+    c.img.x += c.dir * 38 * mult * (dt / 1000);
+    c.t += dt * mult;
+    c.img.setTexture(`${c.key}_${Math.floor(c.t / 260) % 2}`);
+    if (c.img.x < this.L.startX - 200 || c.img.x > this.L.endX + 200) {
+      c.img.destroy();
+      this.caneCart = null;
     }
   }
 
@@ -814,6 +866,7 @@ export class StreetScene extends Phaser.Scene {
     if (this.era !== 2016) {
       if (running && s.trip) s.minute = Math.min(PAST_HOURS[s.trip.era][1] * 60, s.minute + dm);
       this.updatePastWalkers(dt, running);
+      this.updateCaneTricycle(dt, running);
       this.updateActors(dt);
       this.updateEnvironment(dt);
       if (running && tripOver(s) && !this.tripEndSent) {

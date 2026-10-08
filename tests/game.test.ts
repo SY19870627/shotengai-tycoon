@@ -873,6 +873,45 @@ describe('東原', () => {
     }
   });
 
+  it('1995、1960 交替；1960 每三趟有一趟遇到糖廠發薪日', () => {
+    const s = dy();
+    s.flags.push('film');
+    const eras: number[] = [];
+    const paydays: boolean[] = [];
+    for (let d = 0; d < 8; d++) {
+      s.minute = 19 * 60;
+      expect(startTrip(s).ok).toBe(true);
+      eras.push(s.trip!.era);
+      if (s.trip!.era === 1960) paydays.push(!!s.trip!.payday);
+      expect(pastShops(s).length).toBe(11);
+      endTrip(s);
+      s.day += 1;
+    }
+    expect(eras).toEqual([1995, 1960, 1995, 1960, 1995, 1960, 1995, 1960]);
+    expect(paydays).toEqual([false, true, false, false]);
+  });
+
+  it('1960 年的劇本：出場的角色都有定義，童年過場每趟一段、沒看過的先放', () => {
+    const s = dy();
+    const m = STREETS.dongyuan.memory!;
+    s.trip = { era: 1960, returnMinute: 0, weather: 'sunny', start: s.memories, payday: true };
+    const scripts: Step[][] = [];
+    for (const p of m.past1960!) scripts.push(p.first(s), p.again(s));
+    for (const id of ['kiln', 'treehouse']) scripts.push(m.pastLandmark!(s, 1960, id)!, m.pastLandmark!(s, 1960, id)!);
+    for (let k = 0; k < 5; k++) scripts.push(m.tripIntro!(s, 1960));
+    expect(s.pastDone.filter((x) => x.startsWith('cut-')).length).toBe(4);
+    const walk = (steps: Step[]): void => {
+      for (const st of steps) {
+        if (st.t === 'appear' || st.t === 'say') expect(st.actor === 'me' || !!NPCS[st.actor], st.actor).toBe(true);
+        if (st.t === 'choice') for (const o of st.options) walk(o.then ?? []);
+      }
+    };
+    for (const sc of scripts) {
+      expect(sc.length).toBeGreaterThan(0);
+      walk(sc);
+    }
+  });
+
   it('在回憶時光裡關掉遊戲，讀檔回到 2016 年', () => {
     const s = dy();
     s.flags.push('film');

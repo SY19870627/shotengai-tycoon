@@ -755,3 +755,310 @@ function simpleHills(
   });
   return out;
 }
+
+// ───────────────────────── 東原 1960：遠方的糖廠（前大埔糖廠，黑糖會社） ─────────────────────────
+
+/** 一輛五分車的甘蔗台車（平板上堆滿甘蔗） */
+function caneWagon(g: Phaser.GameObjects.Graphics, x: number, railY: number, tone: number): void {
+  g.fillStyle(haze(0x2a2a2e, tone));
+  g.fillCircle(x + 3, railY - 2, 2);
+  g.fillCircle(x + 13, railY - 2, 2);
+  g.fillStyle(haze(0x5a4a3a, tone));
+  g.fillRect(x, railY - 6, 16, 3);
+  // 甘蔗堆（綠黃色，一根根往外戳）
+  g.fillStyle(haze(0x8a9a4a, tone));
+  g.fillRoundedRect(x - 1, railY - 13, 18, 8, 2);
+  g.lineStyle(1, haze(0xb8b060, tone), 0.9);
+  for (let k = 0; k < 4; k++) g.lineBetween(x - 2, railY - 11 + k * 2, x + 18, railY - 12 + k * 2);
+  g.fillStyle(haze(0x6a8a3a, tone));
+  g.fillTriangle(x + 2, railY - 13, x + 6, railY - 13, x + 3, railY - 17);
+  g.fillTriangle(x + 10, railY - 13, x + 14, railY - 13, x + 13, railY - 16);
+}
+
+/** 五分車的小蒸汽火車頭（往右開） */
+function caneLoco(
+  g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics, x: number, railY: number, tone: number,
+): void {
+  const black = haze(0x26262a, tone);
+  g.fillStyle(black);
+  g.fillCircle(x + 4, railY - 2.5, 2.5);
+  g.fillCircle(x + 11, railY - 2.5, 2.5);
+  g.fillCircle(x + 18, railY - 2.5, 2.5);
+  g.fillRect(x, railY - 7, 23, 3);
+  // 鍋爐 + 駕駛室 + 煙囪
+  g.fillRoundedRect(x + 8, railY - 13, 15, 7, 3);
+  g.fillRect(x, railY - 17, 9, 11);
+  g.fillStyle(haze(0x3a3a40, tone));
+  g.fillRect(x - 1, railY - 19, 11, 2);
+  g.fillStyle(black);
+  g.fillRect(x + 18, railY - 18, 3, 6);
+  g.fillStyle(haze(0xa83a2a, tone));
+  g.fillRect(x + 21, railY - 7, 3, 2);
+  g.fillStyle(haze(0xc8d0cc, tone));
+  g.fillRect(x + 2, railY - 15, 4, 3);
+  // 冒煙
+  for (let k = 0; k < 6; k++) {
+    g.fillStyle(0xeceae4, 0.55 * (1 - k / 7));
+    g.fillCircle(x + 19 - k * 5, railY - 21 - k * 3 - Math.sin(k) * 2, 2.5 + k * 1.1);
+  }
+  // 夜裡：車頭燈 + 駕駛室
+  n.fillStyle(0xfff0b0, 0.9);
+  n.fillCircle(x + 23, railY - 11, 1.8);
+  n.fillStyle(0xffd080, 0.25);
+  n.fillEllipse(x + 32, railY - 10, 20, 6);
+  n.fillStyle(0xffc070, 0.7);
+  n.fillRect(x + 2, railY - 15, 4, 3);
+}
+
+/** 鋸齒屋頂的廠房（北向採光窗） */
+function sawtoothShed(
+  g: Phaser.GameObjects.Graphics, n: Phaser.GameObjects.Graphics,
+  x: number, base: number, w: number, h: number, tooth: number, tone: number,
+): void {
+  const wall = haze(0xbcae94, tone), roof = haze(0x6e747a, tone), glass = haze(0xc8d4d0, tone);
+  g.fillStyle(wall);
+  g.fillRect(x, base - h, w, h);
+  g.fillStyle(haze(0x9a8e78, tone));
+  g.fillRect(x, base - 4, w, 4);
+  for (let tx = x; tx < x + w - 1; tx += tooth) {
+    const tw = Math.min(tooth, x + w - tx);
+    // 垂直的採光窗面 + 斜屋面
+    g.fillStyle(glass);
+    g.fillRect(tx, base - h - 9, 3, 9);
+    g.fillStyle(roof);
+    g.fillTriangle(tx + 3, base - h - 9, tx + 3, base - h, tx + tw, base - h);
+    g.fillStyle(haze(0x50565c, tone));
+    g.fillRect(tx + 2, base - h - 10, 2, 10);
+    n.fillStyle(0xffd080, 0.55);
+    n.fillRect(tx, base - h - 8, 2.5, 8);
+  }
+  // 牆上一排窗（夜班亮燈）
+  for (let wx = x + 5; wx < x + w - 6; wx += 11) {
+    g.fillStyle(haze(0x5a6066, tone));
+    g.fillRect(wx, base - h + 6, 6, 7);
+    n.fillStyle(0xffc46a, 0.7);
+    n.fillRect(wx, base - h + 6, 6, 7);
+  }
+}
+
+/**
+ * 1960 年的天空下，遠方的糖廠：高高的紅磚煙囪冒著黑糖味的煙、鋸齒屋頂的廠房、
+ * 壓榨工場、水塔、糖倉，還有一條五分車鐵道，小火車拉著滿載甘蔗的台車進廠。
+ * 視差與中景同一層（0.25），深度 1.2：在遠山、中景山坡之上，近景樹與建築之下。
+ * 回傳 [白天, 夜光]；夜光層 setData('night', true)，和 drawBackdrop 的夜光層一樣由場景淡入。
+ */
+export function drawSugarFactory(scene: Phaser.Scene, worldW: number): Phaser.GameObjects.GameObject[] {
+  const f = 0.25, depth = 1.2, tone = 0.3;
+  const g = layer(scene, f, depth);
+  const n = nightLayer(scene, f, depth);
+  const w = layerWidth(worldW, f);
+  // 糖廠坐在一片稍微隆起的台地上（讓鐵道和小火車能從近景的樹梢上露出來）
+  const base = GROUND_Y - 56;
+  // 整條街捲動時，糖廠大約在畫面中間偏右
+  const span = Math.max(0, worldW - W) * f + W;
+  const cx = Math.round(Phaser.Math.Clamp(span * 0.58, 380, w - 300));
+
+  // 台地：兩端緩緩降回田裡
+  g.fillStyle(haze(0x6a9a5a, 0.3));
+  g.fillPoints([
+    { x: cx - 520, y: GROUND_Y - 36 }, { x: cx - 380, y: base + 2 }, { x: cx + 420, y: base + 2 },
+    { x: cx + 560, y: GROUND_Y - 36 }, { x: cx + 560, y: GROUND_Y }, { x: cx - 520, y: GROUND_Y },
+  ], true);
+  g.fillStyle(haze(0x7aa860, 0.3));
+  for (let x = cx - 360; x < cx + 400; x += 7) g.fillRect(x, base + 12 + ((x * 7) % 5), 4, 1.5);
+  // 廠區前的空地（甘蔗堆、地面）
+  g.fillStyle(haze(0xa89a7a, tone));
+  g.fillRect(cx - 230, base - 3, 470, 6);
+
+  // 水塔（鐵架高架水槽）
+  {
+    const tx = cx - 196;
+    g.lineStyle(1.5, haze(0x4a4a50, tone));
+    g.lineBetween(tx - 8, base, tx - 5, base - 46);
+    g.lineBetween(tx + 8, base, tx + 5, base - 46);
+    g.lineBetween(tx - 7, base - 16, tx + 7, base - 30);
+    g.lineBetween(tx + 7, base - 16, tx - 7, base - 30);
+    g.fillStyle(haze(0x7a8086, tone));
+    g.fillRoundedRect(tx - 11, base - 62, 22, 17, 3);
+    g.fillStyle(haze(0x5a6066, tone));
+    g.fillTriangle(tx - 12, base - 62, tx + 12, base - 62, tx, base - 70);
+  }
+
+  // 鋸齒屋頂廠房（兩棟）
+  sawtoothShed(g, n, cx - 180, base, 96, 26, 16, tone);
+  sawtoothShed(g, n, cx - 92, base, 60, 32, 15, tone + 0.02);
+
+  // 壓榨工場：高的紅磚山牆建築，一排排拱窗
+  {
+    const x0 = cx - 34, x1 = cx + 46, h = 58;
+    const brick = haze(0x9a5a44, tone);
+    g.fillStyle(brick);
+    g.fillRect(x0, base - h, x1 - x0, h);
+    g.lineStyle(1, haze(0x7a4434, tone), 0.6);
+    for (let y = base - h + 6; y < base; y += 6) g.lineBetween(x0, y, x1, y);
+    // 山牆屋頂 + 屋脊上的通風小樓
+    g.fillStyle(haze(0x5e6268, tone));
+    g.fillTriangle(x0 - 5, base - h + 1, x1 + 5, base - h + 1, (x0 + x1) / 2, base - h - 22);
+    g.fillStyle(haze(0x6e7278, tone));
+    g.fillRect((x0 + x1) / 2 - 12, base - h - 26, 24, 8);
+    g.fillStyle(haze(0x5e6268, tone));
+    g.fillTriangle((x0 + x1) / 2 - 15, base - h - 25, (x0 + x1) / 2 + 15, base - h - 25, (x0 + x1) / 2, base - h - 32);
+    n.fillStyle(0xffc46a, 0.6);
+    n.fillRect((x0 + x1) / 2 - 10, base - h - 24, 20, 5);
+    for (let row = 0; row < 2; row++) {
+      for (let wx = x0 + 6; wx < x1 - 6; wx += 12) {
+        const wy = base - h + 10 + row * 22;
+        g.fillStyle(haze(0xe0d4bc, tone));
+        g.fillRect(wx - 1, wy - 1, 8, 13);
+        g.fillStyle(haze(0x4a525a, tone));
+        g.fillRect(wx, wy + 2, 6, 10);
+        g.slice(wx + 3, wy + 2, 3, Math.PI, 0, false);
+        g.fillPath();
+        n.fillStyle(0xffc46a, 0.75);
+        n.fillRect(wx, wy + 1, 6, 11);
+      }
+    }
+    // 大門
+    g.fillStyle(haze(0x3a3e44, tone));
+    g.fillRect((x0 + x1) / 2 - 8, base - 18, 16, 18);
+    n.fillStyle(0xffb050, 0.6);
+    n.fillRect((x0 + x1) / 2 - 8, base - 18, 16, 18);
+  }
+
+  // 糖倉：長長的紅瓦倉庫
+  {
+    const x0 = cx + 92, x1 = cx + 214, h = 24;
+    g.fillStyle(haze(0xd0c2a4, tone));
+    g.fillRect(x0, base - h, x1 - x0, h);
+    g.fillStyle(haze(0xa85a3a, tone));
+    g.fillPoints([{ x: x0 - 5, y: base - h + 1 }, { x: x1 + 5, y: base - h + 1 }, { x: x1 - 6, y: base - h - 12 }, { x: x0 + 6, y: base - h - 12 }], true);
+    g.lineStyle(1, haze(0x8a4a2e, tone), 0.7);
+    for (let x = x0; x < x1; x += 6) g.lineBetween(x, base - h + 1, x + 4, base - h - 11);
+    for (let dx = 12; dx < x1 - x0 - 8; dx += 26) {
+      g.fillStyle(haze(0x6a5a4a, tone));
+      g.fillRect(x0 + dx, base - 14, 10, 14);
+    }
+    // 牆上大大的「糖」字標記（白色圓圈）
+    g.fillStyle(haze(0xf4f0e4, tone));
+    g.fillCircle(x0 + 20, base - h + 9, 6);
+    g.fillStyle(haze(0xa85a3a, tone));
+    g.fillRect(x0 + 17, base - h + 6, 6, 1.5);
+    g.fillRect(x0 + 17, base - h + 9, 6, 1.5);
+    g.fillRect(x0 + 19.25, base - h + 5, 1.5, 8);
+  }
+
+  // 煙囪：高高的紅磚煙囪（比兩層樓的街屋還高，從屋頂上探出來），越上越細，頂端黑色箍、旁邊一條鐵梯
+  const chX = cx + 66, chTop = base - 292;
+  {
+    const brick = haze(0xa05a42, tone - 0.04);
+    g.fillStyle(brick);
+    g.fillPoints([{ x: chX - 11, y: base }, { x: chX + 11, y: base }, { x: chX + 5, y: chTop }, { x: chX - 5, y: chTop }], true);
+    g.fillStyle(haze(0x7a4232, tone), 0.55);
+    g.fillPoints([{ x: chX + 4, y: base }, { x: chX + 11, y: base }, { x: chX + 5, y: chTop }, { x: chX + 2, y: chTop }], true);
+    g.lineStyle(1, haze(0xc88a6a, tone), 0.5);
+    for (let y = base - 12; y > chTop + 6; y -= 14) {
+      const t = (base - y) / (base - chTop);
+      const hw = 11 - 6 * t;
+      g.lineBetween(chX - hw, y, chX + hw, y);
+    }
+    g.fillStyle(haze(0x2e2e32, tone));
+    g.fillRect(chX - 7, chTop - 3, 14, 6);
+    g.fillRect(chX - 6, chTop + 16, 12, 2.5);
+    g.fillRect(chX - 6.5, chTop + 60, 13, 2);
+    // 煙囪上白漆的直書廠名（遠遠的只看得出一格格白色）
+    g.fillStyle(haze(0xeee6d4, tone), 0.85);
+    for (let k = 0; k < 4; k++) g.fillRect(chX - 2.5, chTop + 26 + k * 8, 5, 5);
+    g.fillStyle(haze(0xe8dcc4, tone));
+    g.fillRect(chX - 9.5, base - 40, 19, 3);
+    g.lineStyle(0.8, haze(0x3a3a40, tone), 0.8);
+    g.lineBetween(chX - 3, base - 4, chX - 1, chTop + 4);
+    // 基座
+    g.fillStyle(haze(0x8a7a66, tone));
+    g.fillRect(chX - 14, base - 8, 28, 8);
+    // 夜裡：煙囪頂端被爐火映紅
+    n.fillStyle(0xff8a3a, 0.35);
+    n.fillCircle(chX, chTop - 2, 7);
+  }
+  // 煙：往右飄的一長條（越遠越淡、越散）
+  for (let k = 0; k < 26; k++) {
+    const t = k / 25;
+    const sx = chX + 2 + k * 9 + Math.sin(k * 0.7) * 3;
+    const sy = chTop - 6 - Math.sqrt(k) * 9 + Math.sin(k * 0.9) * 2;
+    const r = 4 + k * 1.15;
+    g.fillStyle(lerpColor(0x8a8680, 0xe6e2da, Math.min(1, t * 1.6)), 0.6 * (1 - t) + 0.08);
+    g.fillCircle(sx, sy, r);
+    if (k % 3 === 1) {
+      g.fillStyle(0xf4f0e8, 0.3 * (1 - t));
+      g.fillCircle(sx - r * 0.3, sy - r * 0.4, r * 0.5);
+    }
+  }
+  // 小煙囪（鍋爐房）
+  {
+    const sx = cx - 60;
+    g.fillStyle(haze(0x8a5a44, tone));
+    g.fillRect(sx - 3, base - 66, 6, 34);
+    g.fillStyle(haze(0x2e2e32, tone));
+    g.fillRect(sx - 4, base - 68, 8, 3);
+    for (let k = 0; k < 7; k++) {
+      g.fillStyle(0xe8e4dc, 0.4 * (1 - k / 8));
+      g.fillCircle(sx + k * 4, base - 72 - k * 5, 2.5 + k);
+    }
+  }
+
+  // 甘蔗堆場（台車卸下來的甘蔗）
+  for (const [hx, hw] of [[cx - 214, 26], [cx + 22, 30], [cx + 60, 20]] as const) {
+    g.fillStyle(haze(0x8a9a4a, tone));
+    g.fillEllipse(hx, base - 3, hw, 10);
+    g.lineStyle(1, haze(0xb8b060, tone), 0.8);
+    g.lineBetween(hx - hw / 2 + 3, base - 4, hx + hw / 2 - 3, base - 6);
+    g.lineBetween(hx - hw / 2 + 5, base - 1, hx + hw / 2 - 2, base - 3);
+  }
+
+  // 五分車鐵道：橫過整片田，延伸進廠
+  const railY = base + 7;
+  const r0 = cx - 380, r1 = cx + 420;
+  g.fillStyle(haze(0x9a8c74, tone));
+  g.fillRect(r0, railY - 1, r1 - r0, 4);
+  g.fillStyle(haze(0x5a4a3a, tone));
+  for (let x = r0; x < r1; x += 6) g.fillRect(x, railY, 3, 2.5);
+  g.lineStyle(1, haze(0x3a3a40, tone));
+  g.lineBetween(r0, railY - 0.5, r1, railY - 0.5);
+  g.lineStyle(1, haze(0x6a6a70, tone));
+  g.lineBetween(r0, railY + 2, r1, railY + 2);
+  // 兩端順著坡下去，消失在甘蔗田裡
+  g.lineStyle(1.5, haze(0x5a4a3a, tone + 0.05));
+  g.lineBetween(r0, railY, cx - 520, GROUND_Y - 34);
+  g.lineBetween(r1, railY, cx + 560, GROUND_Y - 34);
+  // 進廠的叉道
+  g.lineStyle(1, haze(0x3a3a40, tone));
+  g.lineBetween(cx - 150, railY - 0.5, cx - 110, base - 1);
+  g.lineBetween(cx - 110, base - 1, cx + 80, base - 1);
+
+  // 小火車拉著六節甘蔗台車往糖廠開（從左邊來）
+  const lx = cx - 250;
+  caneLoco(g, n, lx, railY, tone);
+  for (let k = 0; k < 6; k++) caneWagon(g, lx - 20 - k * 19, railY, tone);
+  // 廠內叉道上停著幾節滿載的台車
+  for (let k = 0; k < 3; k++) caneWagon(g, cx - 100 + k * 19, base + 1, tone + 0.02);
+  // 遠處另一頭還有一列空台車
+  for (let k = 0; k < 4; k++) {
+    const x = cx + 300 + k * 18;
+    if (x > w - 20) break;
+    g.fillStyle(haze(0x2a2a2e, tone));
+    g.fillCircle(x + 3, railY - 2, 2);
+    g.fillCircle(x + 13, railY - 2, 2);
+    g.fillStyle(haze(0x5a4a3a, tone));
+    g.fillRect(x, railY - 6, 16, 3);
+    g.fillRect(x, railY - 9, 2, 3);
+    g.fillRect(x + 14, railY - 9, 2, 3);
+  }
+
+  // 圍牆邊的一排木麻黃
+  for (const x of [cx - 290, cx - 270, cx - 236, cx + 236, cx + 258, cx + 282]) {
+    g.fillStyle(haze(0x4a6a4a, tone + 0.05));
+    g.fillTriangle(x - 5, base - 2, x + 5, base - 2, x, base - 26);
+    g.fillStyle(haze(0x5a7a52, tone + 0.05));
+    g.fillTriangle(x - 3, base - 10, x + 4, base - 10, x, base - 28);
+  }
+  return [g, n];
+}

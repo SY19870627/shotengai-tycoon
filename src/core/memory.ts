@@ -243,8 +243,8 @@ export function memoryDefaults(): Pick<GameState, 'memories' | 'memFrac' | 'reci
 // 白布電影：回憶時光
 // =====================================================================
 
-/** 1960 年的回憶時光還沒做好之前，每次都回到 1995 年 */
-export const ERA_1960_READY = false;
+/** 1960 年的回憶時光做好了：1995、1960 交替 */
+export const ERA_1960_READY = true;
 /** 2016 年傍晚幾點以後可以放白布電影 */
 export const TRIP_HOUR = 18;
 /** 回憶時光在過去的時鐘：幾點開始、幾點畫面淡出 */
@@ -278,6 +278,8 @@ export function startTrip(s: GameState): Result {
   if (!r.ok) return r;
   const era = nextEra(s);
   s.trip = { era, returnMinute: s.minute, weather: s.weather, start: { ...s.memories } };
+  // 1960：每三趟有一趟剛好遇到糖廠發薪日（第二趟開始）
+  if (era === 1960) s.trip.payday = Math.floor(s.trips / 2) % 3 === 1;
   s.minute = PAST_HOURS[era][0] * 60;
   s.weather = 'sunny';
   return { ok: true };
@@ -305,7 +307,7 @@ export function endTrip(s: GameState): Memories {
 export function pastShops(s: GameState): PastShop[] {
   const m = streetOf(s).memory;
   if (!m || !s.trip) return [];
-  return s.trip.era === 1995 ? m.past1995 ?? [] : [];
+  return (s.trip.era === 1995 ? m.past1995 : m.past1960) ?? [];
 }
 
 export function pastShopAt(s: GameState, lot: number): PastShop | undefined {
@@ -345,8 +347,8 @@ export function simulateTrip(s: GameState, apply: (steps: Step[]) => void): Memo
   const lms = ['kiln', 'treehouse'];
   let k = 0;
   while (!tripOver(s) && k < 30) {
-    const lm = lms.find((id) => !s.pastDone.includes(id === 'kiln' ? '95-snake' : '95-banyan'));
-    if (lm && k % 3 === 1) {
+    const lm = k % 3 === 1 ? lms.shift() : undefined;
+    if (lm) {
       const steps = m.pastLandmark?.(s, s.trip!.era, lm);
       if (steps) apply(steps);
       passPastTime(s, HELP_MINUTES / 2);

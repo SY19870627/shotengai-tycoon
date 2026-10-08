@@ -250,6 +250,99 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'p95Adult', name: '路過的阿伯',
     look: L({ skin: 0xc98e66, hair: 0x4a4a4a, hairStyle: 'short', shirt: 0x5b7a5b, pants: 0x3d3a36, accessory: 'hat', age: 'mid' }),
   },
+  // ---- 東原 1960（全部虛構） ----
+  p60MeatDad: {
+    id: 'p60MeatDad', name: '肉圓攤的頭家',
+    look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p60MeatKid: {
+    id: 'p60MeatKid', name: '顧攤的小男孩（肉圓伯小時候）',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'kid' }),
+  },
+  p60Grocer: {
+    id: 'p60Grocer', name: '雜貨店的頭家娘',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'bun', shirt: 0x5b7a9a, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
+  },
+  p60Cloth: {
+    id: 'p60Cloth', name: '布莊的老闆娘',
+    look: L({ skin: 0xf2c9a5, hair: 0x111111, hairStyle: 'bun', shirt: 0x8a3b5a, pants: 0x8a3b5a, accessory: 'none', age: 'mid' }),
+  },
+  p60Mom: {
+    id: 'p60Mom', name: '帶孩子來做新衣的媽媽',
+    look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'bun', shirt: 0x6b8f6b, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
+  },
+  p60Inn: {
+    id: 'p60Inn', name: '旅社的老闆娘',
+    look: L({ skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'bob', shirt: 0x3d5a7a, pants: 0x3d5a7a, accessory: 'none', age: 'mid' }),
+  },
+  p60Engineer: {
+    id: 'p60Engineer', name: '糖廠來出差的技師',
+    look: L({ skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x54627a, accessory: 'hat', age: 'mid' }),
+  },
+  p60Cook: {
+    id: 'p60Cook', name: '料理屋的師傅',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),
+  },
+  p60Herbal: {
+    id: 'p60Herbal', name: '中藥行的先生',
+    look: L({ skin: 0xe8b48f, hair: 0x7a7a7a, hairStyle: 'short', shirt: 0x6b4a2a, pants: 0x3d3a36, accessory: 'glasses', age: 'old' }),
+  },
+  p60Photo: {
+    id: 'p60Photo', name: '照相館的師傅',
+    look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x4a4a6a, pants: 0x2b2b2b, accessory: 'beard', age: 'mid' }),
+  },
+  p60Ice: {
+    id: 'p60Ice', name: '賣枝仔冰的少年',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'cap', age: 'young' }),
+  },
+  p60Tinker: {
+    id: 'p60Tinker', name: '愛改裝東西的阿伯',
+    look: L({ skin: 0xb07a52, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0x3f6f4f, pants: 0x3d3a36, accessory: 'glasses', age: 'old' }),
+  },
+  p60SmithDad: {
+    id: 'p60SmithDad', name: '打鐵舖的頭家',
+    look: L({ skin: 0xb07a52, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
+  },
+  p60SmithKid: {
+    id: 'p60SmithKid', name: '拉風箱的小男孩（鐵伯小時候）',
+    look: L({ skin: 0xb07a52, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x3d3a36, accessory: 'none', age: 'kid' }),
+  },
+  p60Barber: {
+    id: 'p60Barber', name: '理髮廳的師傅',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2b2b2b, accessory: 'none', age: 'young' }),
+  },
+  p60Customer: {
+    id: 'p60Customer', name: '剪到一半的阿伯',
+    look: L({ skin: 0xc98e66, hair: 0x4a4a4a, hairStyle: 'bald', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'none', age: 'mid' }),
+  },
+  p60Snack: {
+    id: 'p60Snack', name: '戲院門口賣零嘴的阿婆',
+    look: L({ skin: 0xe8b48f, hair: 0xd9d4cc, hairStyle: 'bun', shirt: 0x5b5f73, pants: 0x3d3a36, accessory: 'apron', age: 'old' }),
+  },
+  p60Fan: {
+    id: 'p60Fan', name: '剛看完電影的少年',
+    look: L({ skin: 0xf5d0b0, hair: 0x111111, hairStyle: 'short', shirt: 0xf6f6f6, pants: 0x2f3550, accessory: 'none', age: 'young' }),
+  },
+  p60Kid: {
+    id: 'p60Kid', name: '阿水',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'short', shirt: 0xf0ece0, pants: 0x3d3a36, accessory: 'none', age: 'kid' }),
+  },
+  p60Kid2: {
+    id: 'p60Kid2', name: '阿土',
+    look: L({ skin: 0xb07a52, hair: 0x111111, hairStyle: 'spiky', shirt: 0xd9c49a, pants: 0x3d3a36, accessory: 'none', age: 'kid' }),
+  },
+  p60Guard: {
+    id: 'p60Guard', name: '糖廠的警衛',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x5a6a4a, pants: 0x5a6a4a, accessory: 'cap', age: 'mid' }),
+  },
+  p60Driver: {
+    id: 'p60Driver', name: '運甘蔗的三輪車阿伯',
+    look: L({ skin: 0xb07a52, hair: 0x7a7a7a, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'hat', age: 'old' }),
+  },
+  p60Elder: {
+    id: 'p60Elder', name: '榕樹下奉茶的阿公',
+    look: L({ skin: 0xc98e66, hair: 0xd9d4cc, hairStyle: 'short', shirt: 0xf0ece0, pants: 0x3d3a36, accessory: 'beard', age: 'old' }),
+  },
   cyclist: {
     id: 'cyclist', name: '單車隊隊長',
     look: L({ skin: 0xf5d0b0, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x2b2b2b, accessory: 'headband', age: 'mid' }),
