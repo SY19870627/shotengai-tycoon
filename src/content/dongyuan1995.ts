@@ -73,7 +73,7 @@ export const PAST_1995: PastShop[] = [
       say('p95Barber', '少年仔，掃把在那邊。地上的頭髮掃一掃，我請你喝汽水。'),
       say('p95Adult', '阿財，你聽說沒？街尾阿珠那間，說要裝什麼「電棒燙」。'),
       say('p95Barber', '燙頭髮？東原的查某人哪需要燙頭髮！我這裡剪得清清爽爽就好。'),
-      say('p95Adult', '還有啊，戲院那邊荒廢那麼久，聽說裡面有蛇。囡仔都在比膽量。'),
+      say('p95Adult', '還有啊，戲院那邊荒廢那麼久，裡面變成蛇窟了。囡仔還偷偷跑進去玩，被大人抓到就是一頓藤條。'),
       say('p95Barber', '那間戲院喔……以前我跟我阿母去看電影，散場的人多到擠不出來。'),
       emote('p95Barber', 'music'),
       ...got({ past: 2 }),
@@ -303,7 +303,7 @@ export function tripIntro(s: GameState, era: Era): Step[] {
       emote('me', 'shock'),
       say('me', '……這是二十一年前的東原？'),
       narrate('回憶時光只到傍晚。點店家可以進去幫忙，每幫一次忙會過一個小時。第一次幫忙的店，找回的回憶最多。'),
-      narrate('聽說戲院那邊已經荒廢了，囡仔都在比膽量……'),
+      narrate('聽說荒廢的戲院變成了蛇窟，囡仔常常偷跑進去，大人氣得拿藤條追……'),
       leave('me'),
     ];
   }
@@ -328,41 +328,52 @@ export function pastLandmark(s: GameState, era: Era, id: string): Step[] | null 
       return [
         focus({ landmark: 'kiln' }),
         appear('p95Kid', { landmark: 'kiln' }),
-        say('p95Kid', '你還敢再進去喔？我才不要！'),
+        say('p95Kid', '我才不要再進去！上次被我阿母用藤條打到屁股開花，三天不能坐……'),
         narrate('你在門口探頭看了一眼，黑漆漆的放映室裡好像有什麼東西在動……還是算了。'),
         ...got({ past: 1 }),
         leave('p95Kid'),
       ];
     }
     s.pastDone.push('95-snake');
+    const caught: Step[] = [
+      appear('p95Mom', { landmark: 'kiln' }, 150),
+      say('p95Mom', '阿龍！跟你講過幾次，不准去蛇窟！'),
+      emote('p95Kid', 'shock'),
+      narrate('阿龍的阿母手裡拿著一根藤條，咻咻地揮。'),
+      say('p95Mom', '被飯匙倩咬到怎麼辦！今天回去看我怎麼修理你！還有阿弟，我等一下就去跟你阿嬤講！'),
+      say('p95Kid', '阿母，我不敢了啦——！'),
+      say('p95Kid2', '嗚嗚嗚……'),
+      narrate('兩個囡仔被拎著耳朵帶回家，一路上藤條咻咻響。那個年代，大人都是這樣把囡仔打大的。'),
+    ];
     return [
       focus({ landmark: 'kiln' }),
       narrate('荒廢的戲院。木板釘住的大門，「小心有蛇」的牌子歪了一邊。'),
       appear('p95Kid', { landmark: 'kiln' }, -40),
       appear('p95Kid2', { landmark: 'kiln' }, 30),
       appear('me', { landmark: 'kiln' }, -130),
-      say('p95Kid', '喂！大哥哥，你敢不敢進去？我們都進去過了喔！（騙人的）'),
+      say('p95Kid', '噓！阿弟，快一點，從這個木板縫鑽進去！'),
       say('p95Kid2', '阿龍，不要啦，我阿嬤說裡面有飯匙倩……'),
-      choice('孩子們在比膽量',
-        opt('「好啊，一起進去！」', {}, [
+      say('p95Kid', '……啊！大哥哥，你不要跟我阿母講喔！'),
+      choice('兩個囡仔要偷跑進蛇窟',
+        opt('「我陪你們進去，看一下就出來」', {}, [
           narrate('從破掉的木板縫鑽進去。裡面好暗，空氣裡都是灰塵和霉味。一排一排的木頭椅子，有的已經塌了。'),
           narrate('牆上還貼著一張褪色的電影海報：「十二生肖大冒險」。放映室的角落，堆著幾捲生鏽的膠卷。'),
           say('p95Kid', '……你、你看那邊，地上那條是什麼？'),
           narrate('嘶——'),
           emote('p95Kid', 'shock'), emote('p95Kid2', 'shock'), emote('me', 'shock'),
           say('p95Kid2', '蛇啊啊啊啊啊！'),
-          narrate('三個人一路衝出戲院，跑到街口才停下來喘氣。你手裡，還緊緊抓著那張海報。'),
-          say('p95Kid', '哈……哈哈哈！我們進去過了！明天去學校可以跟大家講了！'),
-          fx('confetti', 'me'),
+          narrate('三個人一路衝出戲院。你手裡，還緊緊抓著那張海報。'),
+          ...caught,
         ]),
-        opt('「裡面有蛇很危險，我們去冰鋪吃冰吧」', {}, [
-          say('p95Kid', '……好啦，膽小鬼。'),
+        opt('「裡面有蛇很危險，我去叫大人」', {}, [
+          say('p95Kid', '大哥哥是抓耙仔！'),
           narrate('離開前，你從門縫看到牆上一張褪色的電影海報：「十二生肖大冒險」。'),
+          ...caught,
         ]),
       ),
       effect({ flag: ['poster'] }),
       ...got({ past: 3 }),
-      leave('p95Kid'), leave('p95Kid2'), leave('me'),
+      leave('p95Mom'), leave('p95Kid'), leave('p95Kid2'), leave('me'),
     ];
   }
   if (id === 'treehouse') {

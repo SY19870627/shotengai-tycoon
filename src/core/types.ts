@@ -449,7 +449,7 @@ export interface StreetDef {
     /** 回憶巡禮點 */
     pilgrimage?: PilgrimDef[];
     pilgrimStory?: (s: GameState, p: PilgrimDef) => Step[];
-    /** 點過去的地標（戲院蛇窩探險…） */
+    /** 點過去的地標（戲院蛇窟…） */
     pastLandmark?: (s: GameState, era: Era, id: string) => Step[] | null;
   };
   shopTypes: string[];
