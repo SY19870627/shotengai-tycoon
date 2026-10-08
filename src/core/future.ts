@@ -44,6 +44,12 @@ export function chickenDay(s: GameState): boolean {
 /** 鹹酥雞的車繞村叫賣的時間 */
 export const CHICKEN_ROUND: [number, number] = [14, 15];
 
+/** 鹹酥雞攤直接擺在老街的馬路上（叫賣完到晚上） */
+export function chickenHere(s: GameState): boolean {
+  const h = hourOf(s);
+  return chickenDay(s) && h >= CHICKEN_ROUND[1] && h < 21;
+}
+
 /** 夜市、早市、香腸伯、鹹酥雞時段的居民倍率 */
 export function marketMult(s: GameState): number {
   const h = hourOf(s);
@@ -52,8 +58,8 @@ export function marketMult(s: GameState): number {
   if (morningMarket(s) && h >= 6 && h < 10.5) return 2 * up;
   // 圍過來買香腸，順便逛老街
   if (sausageHere(s)) return 1.2;
-  // 傍晚去國小買完鹹酥雞，回家路上經過老街
-  if (chickenDay(s) && h >= 17 && h < 19.5) return 1.25;
+  // 圍過來買鹹酥雞，順便逛老街
+  if (chickenHere(s)) return 1.25;
   return 1;
 }
 

@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { nightMarket, morningMarket, longanSeason, sausageHere, chickenDay, CHICKEN_ROUND } from '../core/future';
+import { nightMarket, morningMarket, longanSeason, sausageHere, chickenDay, chickenHere, CHICKEN_ROUND } from '../core/future';
 import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
@@ -251,6 +251,8 @@ export class StreetScene extends Phaser.Scene {
   private seasonOn = false;
   private sausageCart?: Phaser.GameObjects.Container;
   private chickenTruck?: Phaser.GameObjects.Container;
+  private chickenStall?: Phaser.GameObjects.Container;
+  private chickenTimer = 0;
   private vendorTimer = 0;
   private shoutTimer = 0;
   private seasonTimer = 0;
@@ -293,6 +295,7 @@ export class StreetScene extends Phaser.Scene {
     this.seasonHaze = undefined;
     this.sausageCart = undefined;
     this.chickenTruck = undefined;
+    this.chickenStall = undefined;
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -902,13 +905,67 @@ export class StreetScene extends Phaser.Scene {
     return c;
   }
 
+  /** 攤販旁邊站著的人（老闆、等著買的村民） */
+  private vendorPerson(key: string, look: Look, x: number, y: number, flip: boolean): Phaser.GameObjects.Image {
+    const tex = ensureCharTexture(this, key, look);
+    return this.add.image(x, y, `${tex}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H).setFlipX(flip);
+  }
+
+  /** 鹹酥雞攤：炸鍋、玻璃櫃、燈泡、招牌，老闆站在攤子後面 */
+  private drawChickenStall(): Phaser.GameObjects.Container {
+    const c = this.add.container(0, 0);
+    const g = this.add.graphics();
+    // 攤車
+    g.fillStyle(0xc8ccd0);
+    g.fillRect(-50, -40, 100, 34);
+    g.fillStyle(0x8a8e92);
+    g.fillRect(-50, -8, 100, 4);
+    g.fillStyle(0x2a2a30);
+    g.fillCircle(-38, -2, 6);
+    g.fillCircle(38, -2, 6);
+    // 玻璃櫃裡的炸物食材
+    g.fillStyle(0xe8f2f4, 0.85);
+    g.fillRect(-46, -66, 52, 26);
+    for (let k = 0; k < 8; k++) {
+      g.fillStyle([0xd9a03b, 0x6aa84f, 0xe8d8b0, 0xc0392b][k % 4]);
+      g.fillCircle(-40 + (k % 4) * 12, -58 + Math.floor(k / 4) * 10, 3.5);
+    }
+    // 炸鍋
+    g.fillStyle(0x5a5a60);
+    g.fillRect(14, -54, 32, 14);
+    g.fillStyle(0xd9a03b, 0.8);
+    g.fillRect(16, -54, 28, 4);
+    // 燈泡、雨傘
+    g.lineStyle(2, 0x6a6a72);
+    g.lineBetween(0, -40, 0, -98);
+    g.fillStyle(0xd64545);
+    g.fillTriangle(-58, -86, 0, -108, 58, -86);
+    g.fillStyle(0xfff0b0);
+    g.fillCircle(-20, -82, 3);
+    g.fillCircle(20, -82, 3);
+    const sign = this.add.text(0, -24, '鹹酥雞', {
+      fontFamily: FONT, fontSize: '13px', fontStyle: '900', color: '#ffffff', backgroundColor: '#8a3b1a', padding: { x: 4, y: 1 },
+    }).setOrigin(0.5);
+    // 老闆站在攤車後面（被攤車擋住下半身），村民在前面等
+    c.add(this.vendorPerson('chickenBoss', NPCS.chickenBoss.look, 26, -14, true));
+    c.add([g, sign]);
+    c.add(this.vendorPerson('resident4', RESIDENT_LOOKS[4], -76, 8, false));
+    return c;
+  }
+
   /** 週二、週四：香腸伯的三輪貨車停在街上；週三下午：鹹酥雞的車繞村叫賣 */
   private updateWeekdayVendors(dt: number, running: boolean) {
     const s = S();
     const here = sausageHere(s);
     if (here && !this.sausageCart) {
       const x = this.L.lotX(Math.min(2, this.lotViews.length - 1)) + LOT_W / 2;
-      this.sausageCart = this.drawCargoTricycle('sausage').setPosition(x, GROUND_Y + SIDEWALK_H + 44).setDepth(31);
+      const y = GROUND_Y + SIDEWALK_H + 44;
+      const cart = this.drawCargoTricycle('sausage');
+      // 香腸伯站在車斗旁邊顧烤爐，兩個村民在等
+      cart.add(this.vendorPerson('sausageUncle', NPCS.sausageUncle.look, -76, 6, false));
+      cart.add(this.vendorPerson('resident0', RESIDENT_LOOKS[0], -120, 8, false));
+      cart.add(this.vendorPerson('resident3', RESIDENT_LOOKS[3], -145, 10, false));
+      this.sausageCart = cart.setPosition(x, y).setDepth(31);
     } else if (!here && this.sausageCart) {
       this.sausageCart.destroy();
       this.sausageCart = undefined;
@@ -933,6 +990,25 @@ export class StreetScene extends Phaser.Scene {
     } else if (!rounding && this.chickenTruck) {
       this.chickenTruck.destroy();
       this.chickenTruck = undefined;
+    }
+    // 叫賣完，直接在馬路上擺攤到晚上
+    const stall = chickenHere(s);
+    if (stall && !this.chickenStall) {
+      const i = Math.min(3, this.lotViews.length - 1);
+      this.chickenStall = this.drawChickenStall().setPosition(this.L.lotX(i) + LOT_W / 2, GROUND_Y + SIDEWALK_H + 46).setDepth(31);
+    } else if (!stall && this.chickenStall) {
+      this.chickenStall.destroy();
+      this.chickenStall = undefined;
+    }
+    if (this.chickenStall && mult > 0) {
+      this.chickenTimer -= dt * mult;
+      if (this.chickenTimer <= 0) {
+        this.chickenTimer = 600 + Math.random() * 500;
+        const sx = this.chickenStall.x + 20, sy = this.chickenStall.y - 50;
+        const puff = this.add.circle(sx, sy, 6, 0xe8e0d0, 0.5).setDepth(32);
+        this.tweens.add({ targets: puff, y: sy - 60, scale: 2.2, alpha: 0, duration: 1700, onComplete: () => puff.destroy() });
+        if (Math.random() < 0.2) this.floatText(this.chickenStall.x, sy - 24, '鹹酥雞、甜不辣、四季豆喔！', '#fff0a0', 14);
+      }
     }
     if (this.chickenTruck) {
       const t = (h - a) / (b - a);

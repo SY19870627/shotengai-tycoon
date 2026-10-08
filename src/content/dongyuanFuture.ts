@@ -216,7 +216,7 @@ export const DONGYUAN_FUTURE: StoryEvent[] = [
       appear('me', 'dy-barber', -100),
       say('me', '「來養」那攤鹹酥雞？'),
       say('dy-barber', '哈哈，意思就是請大家來買啦！大家來捧場，養鹹酥雞老闆一家人。'),
-      say('dy-barber', '他每個禮拜三下午都在國小門口擺攤。傍晚大家買完鹹酥雞回家，都會經過老街。'),
+      say('dy-barber', '繞完全村，他就直接在這條路上擺攤，國小放學的孩子都會跑過來。鄉下地方就是這樣，馬路就是攤位啦！'),
       emote('me', 'music'),
       leave('dy-barber'), leave('me'),
     ],
