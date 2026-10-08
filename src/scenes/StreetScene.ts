@@ -258,6 +258,8 @@ export class StreetScene extends Phaser.Scene {
   private seasonTimer = 0;
   private seasonLayer?: Phaser.GameObjects.Container;
   private seasonHaze?: Phaser.GameObjects.Rectangle;
+  private seasonClouds?: Phaser.GameObjects.Container;
+  private seasonCloudList: { c: Phaser.GameObjects.Container; v: number }[] = [];
   private pilgrimSig = '';
   private wellLayer!: Phaser.GameObjects.Container;
   private wellSig = '';
@@ -293,6 +295,8 @@ export class StreetScene extends Phaser.Scene {
     this.seasonOn = false;
     this.seasonLayer = undefined;
     this.seasonHaze = undefined;
+    this.seasonClouds = undefined;
+    this.seasonCloudList = [];
     this.sausageCart = undefined;
     this.chickenTruck = undefined;
     this.chickenStall = undefined;
@@ -826,8 +830,23 @@ export class StreetScene extends Phaser.Scene {
       this.seasonLayer = undefined;
       this.seasonHaze?.destroy();
       this.seasonHaze = undefined;
+      this.seasonClouds?.destroy();
+      this.seasonClouds = undefined;
+      this.seasonCloudList = [];
       if (on) {
         this.seasonHaze = this.add.rectangle(0, 0, W, H, 0xa07848, 0.17).setOrigin(0).setScrollFactor(0).setDepth(49);
+        // 一大團一大團的龍眼煙，從屋頂一路罩到馬路，慢慢飄過老街
+        this.seasonClouds = this.add.container(0, 0).setScrollFactor(0).setDepth(48);
+        for (let k = 0; k < 9; k++) {
+          const cloud = this.add.container(Math.random() * (W + 400) - 200, GROUND_Y - 280 + (k % 3) * 120 + Math.random() * 40);
+          const size = 1 + Math.random() * 0.7;
+          for (let n = 0; n < 6; n++) {
+            const e = this.add.ellipse((n - 2.5) * 70 * size, Math.sin(n * 1.7) * 26 * size, (200 + Math.random() * 120) * size, (110 + Math.random() * 60) * size, 0xd2c2a8, 0.16 + Math.random() * 0.08);
+            cloud.add(e);
+          }
+          this.seasonClouds.add(cloud);
+          this.seasonCloudList.push({ c: cloud, v: (k % 2 ? 1 : -1) * (6 + Math.random() * 10) });
+        }
         // 騎樓下剝龍眼的人：板凳、一大盆龍眼
         const layer = this.add.container(0, 0).setDepth(12);
         s.lots.forEach((l, i) => {
@@ -849,6 +868,12 @@ export class StreetScene extends Phaser.Scene {
         });
         this.seasonLayer = layer;
       }
+    }
+    // 煙團慢慢飄（暫停時也輕輕晃，不會整片凍住）
+    for (const cl of this.seasonCloudList) {
+      cl.c.x += cl.v * (dt / 1000) * (running ? store.speed : 0.3);
+      if (cl.c.x > W + 400) cl.c.x = -400;
+      if (cl.c.x < -400) cl.c.x = W + 400;
     }
     if (!on || !running) return;
     const mult = store.speed;
@@ -2727,8 +2752,10 @@ export class StreetScene extends Phaser.Scene {
     const season = longanSeason(S());
     this.kilnTimer = season ? 300 + Math.random() * 250 : 900 + Math.random() * 600;
     const x = box.x + KILN.chimneyX + Phaser.Math.Between(-4, 4), y = GROUND_Y + KILN.chimneyY;
-    const puff = this.add.circle(x, y, (season ? 10 : 7) + Math.random() * 4, season ? 0xc8b8a0 : 0xd8d0c4, season ? 0.6 : 0.5).setDepth(12);
-    this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(80, 130), x: x + Phaser.Math.Between(10, 50), scale: 2.6, alpha: 0, duration: 2600, onComplete: () => puff.destroy() });
+    const puff = this.add.circle(x, y, (season ? 16 : 7) + Math.random() * 4, season ? 0xc8b8a0 : 0xd8d0c4, season ? 0.6 : 0.5).setDepth(season ? 47 : 12);
+    // 焙季的煙又大又濃，往兩邊散開罩住整條街
+    if (season) this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(40, 120), x: x + Phaser.Math.Between(-260, 260), scale: 8, alpha: 0, duration: 6000, onComplete: () => puff.destroy() });
+    else this.tweens.add({ targets: puff, y: y - Phaser.Math.Between(80, 130), x: x + Phaser.Math.Between(10, 50), scale: 2.6, alpha: 0, duration: 2600, onComplete: () => puff.destroy() });
   }
 
   /** 露頭冒煙：泉量越多煙越濃 */
