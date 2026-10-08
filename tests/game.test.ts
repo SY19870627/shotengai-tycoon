@@ -21,7 +21,7 @@ import {
 import { FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, fudeToday, buyPrep } from '../src/core/future';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
-import { pickStory, flattenEffects } from '../src/core/story';
+import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { STREETS } from '../src/content';
 import { NPCS } from '../src/content/npcs';
@@ -744,6 +744,25 @@ describe('關子嶺', () => {
 
 describe('東原', () => {
   const dy = () => createGame('dongyuan', seeded(3));
+
+  it('傍晚以後才達成全部目標：結局當晚就演，不用等到隔天傍晚', () => {
+    const s = dy();
+    const goals = STREETS.dongyuan.goals;
+    const checks = goals.map((g) => g.check);
+    try {
+      for (const g of goals) g.check = () => true;
+      // 傍晚的時段已經檢查過了（當時還沒達成）
+      expect(pickEnding(s, ['morning', 'noon'], seeded(1))).toBeNull();
+      const st = pickEnding(s, ['morning', 'noon', 'evening'], seeded(1));
+      expect(st?.event.id).toBe('dy-ending');
+      for (const step of flattenEffects(st!.steps)) if (step.t === 'effect') applyEffects(s, step.effects, seeded(1));
+      expect(s.chapterComplete).toBe(true);
+      // 只演一次
+      expect(pickEnding(s, ['morning', 'noon', 'evening'], seeded(1))).toBeNull();
+    } finally {
+      goals.forEach((g, k) => { g.check = checks[k]; });
+    }
+  });
 
   it('開局：肉圓、雜貨、理髮三間老店已經在營業，空屋要找屋主', () => {
     const s = dy();

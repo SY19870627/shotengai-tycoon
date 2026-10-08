@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { endingEvent } from '../core/story';
 import {
   unlockLot, nextLotCost, neighborEffects, signTenant, rejectApplicant, postAd, AD_COST, profileOf, renovate,
   giveGift, GIFT_COST, evict, setRentTier, startNextDay, startActivity, canStartActivity, activityCost, getRel,
@@ -6,7 +7,7 @@ import {
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
   noisyNeighbors, shopOpen, isWeekend,
-  MAX_APPLICANTS, goalsDone,
+  MAX_APPLICANTS, goalsDone, hourOf,
 } from '../core/game';
 import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
@@ -1706,7 +1707,10 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       `活動加成：人潮 ×${mods.traffic.toFixed(2)}、吸引力 ×${mods.appealAll.toFixed(2)}`,
       ...extra,
     ].join('\n'), 15, '#5a5266').setLineSpacing(6));
-    if (goalsDone(s)) m.add(this.text(x + 30, y + 440, '全部達成！明天早上會有好消息……', 16, '#b3262e', '900'));
+    if (goalsDone(s) && !s.chapterComplete) {
+      const evening = endingEvent(s)?.when === 'evening' && hourOf(s) < 18.5;
+      m.add(this.text(x + 30, y + 440, evening ? '全部達成！今天傍晚會有好消息……' : '全部達成！好消息馬上就來了……', 16, '#b3262e', '900'));
+    }
   }
 
   private confirmBackToMap() {
@@ -1827,8 +1831,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       }
     }
     this.rebuildPanel();
-    if (s.chapterComplete && !store.meta.completed.includes(s.streetId)) {
+    // 章節完成的視窗每一局都要跳（以前通關過這條街，重玩也要看得到）
+    if (s.chapterComplete && !s.flags.includes('chapterShown')) {
+      s.flags.push('chapterShown');
       completeChapter();
+      save();
       const street = streetOf(s);
       store.speed = 0;
       const { m, y } = this.openModal(640, 340, 0.6, false);

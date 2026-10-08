@@ -12,7 +12,7 @@ import {
   hasPlan, RYOKAN_PLANS, firefliesOut, type PlanId,
 } from '../core/onsen';
 import { MODULES, FACILITY, facilityOf, moduleEff, staffRatio } from '../core/facilities';
-import { pickStory } from '../core/story';
+import { pickStory, pickEnding } from '../core/story';
 import { passerbyRoute } from '../core/sim';
 import { SHOP_BY_ID, isOpen, type Category } from '../core/shops';
 import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review, YokaiKind, FireMode } from '../core/types';
@@ -1330,6 +1330,13 @@ export class StreetScene extends Phaser.Scene {
     const h = hourOf(s);
     const slots: ['morning' | 'noon' | 'evening' | 'night', number][] = [['morning', 7], ['noon', 12], ['evening', 18.5]];
     if (dayEndMin(s) > 23.6 * 60) slots.push(['night', 23.5]);
+    // 目標全部達成：已經過了結局的時段也不用等到隔天
+    const end = pickEnding(s, slots.filter(([, at]) => h >= at).map(([w]) => w));
+    if (end) {
+      this.clearAmbientActors();
+      playStory(end.steps);
+      return;
+    }
     for (const [when, at] of slots) {
       if (this.storyChecks[when] || h < at) continue;
       this.storyChecks[when] = true;

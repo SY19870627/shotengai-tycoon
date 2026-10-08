@@ -52,6 +52,27 @@ export function pickStory(
   return null;
 }
 
+/** 這條街的結局劇情（目標全部達成後演一次） */
+export function endingEvent(s: GameState): StoryEvent | undefined {
+  return streetOf(s).stories.find((e) => e.once && e.id.endsWith('-ending'));
+}
+
+/**
+ * 目標全部達成：結局不用等到隔天的時段檢查，只要已經過了它的時段（例如東原的傍晚），馬上就演。
+ * reached：今天已經到了的時段。
+ */
+export function pickEnding(
+  s: GameState, reached: StoryEvent['when'][], rand: () => number = Math.random,
+): { event: StoryEvent; binding: Binding; steps: Step[] } | null {
+  const e = endingEvent(s);
+  if (!e || s.storyLog[e.id] !== undefined || !reached.includes(e.when)) return null;
+  const ctx = makeCtx(s, rand);
+  const binding = e.cond(ctx);
+  if (!binding) return null;
+  s.storyLog[e.id] = s.day;
+  return { event: e, binding, steps: e.script(binding, ctx) };
+}
+
 /** 測試／模擬用：不演出，直接套用第一個選項的效果 */
 export function flattenEffects(steps: Step[], choose = 0): Step[] {
   const out: Step[] = [];
