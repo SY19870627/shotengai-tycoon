@@ -352,7 +352,7 @@ export const NPCS: Record<string, NpcDef> = {
     look: L({ skin: 0xb07a52, hair: 0xb7b1a8, hairStyle: 'short', shirt: 0xf0f0f0, pants: 0x3d3a36, accessory: 'cap', age: 'old' }),
   },
   chickenBoss: {
-    id: 'chickenBoss', name: '鹽酥雞老闆',
+    id: 'chickenBoss', name: '鹹酥雞老闆',
     look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xf2c14e, pants: 0x3d3a36, accessory: 'apron', age: 'mid' }),
   },
   cyclist: {

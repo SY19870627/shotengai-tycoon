@@ -36,15 +36,15 @@ export function sausageHere(s: GameState): boolean {
   return sausageDay(s) && h >= 14 && h < 20;
 }
 
-/** 週三：鹽酥雞在國小擺攤，下午先開車繞全村叫賣 */
+/** 週三：鹹酥雞在國小擺攤，下午先開車繞全村叫賣 */
 export function chickenDay(s: GameState): boolean {
   return isMemoryStreet(s) && weekdayIndex(s) === 2;
 }
 
-/** 鹽酥雞的車繞村叫賣的時間 */
+/** 鹹酥雞的車繞村叫賣的時間 */
 export const CHICKEN_ROUND: [number, number] = [14, 15];
 
-/** 夜市、早市、香腸伯、鹽酥雞時段的居民倍率 */
+/** 夜市、早市、香腸伯、鹹酥雞時段的居民倍率 */
 export function marketMult(s: GameState): number {
   const h = hourOf(s);
   const up = futureDone(s, 'market') ? 1.4 : 1;
@@ -52,7 +52,7 @@ export function marketMult(s: GameState): number {
   if (morningMarket(s) && h >= 6 && h < 10.5) return 2 * up;
   // 圍過來買香腸，順便逛老街
   if (sausageHere(s)) return 1.2;
-  // 傍晚去國小買完鹽酥雞，回家路上經過老街
+  // 傍晚去國小買完鹹酥雞，回家路上經過老街
   if (chickenDay(s) && h >= 17 && h < 19.5) return 1.25;
   return 1;
 }

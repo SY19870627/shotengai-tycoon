@@ -28,7 +28,7 @@ import { ensureCharTexture, CHAR_H, CHAR_W } from './drawCharacters';
 import { drawEmote, drawBubble, playFx, drawPalanquin, drawFlag } from './effects';
 import { buildLayout, type StreetLayout } from './layout';
 import { PED_VARIANTS } from './BootScene';
-import { nightMarket, morningMarket, longanSeason } from '../core/future';
+import { nightMarket, morningMarket, longanSeason, sausageHere, chickenDay, CHICKEN_ROUND } from '../core/future';
 import { MEMORY_NAME, MEMORY_COLOR, memoryTag, helpsLeft, movieTonight, ownerOf, eraOf, pastShopAt, PAST_HOURS, tripOver, canTrip, isMemoryStreet, pilgrimage, pilgrimState } from '../core/memory';
 import type { Era } from '../core/types';
 
@@ -249,6 +249,10 @@ export class StreetScene extends Phaser.Scene {
   private marketKind = '';
   private marketGlow?: Phaser.GameObjects.Graphics;
   private seasonOn = false;
+  private sausageCart?: Phaser.GameObjects.Container;
+  private chickenTruck?: Phaser.GameObjects.Container;
+  private vendorTimer = 0;
+  private shoutTimer = 0;
   private seasonTimer = 0;
   private seasonLayer?: Phaser.GameObjects.Container;
   private seasonHaze?: Phaser.GameObjects.Rectangle;
@@ -287,6 +291,8 @@ export class StreetScene extends Phaser.Scene {
     this.seasonOn = false;
     this.seasonLayer = undefined;
     this.seasonHaze = undefined;
+    this.sausageCart = undefined;
+    this.chickenTruck = undefined;
     this.L = buildLayout(this.street);
     this.lotViews = [];
     this.peds = [];
@@ -855,6 +861,92 @@ export class StreetScene extends Phaser.Scene {
     if (Math.random() < 0.35) this.floatText(cam.scrollX + 80 + Math.random() * (W - 160), GROUND_Y - 160 - Math.random() * 80, '龍眼香～', '#f3dcb0', 14);
   }
 
+  /** 改裝的三輪貨車（香腸伯、鹹酥雞的叫賣車共用），車頭朝右 */
+  private drawCargoTricycle(kind: 'sausage' | 'chicken'): Phaser.GameObjects.Container {
+    const c = this.add.container(0, 0);
+    const g = this.add.graphics();
+    // 車斗
+    g.fillStyle(kind === 'sausage' ? 0x3f6f8f : 0xd9a03b);
+    g.fillRect(-60, -34, 70, 22);
+    g.fillStyle(0x2a2a30);
+    g.fillCircle(-46, -8, 9);
+    g.fillCircle(-4, -8, 9);
+    g.fillCircle(34, -8, 9);
+    g.fillStyle(0x8a8e92);
+    for (const wx of [-46, -4, 34]) g.fillCircle(wx, -8, 3);
+    // 車頭
+    g.fillStyle(kind === 'sausage' ? 0x4f86c6 : 0xe8c04a);
+    g.fillRoundedRect(12, -50, 30, 38, { tl: 10, tr: 4, bl: 0, br: 0 });
+    g.fillStyle(0xbfe0f0);
+    g.fillRect(28, -46, 11, 14);
+    if (kind === 'sausage') {
+      // 烤爐、香腸、黑輪鍋
+      g.fillStyle(0x5a5a60);
+      g.fillRect(-56, -46, 30, 12);
+      g.fillStyle(0xd85a3a);
+      for (let k = 0; k < 4; k++) g.fillRoundedRect(-54 + k * 7, -50, 5, 10, 2);
+      g.fillStyle(0xc0c4c8);
+      g.fillRect(-22, -48, 26, 14);
+      g.fillStyle(0xc8a060);
+      for (let k = 0; k < 3; k++) g.fillCircle(-16 + k * 7, -50, 3);
+    } else {
+      // 車頂的大喇叭
+      g.fillStyle(0xd0d4d8);
+      g.fillTriangle(20, -56, 34, -62, 34, -50);
+      g.fillRect(24, -52, 3, 4);
+    }
+    const sign = this.add.text(-25, -24, kind === 'sausage' ? '香腸・黑輪' : '鹹酥雞', {
+      fontFamily: FONT, fontSize: '11px', fontStyle: '900', color: '#ffffff', backgroundColor: kind === 'sausage' ? '#b3262e' : '#8a3b1a', padding: { x: 3, y: 1 },
+    }).setOrigin(0.5);
+    c.add([g, sign]);
+    return c;
+  }
+
+  /** 週二、週四：香腸伯的三輪貨車停在街上；週三下午：鹹酥雞的車繞村叫賣 */
+  private updateWeekdayVendors(dt: number, running: boolean) {
+    const s = S();
+    const here = sausageHere(s);
+    if (here && !this.sausageCart) {
+      const x = this.L.lotX(Math.min(2, this.lotViews.length - 1)) + LOT_W / 2;
+      this.sausageCart = this.drawCargoTricycle('sausage').setPosition(x, GROUND_Y + SIDEWALK_H + 44).setDepth(31);
+    } else if (!here && this.sausageCart) {
+      this.sausageCart.destroy();
+      this.sausageCart = undefined;
+    }
+    const mult = running ? store.speed : 0;
+    if (this.sausageCart && mult > 0) {
+      this.vendorTimer -= dt * mult;
+      if (this.vendorTimer <= 0) {
+        this.vendorTimer = 700 + Math.random() * 500;
+        const sx = this.sausageCart.x - 40, sy = this.sausageCart.y - 56;
+        const puff = this.add.circle(sx, sy, 6, 0xd8d0c4, 0.55).setDepth(32);
+        this.tweens.add({ targets: puff, y: sy - 60, scale: 2.4, alpha: 0, duration: 1800, onComplete: () => puff.destroy() });
+        if (Math.random() < 0.25) this.floatText(this.sausageCart.x, sy - 20, '香腸、黑輪喔～', '#ffe0c0', 14);
+      }
+    }
+    // 鹹酥雞的叫賣車：下午兩點出發，一個小時從街頭開到街尾
+    const h = hourOf(s);
+    const [a, b] = CHICKEN_ROUND;
+    const rounding = chickenDay(s) && h >= a && h < b;
+    if (rounding && !this.chickenTruck) {
+      this.chickenTruck = this.drawCargoTricycle('chicken').setPosition(this.L.startX - 120, GROUND_Y + SIDEWALK_H + 58).setDepth(31);
+    } else if (!rounding && this.chickenTruck) {
+      this.chickenTruck.destroy();
+      this.chickenTruck = undefined;
+    }
+    if (this.chickenTruck) {
+      const t = (h - a) / (b - a);
+      this.chickenTruck.x = this.L.startX - 120 + t * (this.L.endX - this.L.startX + 240);
+      if (mult > 0) {
+        this.shoutTimer -= dt;
+        if (this.shoutTimer <= 0) {
+          this.shoutTimer = 1600;
+          this.floatText(this.chickenTruck.x + 20, this.chickenTruck.y - 80, '禮拜三喔——來養那攤鹹酥雞——！', '#fff0a0', 15);
+        }
+      }
+    }
+  }
+
   /** 東原：週一夜市、週五早市在馬路上擺攤 */
   private updateMarketStalls() {
     const s = S();
@@ -889,7 +981,7 @@ export class StreetScene extends Phaser.Scene {
         g.fillRect(x - 42 + k * 17, y - 60, 17, 10);
       }
       if (kind === 'night') {
-        // 夜市：烤香腸、鹽酥雞、玩具，掛著燈泡
+        // 夜市：烤香腸、鹹酥雞、玩具，掛著燈泡
         for (let k = 0; k < 4; k++) {
           g.fillStyle([0xc0392b, 0xd9a03b, 0x4f86c6, 0xef8fb1][(i + k) % 4]);
           g.fillRoundedRect(x - 30 + k * 15, y - 22, 12, 10, 2);
@@ -1079,6 +1171,7 @@ export class StreetScene extends Phaser.Scene {
       this.updateFilmScreen();
       this.updatePilgrimMarkers();
       this.updateMarketStalls();
+      this.updateWeekdayVendors(dt, running && !store.storyRunning);
       this.updateLonganSeason(dt, running && !store.storyRunning);
     }
 
