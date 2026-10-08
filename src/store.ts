@@ -33,6 +33,8 @@ export const Ev = {
   PastTap: 'past-tap',
   /** 東原：回憶時光的時間到了 */
   TripEnd: 'trip-end',
+  /** 東原：打開回憶巡禮 */
+  Pilgrim: 'pilgrim',
 } as const;
 
 function readJSON<T>(key: string): T | null {
