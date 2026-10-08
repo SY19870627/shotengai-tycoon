@@ -1492,7 +1492,7 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
       break;
     }
     case 'pharmacy':
-      // 中藥櫃（一格格小抽屜）+ 架上的藥罐
+      // 藥櫃（一格格小抽屜）+ 架上的感冒糖漿
       g.fillStyle(0x8a5a3a);
       g.fillRect(bx + 6, by + 4, 60, bh - 22);
       for (let r = 0; r < 4; r++) {
@@ -1505,13 +1505,17 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
           g.fillCircle(bx + 15 + c * 14, by + 13 + r * 10, 1);
         }
       }
-      row(4, (x, i) => {
-        if (x < bx + 70) return;
-        g.fillStyle([0xf6f6f0, 0x8ac0a0, 0xd8a050, 0xf6f6f0][i]);
-        g.fillRoundedRect(x - 6, by + bh - 36, 12, 18, 2);
-        g.fillStyle(i % 2 ? 0xd8392f : 0x3f8f4f);
-        g.fillRect(x - 6, by + bh - 30, 12, 5);
-      });
+      // 賣最好的：一排排咖啡色瓶子的感冒糖漿
+      for (let k = 0; k < 6; k++) {
+        const x = bx + 74 + k * 9;
+        g.fillStyle(0x7a3a12, 0.95);
+        g.fillRoundedRect(x - 3.5, by + bh - 36, 7, 16, 2);
+        g.fillRect(x - 1.5, by + bh - 40, 3, 4);
+        g.fillStyle(k % 2 ? 0xf2c14e : 0xf6f6f0);
+        g.fillRect(x - 3.5, by + bh - 30, 7, 5);
+        g.fillStyle(0xd8392f);
+        g.fillRect(x - 2, by + bh - 42, 4, 2);
+      }
       for (let k = 0; k < 3; k++) {
         g.fillStyle([0xffffff, 0xf2c14e, 0x8ac0e0][k]);
         g.fillRoundedRect(bx + 78 + k * 14, by + 10, 10, 14, 2);
@@ -1521,7 +1525,7 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
       }
       break;
     case 'icepop': {
-      // 手搖刨冰機 + 糖水罐 + 一碗碗剉冰
+      // 手搖刨冰機 + 四果罐 + 一碗碗四果冰 + 紅茶、冬瓜茶桶
       g.fillStyle(0xc0392b);
       g.fillRect(bx + 14, by + 8, 30, 6);
       g.fillRect(bx + 14, by + 8, 5, 36);
@@ -1539,8 +1543,8 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
       g.fillStyle(0xf6fbff);
       g.slice(bx + 31, by + bh - 28, 8, Math.PI, 0, false);
       g.fillPath();
-      // 糖水罐（玻璃罐裡黑糖、紅豆、綠豆）
-      for (const [jx, col] of [[bx + 64, 0x5a3010], [bx + 82, 0x8a2a2a], [bx + 100, 0x6a8a3a]] as const) {
+      // 四果罐（玻璃罐裡鳳梨、李仔、木瓜）
+      for (const [jx, col] of [[bx + 64, 0xf2c14e], [bx + 82, 0xb3263a], [bx + 100, 0xe8843a]] as const) {
         g.fillStyle(0xe8f2f4, 0.8);
         g.fillRoundedRect(jx - 7, by + 10, 14, 22, 3);
         g.fillStyle(col);
@@ -1554,8 +1558,20 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
         g.fillStyle(0xf6fbff);
         g.slice(x, by + bh - 23, 10, Math.PI, 0, false);
         g.fillPath();
-        g.fillStyle(0x6a3a14, 0.85);
-        g.fillEllipse(x + 1, by + bh - 29, 14, 4);
+        // 剉冰上鋪滿四種蜜餞
+        for (const [dx, col] of [[-4, 0xf2c14e], [0, 0xb3263a], [4, 0xe8843a], [1, 0x8ab04a]] as const) {
+          g.fillStyle(col);
+          g.fillCircle(x + dx, by + bh - 29 - (dx === 1 ? 2 : 0), 2.2);
+        }
+      }
+      // 紅茶、冬瓜茶的大茶桶
+      for (const [tx, col] of [[bx + bw - 34, 0x9a3a1a], [bx + bw - 16, 0xc08a3a]] as const) {
+        g.fillStyle(0xe8f2f4, 0.85);
+        g.fillRoundedRect(tx - 7, by + 8, 14, 26, 3);
+        g.fillStyle(col);
+        g.fillRect(tx - 6, by + 14, 12, 19);
+        g.fillStyle(0x8a8e92);
+        g.fillRect(tx - 2, by + 33, 4, 4);
       }
       break;
     }
