@@ -182,7 +182,7 @@ export function audiencePref(defId: string, origin: Origin): number {
 }
 
 /** 居民消費比較省 */
-export const RESIDENT_SPEND = 0.6;
+export const RESIDENT_SPEND = 0.75;
 
 /** 居民在這種店聊天時，會說出哪一種回憶 */
 export function chatMemory(defId: string): MemoryKind {

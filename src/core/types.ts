@@ -413,6 +413,8 @@ export interface StreetDef {
   weekendMult: number;
   /** 租金倍率 */
   rentMult: number;
+  /** 租客自付成本倍率（東原：自家店面、家人幫忙顧店，成本很低） */
+  upkeepMult?: number;
   /** 每日街道維護費 */
   maintenance: number;
   /** 開放下一個店面的基本費用 */

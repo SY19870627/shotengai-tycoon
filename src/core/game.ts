@@ -1138,7 +1138,7 @@ export function tenantProfit(s: GameState, shop: ShopInstance): number {
   // 削價競爭吃掉毛利
   const i = s.lots.findIndex((l) => l.shop === shop);
   if (neighborEffects(s, i).some((e) => e.label.endsWith('削價競爭'))) margin -= 0.06;
-  const upkeep = def.upkeep * (1 + (shop.level - 1) * 0.3);
+  const upkeep = def.upkeep * (1 + (shop.level - 1) * 0.3) * (street.upkeepMult ?? 1);
   return Math.round(shop.todayRevenue * (margin - COMMISSION) - rent - upkeep);
 }
 
