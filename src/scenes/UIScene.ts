@@ -509,6 +509,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const chip = this.text(0, 0, '點店家進去幫忙（每次 1 個半小時）・點戲院、老榕樹看看・第一次幫忙的店找回最多回憶', 13, '#2a2433', '700')
       .setBackgroundColor('#f3e3c2').setPadding(8, 3, 8, 3);
     this.chips.add(chip);
+    if (s.trip!.payday) {
+      this.chips.add(this.text(chip.width + 6, 0, '今天是糖廠發薪日！街上擠滿了人', 13, '#2a2433', '900').setBackgroundColor('#f0c890').setPadding(8, 3, 8, 3));
+    }
     const back = this.button(W - 170, 76, 154, 40, '提早回到 2016', () => {
       if (store.storyRunning || this.returning) return;
       this.onTripEnd();

@@ -1,6 +1,7 @@
 import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
 import { isWeekend } from '../core/game';
 import { PAST_1995, tripIntro, tripOutro, pastLandmark } from './dongyuan1995';
+import { PAST_1960, tripIntro1960, pastLandmark1960 } from './dongyuan1960';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt, look } from './dsl';
 
 /**
@@ -592,6 +593,25 @@ const stories: StoryEvent[] = [
     ],
   },
   {
+    id: 'dy-meatball-1960', street: ST, once: true, priority: 46, when: 'evening',
+    cond: (c) => (c.flag('p60-meatball') && c.has('dy-meatball') ? {} : null),
+    script: () => [
+      focus('dy-meatball'),
+      appear('dy-meatball'),
+      appear('me', 'dy-meatball', -100),
+      say('dy-meatball', '少年仔，我跟你說一件很奇怪的事。'),
+      say('dy-meatball', '我十歲那年，在阿爸的攤子顧店。有一個不認識的年輕人來幫忙，還問我幾歲。'),
+      say('dy-meatball', '我跟他說，我以後要賣肉圓，一年三百六十五天都開。'),
+      say('dy-meatball', '……那個人，長得跟你一模一樣。'),
+      emote('me', 'sweat'),
+      say('dy-meatball', '哈哈，老了，記性不好。來，吃一顆。我說到做到了吧？'),
+      emote('dy-meatball', 'heart'),
+      effect({ memory: { bond: 2 }, kinship: 2 }),
+      narrate('得到回憶：人情 2。'),
+      leave('dy-meatball'), leave('me'),
+    ],
+  },
+  {
     id: 'dy-wait', street: ST, once: true, priority: 30, when: 'morning',
     cond: (c) => (c.s.day >= 10 ? {} : null),
     script: () => [
@@ -657,9 +677,10 @@ export const DONGYUAN: StreetDef = {
     ],
     startMemories: {},
     past1995: PAST_1995,
-    tripIntro,
+    past1960: PAST_1960,
+    tripIntro: (s, era) => (era === 1960 ? tripIntro1960(s) : tripIntro(s, era)),
     tripOutro,
-    pastLandmark,
+    pastLandmark: (s, era, id) => (era === 1960 ? pastLandmark1960(s, id) : pastLandmark(s, era, id)),
     owners: [
       {
         name: '台北工程師 阿凱', tag: '屋主：台北工程師',

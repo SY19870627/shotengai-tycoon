@@ -1,7 +1,7 @@
 export type Category = 'food' | 'retail' | 'leisure' | 'daily' | 'stay';
 
 /** 店面外觀風格（由老街決定） */
-export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95';
+export type FacadeStyle = 'redbrick' | 'jiufen' | 'onsen' | 'oldtown' | 'retro95' | 'showa60';
 
 export interface ShopDef {
   id: string;
@@ -216,6 +216,43 @@ export const SHOPS: ShopDef[] = [
     spend: 220, appeal: 0.055, capacity: 4, stayMinutes: 10, upkeep: 250, baseRent: 700,
     hours: [9, 19], wallColor: 0x8a5a3a, awningColor: 0xe9cf9a,
     description: '東山焙灶的柴燒龍眼乾。遊客的伴手禮，居民家裡自己就有。',
+  }),
+  // ---- 東原 1960（只在回憶時光出現，不能招租） ----
+  S({
+    id: 'cloth', name: '布莊', short: '布莊', category: 'retail',
+    spend: 300, appeal: 0.04, capacity: 4, stayMinutes: 20, upkeep: 200, baseRent: 600,
+    hours: [8, 21], wallColor: 0xe9dcc4, awningColor: 0x8a3b5a,
+    description: '一匹一匹的花布。過年前，整條街的人都來這裡做新衣。',
+  }),
+  S({
+    id: 'inn', name: '旅社', short: '旅社', category: 'leisure',
+    spend: 200, appeal: 0.03, capacity: 4, stayMinutes: 30, upkeep: 200, baseRent: 600,
+    hours: [0, 30], wallColor: 0xe6dcc8, awningColor: 0x3d5a7a,
+    description: '糖廠來出差的技師、跑單幫的生意人，晚上都住在這裡。',
+  }),
+  S({
+    id: 'ryoriya', name: '料理屋', short: '料理', category: 'food',
+    spend: 250, appeal: 0.05, capacity: 6, stayMinutes: 40, upkeep: 300, baseRent: 700,
+    hours: [11, 23], wallColor: 0xe9dcc0, awningColor: 0x2b2b2b,
+    description: '糖廠的頭家請客的地方。門口掛著布簾，裡面傳出划酒拳的聲音。',
+  }),
+  S({
+    id: 'herbal', name: '中藥行', short: '中藥', category: 'daily',
+    spend: 120, appeal: 0.04, capacity: 3, stayMinutes: 15, upkeep: 200, baseRent: 600,
+    hours: [8, 21], wallColor: 0xd9c49a, awningColor: 0x6b4a2a,
+    description: '一整面牆的小抽屜，空氣裡都是當歸的味道。',
+  }),
+  S({
+    id: 'photo', name: '照相館', short: '照相', category: 'leisure',
+    spend: 200, appeal: 0.03, capacity: 3, stayMinutes: 25, upkeep: 200, baseRent: 600,
+    hours: [9, 21], wallColor: 0xece4d4, awningColor: 0x4a4a6a,
+    description: '結婚、畢業、過年，一輩子只拍幾張的照片都在這裡拍。',
+  }),
+  S({
+    id: 'repair', name: '腳踏車修理', short: '修理', category: 'retail',
+    spend: 100, appeal: 0.04, capacity: 3, stayMinutes: 20, upkeep: 150, baseRent: 500,
+    hours: [8, 21], wallColor: 0xd8d0c0, awningColor: 0x3f6f4f,
+    description: '修腳踏車、修縫紉車，老闆什麼都愛改裝。門口那台縫紉車，被他改成了棉花糖機。',
   }),
   // ---- 住宿 ----
   S({
