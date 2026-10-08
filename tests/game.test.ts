@@ -963,7 +963,7 @@ describe('東原', () => {
     expect(STREETS.dongyuan.goals[0].check(s)).toBe(false);
   });
 
-  it('數值模擬：每晚穿越、說服屋主、點亮巡禮點，40 天內可以看到結局', () => {
+  it('數值模擬：每晚穿越、說服屋主、點亮巡禮點、只招給居民的店，40 天內可以看到結局', () => {
     const s = dy();
     const rand = seeded(11);
     const run = (steps: Step[]) => { for (const st of flattenEffects(steps)) if (st.t === 'effect') applyEffects(s, st.effects, rand); };
@@ -971,7 +971,8 @@ describe('東原', () => {
     for (let d = 1; d <= 40 && !s.chapterComplete; d++) {
       day = d;
       for (let i = 0; i < s.lots.length; i++) {
-        if (s.lots[i].unlocked && !s.lots[i].shop && s.applicants.length) signTenant(s, i, s.applicants[0].tenantId, 0);
+        const a = s.applicants.find((x) => SHOP_BY_ID[profileOf(s, x.tenantId)!.shopType].audience !== 'tourist');
+        if (s.lots[i].unlocked && !s.lots[i].shop && a) signTenant(s, i, a.tenantId, 0);
       }
       unlockLot(s, s.lots.findIndex((l) => !l.unlocked));
       for (const r of STREETS.dongyuan.memory!.recipes) learnRecipe(s, r.shop);
@@ -992,6 +993,7 @@ describe('東原', () => {
       startNextDay(s, rand);
     }
     expect(s.chapterComplete).toBe(true);
+    expect(s.flags).toContain('kinship100');
     expect(day).toBeGreaterThan(12);
   });
 

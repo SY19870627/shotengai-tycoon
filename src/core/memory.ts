@@ -240,6 +240,8 @@ export function dailyKinshipDelta(s: GameState): number {
 
 export function addKinship(s: GameState, d: number): void {
   s.kinship = Math.max(0, Math.min(100, Math.round((s.kinship + d) * 10) / 10));
+  // 鄉親認同到過 100 就算達成（之後掉下來也不會取消）
+  if (s.kinship >= 100 && !s.flags.includes('kinship100')) s.flags.push('kinship100');
 }
 
 export function kinshipLabel(v: number): string {

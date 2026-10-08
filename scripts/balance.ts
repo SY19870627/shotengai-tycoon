@@ -42,7 +42,11 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   for (let i = 0; i < s.lots.length; i++) {
     const lot = s.lots[i];
     if (!lot.unlocked || lot.shop || !s.applicants.length) continue;
-    const a = s.applicants[0];
+    // PREFER=resident：東原只招給居民的店（測鄉親認同能不能到 100）
+    const a = process.env.PREFER === 'resident'
+      ? s.applicants.find((x) => SHOP_BY_ID[profileOf(s, x.tenantId)!.shopType].audience !== 'tourist')
+      : s.applicants[0];
+    if (!a) continue;
     const p = profileOf(s, a.tenantId)!;
     signTenant(s, i, a.tenantId, Math.min(1, p.maxRentTier));
   }
