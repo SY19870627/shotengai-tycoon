@@ -113,7 +113,8 @@ export class MigrantShow {
     this.scene = scene;
     this.L = L;
     ensureMigrantTextures(scene);
-    this.layer = scene.add.container(0, 0).setDepth(28);
+    // 畫在走路的人前面，席地而坐的人、紅龍、垃圾桶才看得到
+    this.layer = scene.add.container(0, 0).setDepth(33);
   }
 
   update() {
@@ -166,7 +167,7 @@ export class MigrantShow {
     const sitters = policy === 'strict' ? 0 : crowd * (lebaran ? 5 : 3);
     for (let k = 0; k < sitters; k++) {
       const x = plaza.x + 30 + rng.between(0, plaza.width - 60);
-      const y = GROUND_Y + rng.between(14, SIDEWALK_H - 6);
+      const y = GROUND_Y + rng.between(SIDEWALK_H - 26, SIDEWALK_H - 2);
       if (k % 3 === 0) {
         g.fillStyle(rng.pick([0x3fb2a9, 0xef8fb1, 0xf2c14e, 0x6a9ad0, 0xd04040]), 0.9);
         g.fillRect(x - 30, y - 6, 60, 12);
@@ -194,30 +195,30 @@ export class MigrantShow {
       const rg = this.scene.add.graphics();
       for (let x = plaza.x + 20; x < plaza.x + plaza.width - 20; x += 60) {
         rg.fillStyle(0xc0a040);
-        rg.fillRect(x - 2, GROUND_Y + 8, 4, 30);
-        rg.fillCircle(x, GROUND_Y + 8, 4);
+        rg.fillRect(x - 2, GROUND_Y + 30, 4, 30);
+        rg.fillCircle(x, GROUND_Y + 30, 4);
         rg.lineStyle(3, 0xc02020);
         rg.beginPath();
-        rg.moveTo(x, GROUND_Y + 12);
-        for (let t = 1; t <= 6; t++) rg.lineTo(x + t * 10, GROUND_Y + 12 + Math.sin((t / 6) * Math.PI) * 8);
+        rg.moveTo(x, GROUND_Y + 34);
+        for (let t = 1; t <= 6; t++) rg.lineTo(x + t * 10, GROUND_Y + 34 + Math.sin((t / 6) * Math.PI) * 8);
         rg.strokePath();
       }
       this.layer.add(rg);
       const key = ensureCharTexture(this.scene, 'zlPolice', NPCS.zlPolice.look);
-      for (const dx of [60, plaza.width - 60]) this.layer.add(this.scene.add.image(plaza.x + dx, GROUND_Y + 40, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H));
-      this.layer.add(this.sign(plaza.x + plaza.width / 2, GROUND_Y - 30, '禁止席地而坐', '#c02020'));
+      for (const dx of [60, plaza.width - 60]) this.layer.add(this.scene.add.image(plaza.x + dx, GROUND_Y + SIDEWALK_H, `${key}_0`).setOrigin(0.5, 1).setScale(61 / CHAR_H));
+      this.layer.add(this.sign(plaza.x + plaza.width / 2, GROUND_Y - 150, '禁止席地而坐', '#c02020'));
     }
     if (policy === 'guide' && crowd) {
       // 垃圾桶、多語告示
       const bg = this.scene.add.graphics();
       for (const dx of [40, plaza.width / 2, plaza.width - 40]) {
         bg.fillStyle(0x2f8f5f);
-        bg.fillRect(plaza.x + dx - 9, GROUND_Y + 6, 18, 26);
+        bg.fillRect(plaza.x + dx - 9, GROUND_Y + 34, 18, 26);
         bg.fillStyle(0x3fa070);
-        bg.fillRect(plaza.x + dx - 11, GROUND_Y + 2, 22, 6);
+        bg.fillRect(plaza.x + dx - 11, GROUND_Y + 30, 22, 6);
       }
       this.layer.add(bg);
-      this.layer.add(this.sign(plaza.x + plaza.width / 2, GROUND_Y - 30, '野餐區・Area Piknik・Khu dã ngoại・Picnic area', '#2f8f5f'));
+      this.layer.add(this.sign(plaza.x + plaza.width / 2, GROUND_Y - 150, '野餐區・Area Piknik・Khu dã ngoại・Picnic area', '#2f8f5f'));
     }
   }
 
