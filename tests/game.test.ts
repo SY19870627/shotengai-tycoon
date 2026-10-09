@@ -7,7 +7,7 @@ import {
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, rollOrigin, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
   sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive, eligibleProfiles,
-  goalsDone,
+  goalsDone, basicGoalsDone, basicGoalsNeeded,
 } from '../src/core/game';
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
@@ -20,7 +20,6 @@ import {
   pilgrimage, pilgrimState, lightPilgrim, pilgrimageDone, startMovie, MOVIE_COST,
 } from '../src/core/memory';
 import { FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, fudeToday, buyPrep } from '../src/core/future';
-import { goalsNeeded } from '../src/core/goals';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
@@ -768,20 +767,22 @@ describe('東原', () => {
     }
   });
 
-  it('目標達成 6 成就過關：3 項裡達成 2 項就演結局，只達成 1 項不演', () => {
+  it('基本目標（6 成）可以跳關，但結局還是要全部達成才演', () => {
     const goals = STREETS.dongyuan.goals;
     const checks = goals.map((g) => g.check);
     try {
-      expect(goalsNeeded(STREETS.dongyuan)).toBe(2);
+      expect(basicGoalsNeeded(dy())).toBe(2);
       goals.forEach((g, k) => { g.check = () => k < 1; });
+      expect(basicGoalsDone(dy())).toBe(false);
+      goals.forEach((g, k) => { g.check = () => k < 2; });
+      expect(basicGoalsDone(dy())).toBe(true);
       expect(goalsDone(dy())).toBe(false);
       expect(pickEnding(dy(), ['morning', 'noon', 'evening'], seeded(1))).toBeNull();
-      goals.forEach((g, k) => { g.check = () => k < 2; });
-      expect(goalsDone(dy())).toBe(true);
-      expect(pickEnding(dy(), ['morning', 'noon', 'evening'], seeded(1))?.event.id).toBe('dy-ending');
     } finally {
       goals.forEach((g, k) => { g.check = checks[k]; });
     }
+    expect(basicGoalsNeeded(createGame('shenkeng', seeded(1)))).toBe(3);
+    expect(basicGoalsNeeded(createGame('shifen', seeded(1)))).toBe(3);
   });
 
   it('開局：肉圓、雜貨、理髮三間老店已經在營業，空屋要找屋主', () => {

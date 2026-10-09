@@ -145,6 +145,18 @@ export function completeChapter(): void {
   saveMeta();
 }
 
+/** 這條街破關後會解鎖、但還沒解鎖的老街 */
+export function lockedNext(): string[] {
+  const st = STREETS[S().streetId];
+  return [st.next, ...(st.unlocks ?? [])].filter((id): id is string => !!id && !store.meta.unlocked.includes(id));
+}
+
+/** 跳關：達到基本目標就先解鎖下一條老街（這條街不算破關，全部達成後還是會演結局） */
+export function skipChapter(): void {
+  for (const id of lockedNext()) store.meta.unlocked.push(id);
+  saveMeta();
+}
+
 export function toast(msg: string): void {
   bus.emit(Ev.Toast, msg);
 }

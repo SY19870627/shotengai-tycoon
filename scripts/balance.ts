@@ -146,7 +146,7 @@ for (let d = 1; d <= (Number(process.env.DAYS) || 30); d++) {
   );
   for (const l of log.splice(0)) console.log(l);
   if (s.chapterComplete) { console.log('*** 過關 ***'); break; }
-  if (goalsDone(s)) console.log('  (達到過關門檻)');
+  if (goalsDone(s)) console.log('  (目標全部達成)');
   if (s.gameOver) { console.log('*** 破產 ***'); break; }
   startNextDay(s, rand);
 }

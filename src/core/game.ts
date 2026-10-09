@@ -9,7 +9,6 @@ import type {
   Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind, MemoryKind, Nation } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
-import { goalsMet } from './goals';
 import {
   hasSpring, springRatio, isSpringShop, protestStage, dailyGrievanceDelta, addGrievance, rollClosures, bathLot, BATH,
   dailyFireUpdate, fireAccidentChance, inspectionChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
@@ -1476,7 +1475,20 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
 }
 
 export function goalsDone(s: GameState): boolean {
-  return goalsMet(streetOf(s), s);
+  return streetOf(s).goals.every((g) => g.check(s));
+}
+
+/** 基本目標：達成 6 成（5 項要 3 項、4 項要 3 項、3 項要 2 項）就可以選擇跳關 */
+export function basicGoalsNeeded(s: GameState): number {
+  return Math.ceil(streetOf(s).goals.length * 0.6);
+}
+
+export function goalsDoneCount(s: GameState): number {
+  return streetOf(s).goals.filter((g) => g.check(s)).length;
+}
+
+export function basicGoalsDone(s: GameState): boolean {
+  return streetOf(s).goals.length > 0 && goalsDoneCount(s) >= basicGoalsNeeded(s);
 }
 
 // =====================================================================

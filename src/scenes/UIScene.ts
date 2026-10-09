@@ -11,9 +11,8 @@ import {
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
   noisyNeighbors, shopOpen, isWeekend,
-  MAX_APPLICANTS, goalsDone, hourOf,
+  MAX_APPLICANTS, goalsDone, hourOf, basicGoalsDone, basicGoalsNeeded, goalsDoneCount,
 } from '../core/game';
-import { goalsDoneCount, goalsNeeded } from '../core/goals';
 import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
   kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
@@ -37,7 +36,8 @@ import {
 import { TRAITS } from '../core/traits';
 import { ACTIVITIES, INFLUENCERS, type ActivityDef } from '../core/activities';
 import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant, FireMode } from '../core/types';
-import { store, bus, Ev, save, toast, S, completeChapter } from '../store';
+import { store, bus, Ev, save, toast, S, completeChapter, lockedNext, skipChapter } from '../store';
+import { STREETS } from '../content';
 import { W, H, C, FONT, hex, money, clock, DX } from '../theme';
 import { drawPortrait } from './drawCharacters';
 import { MODULES, FACILITY, facilityOf, staffNeeded, staffRatio, wageOf, type ModuleDef } from '../core/facilities';
@@ -333,8 +333,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.kinText!.setText(String(Math.round(k)));
     }
     if (this.pilgrimButton) this.pilgrimButton.setText(`巡禮\n${s.lit.length}/${pilgrimage(s).length}`);
-    const st = streetOf(s);
-    this.goalButton?.setText(`目標\n${Math.min(goalsDoneCount(st, s), goalsNeeded(st))}/${goalsNeeded(st)}`);
+    const done = streetOf(s).goals.filter((g) => g.check(s)).length;
+    this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
 
     // 天氣預報、活動與加成標籤
     const items: string[] = [];
@@ -1774,9 +1774,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (store.storyRunning) return;
     const s = S();
     const street = streetOf(s);
-    const { m, x, y } = this.openModal(680, 480);
+    const { m, x, y } = this.openModal(680, 520);
     this.closeButton(m, x + 680 - 54, y + 18);
-    m.add(this.text(x + 30, y + 24, `${street.name}・過關目標（達成 ${goalsNeeded(street)} 項就過關）`, 24, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 24, `${street.name}・過關目標`, 24, hex(C.ink), '900'));
     m.add(this.text(x + 30, y + 64, street.tagline, 15, '#8a8296', '700'));
     street.goals.forEach((g, k) => {
       const ok = g.check(s);
@@ -1793,8 +1793,37 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     ].join('\n'), 15, '#5a5266').setLineSpacing(6));
     if (goalsDone(s) && !s.chapterComplete) {
       const evening = endingEvent(s)?.when === 'evening' && hourOf(s) < 18.5;
-      m.add(this.text(x + 30, y + 440, evening ? '過關門檻達成！今天傍晚會有好消息……' : '過關門檻達成！好消息馬上就來了……', 16, '#b3262e', '900'));
+      m.add(this.text(x + 30, y + 440, evening ? '全部達成！今天傍晚會有好消息……' : '全部達成！好消息馬上就來了……', 16, '#b3262e', '900'));
+    } else if (!s.chapterComplete && lockedNext().length) {
+      // 跳關：達到基本目標（6 成）就可以先解鎖下一條老街
+      if (basicGoalsDone(s)) {
+        m.add(this.text(x + 30, y + 476, `已達基本目標（${basicGoalsNeeded(s)} 項）`, 16, '#2f7d3f', '900').setOrigin(0, 0.5));
+        m.add(this.button(x + 680 - 230, y + 450, 200, 52, '跳關', () => this.confirmSkip(), C.red, 18).root);
+      } else {
+        m.add(this.text(x + 30, y + 476, `基本目標：達成 ${basicGoalsNeeded(s)} 項就能選擇跳關（目前 ${goalsDoneCount(s)} 項）`, 15, '#8a8296', '700').setOrigin(0, 0.5));
+      }
     }
+  }
+
+  private confirmSkip() {
+    if (store.storyRunning) return;
+    const names = lockedNext().map((id) => STREETS[id].name).join('、');
+    const { m, x, y } = this.openModal(600, 300);
+    m.add(this.text(W / 2, y + 56, '已達基本目標，要跳關嗎？', 24, hex(C.ink), '900').setOrigin(0.5));
+    m.add(this.text(W / 2, y + 120, [
+      `會先解鎖：${names}`,
+      '這條街還沒算破關，之後全部達成一樣會演結局。',
+    ].join('\n'), 16, '#5a5266').setOrigin(0.5).setAlign('center').setLineSpacing(8));
+    m.add(this.button(x + 30, y + 210, 160, 56, '取消', () => this.closeModal(), 0x6b6280, 17).root);
+    m.add(this.button(x + 210, y + 210, 170, 56, '跳關，留在這裡', () => {
+      skipChapter();
+      this.closeModal();
+      toast(`已解鎖：${names}`);
+    }, 0x3f8f4f, 16).root);
+    m.add(this.button(x + 400, y + 210, 170, 56, '跳關，前往地圖', () => {
+      skipChapter();
+      this.goMap();
+    }, C.red, 16).root);
   }
 
   private confirmBackToMap() {

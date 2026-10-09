@@ -1,5 +1,4 @@
 import type { StreetDef, TenantProfile, StoryEvent, GameState } from '../core/types';
-import { goalsMet } from '../core/goals';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look } from './dsl';
 import { JIUFEN_EVENTS } from './jiufenEvents';
 import { JIUFEN_NIGHT } from './jiufenNight';
@@ -469,7 +468,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'jf-ending', street: ST, once: true, priority: 95, when: 'morning',
-    cond: (c) => (goalsMet(c.street, c.s) ? {} : null),
+    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
     script: () => [
       narrate('九份的燈籠，從來沒有這麼亮過。'),
       focus({ landmark: 'viewpoint' }),

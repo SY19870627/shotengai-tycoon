@@ -1,5 +1,4 @@
 import type { StreetDef, TenantProfile, StoryEvent, GameState } from '../core/types';
-import { goalsMet } from '../core/goals';
 import { springRatio, springRecovered, isSpringShop } from '../core/onsen';
 import { say, emote, narrate, focus, appear, leave, fx, effect, choice, opt, look } from './dsl';
 import { GUANZILING_EVENTS } from './guanzilingEvents';
@@ -440,7 +439,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'gz-ending', street: ST, once: true, priority: 95, when: 'morning',
-    cond: (c) => (goalsMet(c.street, c.s) ? {} : null),
+    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
     script: () => [
       narrate('關子嶺的泉水，又咕嘟咕嘟地冒著泡了。'),
       focus({ landmark: 'spring' }),

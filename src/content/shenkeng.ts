@@ -1,5 +1,4 @@
 import type { StreetDef, TenantProfile, StoryEvent, GameState } from '../core/types';
-import { goalsMet } from '../core/goals';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look } from './dsl';
 
 const ST = 'shenkeng';
@@ -416,7 +415,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'sk-ending', street: ST, once: true, priority: 95, when: 'morning',
-    cond: (c) => (goalsMet(c.street, c.s) ? {} : null),
+    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
     script: () => [
       narrate('深坑老街重新熱鬧起來了！'),
       focus({ landmark: 'tree' }),

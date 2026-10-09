@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { STREETS, CAMPAIGN } from '../content';
-import { goalsNeeded } from '../core/goals';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
 import { store, enterStreet, hasSave } from '../store';
 import { W, H, C, FONT, hex, DX } from '../theme';
@@ -144,7 +143,7 @@ export class MapScene extends Phaser.Scene {
     }));
     if (st.goals.length) {
       // 介紹比較長（或手機上字放大）時，目標往下排
-      add(this.add.text(x + 24, Math.max(y + 330, intro.y + intro.height + 12), `過關目標（達成 ${goalsNeeded(st)} 項就過關）：\n${st.goals.map((g) => `・${g.text}`).join('\n')}`, {
+      add(this.add.text(x + 24, Math.max(y + 330, intro.y + intro.height + 12), `過關目標：\n${st.goals.map((g) => `・${g.text}`).join('\n')}`, {
         fontFamily: FONT, fontSize: '14px', color: '#6a6378', lineSpacing: 4, wordWrap: { width: w - 48, useAdvancedWrap: true },
       }));
     }
