@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { STREETS, CAMPAIGN } from '../content';
+import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
 import { store, enterStreet, hasSave } from '../store';
 import { W, H, C, FONT, hex } from '../theme';
 
@@ -101,6 +102,16 @@ export class MapScene extends Phaser.Scene {
       this.tweens.add({ targets: g, y: -4, yoyo: true, repeat: -1, duration: 700 + idx * 90, ease: 'Sine.easeInOut' });
     });
 
+    // 右上角的全螢幕按鈕（瀏覽器支援才有）
+    if (canFullscreen()) {
+      const bx = W - 130, by = 20;
+      const bg = this.add.rectangle(bx, by, 110, 40, 0x2a2433, 0.9).setOrigin(0).setStrokeStyle(2, C.gold).setInteractive({ useHandCursor: true });
+      const t = this.add.text(bx + 55, by + 20, isFullscreen() ? '離開全螢幕' : '全螢幕', { fontFamily: FONT, fontSize: '15px', fontStyle: '900', color: '#ffffff' }).setOrigin(0.5);
+      bg.on('pointerup', () => toggleFullscreen());
+      const sync = () => t.setText(isFullscreen() ? '離開全螢幕' : '全螢幕');
+      document.addEventListener('fullscreenchange', sync);
+      this.events.once('shutdown', () => document.removeEventListener('fullscreenchange', sync));
+    }
     this.card = this.add.container(0, 0);
     this.drawCard();
   }
@@ -111,7 +122,7 @@ export class MapScene extends Phaser.Scene {
     const m = store.meta;
     const unlocked = m.unlocked.includes(st.id) && st.playable;
     const done = m.completed.includes(st.id);
-    const x = 870, y = 96, w = 380, h = 560;
+    const x = 870, y = 72, w = 380, h = 628;
     const add = <T extends Phaser.GameObjects.GameObject>(o: T) => { this.card.add(o); return o; };
     add(this.add.rectangle(x + 6, y + 8, w, h, 0x000000, 0.25).setOrigin(0));
     add(this.add.rectangle(x, y, w, h, C.paper).setOrigin(0).setStrokeStyle(4, C.ink));
@@ -122,12 +133,13 @@ export class MapScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '16px', fontStyle: '700', color: '#c8902a',
     }).setOrigin(1, 0));
     add(this.add.text(x + 24, y + 102, st.tagline, { fontFamily: FONT, fontSize: '17px', fontStyle: '700', color: '#b3262e' }));
-    add(this.add.text(x + 24, y + 136, st.intro || '這條老街的故事還在準備中……', {
+    const intro = add(this.add.text(x + 24, y + 136, st.intro || '這條老街的故事還在準備中……', {
       fontFamily: FONT, fontSize: '15px', color: '#3a3346', wordWrap: { width: w - 48, useAdvancedWrap: true }, lineSpacing: 6,
     }));
     if (st.goals.length) {
-      add(this.add.text(x + 24, y + 330, `過關目標：\n${st.goals.map((g) => `・${g.text}`).join('\n')}`, {
-        fontFamily: FONT, fontSize: '14px', color: '#6a6378', lineSpacing: 4,
+      // 介紹比較長（或手機上字放大）時，目標往下排
+      add(this.add.text(x + 24, Math.max(y + 330, intro.y + intro.height + 12), `過關目標：\n${st.goals.map((g) => `・${g.text}`).join('\n')}`, {
+        fontFamily: FONT, fontSize: '14px', color: '#6a6378', lineSpacing: 4, wordWrap: { width: w - 48, useAdvancedWrap: true },
       }));
     }
 

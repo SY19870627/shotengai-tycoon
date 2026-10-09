@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { endingEvent } from '../core/story';
 import { isRailStreet, nextTrain, lanternFestToday } from '../core/shifen';
+import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
 import { isMigrantStreet, NATIONS, NATION_INFO, POLICIES, setPolicy, selfOrder, isSunday, isSaturday, lebaranToday } from '../core/zhongli';
 import type { Policy } from '../core/types';
 import {
@@ -75,6 +76,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   private speedButtons: Button[] = [];
   private sideButtons!: Phaser.GameObjects.Container;
   private goalButton!: Button;
+  /** 左下角的全螢幕按鈕：打開店面面板、劇情時藏起來 */
+  private fullButton?: Button;
   private panel!: Phaser.GameObjects.Container;
   private hint!: Phaser.GameObjects.Container;
   private modal?: Phaser.GameObjects.Container;
@@ -122,6 +125,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.buildSideButtons();
     this.panel = this.add.container(0, PANEL_Y).setVisible(false);
     this.buildHint();
+    this.buildFullscreenButton();
     this.buildStoryLayers();
     this.toastText = this.add.text(W / 2, 118, '', {
       fontFamily: FONT, fontSize: '18px', fontStyle: '700', color: '#ffffff',
@@ -297,6 +301,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
   private refreshTop() {
     const s = S();
+    this.fullButton?.root.setVisible(!this.panel?.visible && !store.storyRunning && !this.modal);
     // 換年代淡出的那一下，資訊列還是舊年代的版面
     if (this.pastBar) return this.refreshPastBar();
     this.dayText.setText(`第 ${s.day} 天・${weekdayName(s)}`);
@@ -449,6 +454,19 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   }
 
   // =================================================================== 下方面板
+
+  /** 左下角的全螢幕按鈕（瀏覽器支援才有） */
+  private buildFullscreenButton() {
+    this.fullButton = undefined;
+    if (!canFullscreen()) return;
+    const b = this.button(14, H - 54, 84, 40, isFullscreen() ? '離開全螢幕' : '全螢幕', () => {
+      toggleFullscreen();
+    }, 0x3c3652, 13);
+    this.fullButton = b;
+    const sync = () => b.setText(isFullscreen() ? '離開全螢幕' : '全螢幕');
+    document.addEventListener('fullscreenchange', sync);
+    this.events.once('shutdown', () => document.removeEventListener('fullscreenchange', sync));
+  }
 
   private buildHint() {
     this.hint = this.add.container(W / 2, H - 30);
@@ -1340,12 +1358,16 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
     const face = this.add.container(0, 0);
     p.add(face);
-    p.add(this.text(108, 10, prof.name, 22, '#ffffff', '900'));
-    const shopLine = this.text(108 + prof.name.length * 23 + 10, 16, `${prof.shopName}　Lv.${shop.level}`, 15, hex(C.gold), '700');
+    const nameText = this.text(108, 10, prof.name, 22, '#ffffff', '900');
+    p.add(nameText);
+    const shopLine = this.text(108 + nameText.width + 10, 16, `${prof.shopName}　Lv.${shop.level}`, 15, hex(C.gold), '700');
+    // 店名太長（或手機上字比較大）時切掉，不要壓到「今日營業」
+    const maxW = 420 - shopLine.x;
+    if (shopLine.width > maxW) shopLine.setCrop(0, 0, maxW, shopLine.height);
     p.add(shopLine);
     p.add(this.traitChips(108, 44, prof));
     const mt = memoryTag(s, def.id);
-    if (mt) p.add(this.text(shopLine.x + shopLine.width + 10, 17, mt.text, 12, '#2a2433', '900').setBackgroundColor(mt.color).setPadding(5, 2, 5, 2));
+    if (mt) p.add(this.text(shopLine.x + Math.min(shopLine.width, 420 - shopLine.x) + 10, 17, mt.text, 12, '#2a2433', '900').setBackgroundColor(mt.color).setPadding(5, 2, 5, 2));
     p.add(this.text(108, 72, '滿意度', 13, '#a49dbb'));
     p.add(this.add.rectangle(160, 80, 160, 12, 0x1a1724).setOrigin(0, 0.5));
     const satBar = this.add.rectangle(161, 80, 0, 10, 0x5bb36a).setOrigin(0, 0.5);
@@ -1376,6 +1398,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     // 關係與鄰居
     const rx = 640;
     p.add(this.text(rx, 10, '鄰居關係', 13, '#a49dbb'));
+    // 太長的行（手機上字比較大）切掉，不要壓到右邊的按鈕
     const rel = this.text(rx, 30, '', 13, '#ffffff').setLineSpacing(3);
     p.add(rel);
 
@@ -1475,6 +1498,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       const eff = neighborEffects(s, i).map((e) => `${e.label} ×${e.mult.toFixed(2)}`);
       const effTop = eff.slice(0, Math.max(1, 6 - Math.min(3, lines.length)));
       rel.setText([...lines.slice(0, 3), ...effTop].slice(0, 7).join('\n') || '附近還沒有鄰居');
+      // 太長的行（手機上字比較大）切掉，不要壓到右邊的按鈕
+      if (rel.width > 292) rel.setCrop(0, 0, 292, rel.height);
+      else rel.setCrop();
       tierButtons.forEach((b, k) => {
         b.bg.setStrokeStyle(2, k === shop.rentTier ? C.gold : 0xffffff, k === shop.rentTier ? 1 : 0.15);
         b.setEnabled(k <= prof.maxRentTier || k === shop.rentTier);

@@ -8,8 +8,10 @@ import { store, bus, Ev } from './store';
 import * as core from './core/game';
 import * as story from './core/story';
 import * as memory from './core/memory';
+import { setupMobile } from './mobile';
 
 async function start() {
+  setupMobile();
   // 等中文字型載入，避免文字先用備用字型畫出來
   try {
     await Promise.race([
