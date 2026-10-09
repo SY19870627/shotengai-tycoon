@@ -36,7 +36,8 @@ import {
 import { TRAITS } from '../core/traits';
 import { ACTIVITIES, INFLUENCERS, type ActivityDef } from '../core/activities';
 import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant, FireMode } from '../core/types';
-import { store, bus, Ev, save, toast, S, completeChapter, lockedNext, skipChapter } from '../store';
+import { store, bus, Ev, save, toast, S, completeChapter, lockedNext, skipChapter, playStory } from '../store';
+import { pleadSteps } from '../content/plead';
 import { STREETS } from '../content';
 import { W, H, C, FONT, hex, money, clock, DX } from '../theme';
 import { drawPortrait } from './drawCharacters';
@@ -1795,13 +1796,16 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       const evening = endingEvent(s)?.when === 'evening' && hourOf(s) < 18.5;
       m.add(this.text(x + 30, y + 440, evening ? '全部達成！今天傍晚會有好消息……' : '全部達成！好消息馬上就來了……', 16, '#b3262e', '900'));
     } else if (!s.chapterComplete && lockedNext().length) {
-      // 跳關：達到基本目標（6 成）就可以先解鎖下一條老街
-      if (basicGoalsDone(s)) {
-        m.add(this.text(x + 30, y + 476, `已達基本目標（${basicGoalsNeeded(s)} 項）`, 16, '#2f7d3f', '900').setOrigin(0, 0.5));
-        m.add(this.button(x + 680 - 230, y + 450, 200, 52, '跳關', () => this.confirmSkip(), C.red, 18).root);
-      } else {
-        m.add(this.text(x + 30, y + 476, `基本目標：達成 ${basicGoalsNeeded(s)} 項就能選擇跳關（目前 ${goalsDoneCount(s)} 項）`, 15, '#8a8296', '700').setOrigin(0, 0.5));
-      }
+      // 跳關：達到基本目標（6 成）就可以先解鎖下一條老街；還沒達到按下去，會有人跑出來求你留下
+      const basic = basicGoalsDone(s);
+      m.add(this.text(x + 30, y + 476, basic
+        ? `已達基本目標（${basicGoalsNeeded(s)} 項）`
+        : `基本目標：達成 ${basicGoalsNeeded(s)} 項（目前 ${goalsDoneCount(s)} 項）`, 16, basic ? '#2f7d3f' : '#8a8296', '900').setOrigin(0, 0.5));
+      m.add(this.button(x + 680 - 230, y + 450, 200, 52, '跳關', () => {
+        if (basic) return this.confirmSkip();
+        this.closeModal();
+        playStory(pleadSteps(s, basicGoalsNeeded(s), goalsDoneCount(s)));
+      }, basic ? C.red : 0x6b6280, 18).root);
     }
   }
 
