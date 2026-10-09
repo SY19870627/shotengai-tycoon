@@ -1,4 +1,5 @@
 import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
+import { goalsMet } from '../core/goals';
 import { isWeekend } from '../core/game';
 import { PAST_1995, tripIntro, tripOutro, pastLandmark } from './dongyuan1995';
 import { PAST_1960, tripIntro1960, pastLandmark1960 } from './dongyuan1960';
@@ -651,7 +652,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'dy-ending', street: ST, once: true, priority: 99, when: 'evening',
-    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
+    cond: (c) => (goalsMet(c.street, c.s) ? {} : null),
     script: (_b, c) => endingSteps(c.s),
   },
 ];

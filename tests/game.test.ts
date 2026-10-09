@@ -7,6 +7,7 @@ import {
   transportCapacity, upgradeBus, upgradeRoute, trafficPerHour, rollOrigin, strandedPerHour, rollForecast,
   planCheckins, checkInGuest, occupancyRate, noisyNeighbors, roomsOf, dayEndMin,
   sightChance, useTelescope, registerSightseer, TELESCOPE_FEE, shopOpen, isActive, eligibleProfiles,
+  goalsDone,
 } from '../src/core/game';
 import {
   springSupply, springDemand, springRatio, drillWell, sealWell, buildBath, registerFireVisitor, setFireMode, fireDowngradeCost,
@@ -19,6 +20,7 @@ import {
   pilgrimage, pilgrimState, lightPilgrim, pilgrimageDone, startMovie, MOVIE_COST,
 } from '../src/core/memory';
 import { FUTURE_PLANS, planState, startPlan, futureDone, futureDoneCount, fudeToday, buyPrep } from '../src/core/future';
+import { goalsNeeded } from '../src/core/goals';
 import { moduleEff, staffRatio, facilityOf } from '../src/core/facilities';
 import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
@@ -761,6 +763,22 @@ describe('東原', () => {
       expect(s.chapterComplete).toBe(true);
       // 只演一次
       expect(pickEnding(s, ['morning', 'noon', 'evening'], seeded(1))).toBeNull();
+    } finally {
+      goals.forEach((g, k) => { g.check = checks[k]; });
+    }
+  });
+
+  it('目標達成 6 成就過關：3 項裡達成 2 項就演結局，只達成 1 項不演', () => {
+    const goals = STREETS.dongyuan.goals;
+    const checks = goals.map((g) => g.check);
+    try {
+      expect(goalsNeeded(STREETS.dongyuan)).toBe(2);
+      goals.forEach((g, k) => { g.check = () => k < 1; });
+      expect(goalsDone(dy())).toBe(false);
+      expect(pickEnding(dy(), ['morning', 'noon', 'evening'], seeded(1))).toBeNull();
+      goals.forEach((g, k) => { g.check = () => k < 2; });
+      expect(goalsDone(dy())).toBe(true);
+      expect(pickEnding(dy(), ['morning', 'noon', 'evening'], seeded(1))?.event.id).toBe('dy-ending');
     } finally {
       goals.forEach((g, k) => { g.check = checks[k]; });
     }

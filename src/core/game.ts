@@ -9,6 +9,7 @@ import type {
   Look, TraitId, Weather, Forecast, Origin, Guest, Review, YokaiKind, MemoryKind, Nation } from './types';
 import { FACILITY, MODULE_BY_ID, facilityOf, moduleEff, staffRatio, wageOf, type ModuleDef } from './facilities';
 import { STREETS } from '../content';
+import { goalsMet } from './goals';
 import {
   hasSpring, springRatio, isSpringShop, protestStage, dailyGrievanceDelta, addGrievance, rollClosures, bathLot, BATH,
   dailyFireUpdate, fireAccidentChance, inspectionChance, festivalActive, scheduleFestival, FESTIVAL_MODS, YOKAI, recordLeaves,
@@ -1475,7 +1476,7 @@ export function startNextDay(s: GameState, rand: () => number = Math.random): vo
 }
 
 export function goalsDone(s: GameState): boolean {
-  return streetOf(s).goals.every((g) => g.check(s));
+  return goalsMet(streetOf(s), s);
 }
 
 // =====================================================================

@@ -13,6 +13,7 @@ import {
   noisyNeighbors, shopOpen, isWeekend,
   MAX_APPLICANTS, goalsDone, hourOf,
 } from '../core/game';
+import { goalsDoneCount, goalsNeeded } from '../core/goals';
 import {
   isMemoryStreet, ownerOf, negotiate, negotiateBlock, memoryText, OWNER_RULE_TEXT, ownerRule, MEMORY_KINDS, MEMORY_NAME, MEMORY_COLOR,
   kinshipLabel, residentShare, dailyKinshipDelta, learnRecipe, hasMemories, returnedOwners, recipeCost,
@@ -332,8 +333,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.kinText!.setText(String(Math.round(k)));
     }
     if (this.pilgrimButton) this.pilgrimButton.setText(`巡禮\n${s.lit.length}/${pilgrimage(s).length}`);
-    const done = streetOf(s).goals.filter((g) => g.check(s)).length;
-    this.goalButton?.setText(`目標\n${done}/${streetOf(s).goals.length}`);
+    const st = streetOf(s);
+    this.goalButton?.setText(`目標\n${Math.min(goalsDoneCount(st, s), goalsNeeded(st))}/${goalsNeeded(st)}`);
 
     // 天氣預報、活動與加成標籤
     const items: string[] = [];
@@ -1775,7 +1776,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     const street = streetOf(s);
     const { m, x, y } = this.openModal(680, 480);
     this.closeButton(m, x + 680 - 54, y + 18);
-    m.add(this.text(x + 30, y + 24, `${street.name}・過關目標`, 24, hex(C.ink), '900'));
+    m.add(this.text(x + 30, y + 24, `${street.name}・過關目標（達成 ${goalsNeeded(street)} 項就過關）`, 24, hex(C.ink), '900'));
     m.add(this.text(x + 30, y + 64, street.tagline, 15, '#8a8296', '700'));
     street.goals.forEach((g, k) => {
       const ok = g.check(s);
@@ -1792,7 +1793,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     ].join('\n'), 15, '#5a5266').setLineSpacing(6));
     if (goalsDone(s) && !s.chapterComplete) {
       const evening = endingEvent(s)?.when === 'evening' && hourOf(s) < 18.5;
-      m.add(this.text(x + 30, y + 440, evening ? '全部達成！今天傍晚會有好消息……' : '全部達成！好消息馬上就來了……', 16, '#b3262e', '900'));
+      m.add(this.text(x + 30, y + 440, evening ? '過關門檻達成！今天傍晚會有好消息……' : '過關門檻達成！好消息馬上就來了……', 16, '#b3262e', '900'));
     }
   }
 

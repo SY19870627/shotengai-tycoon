@@ -1,4 +1,5 @@
 import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
+import { goalsMet } from '../core/goals';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look, wait } from './dsl';
 import { homeFeelOk, isSunday, selfOrder } from '../core/zhongli';
 
@@ -497,7 +498,7 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'zl-ending', street: ST, once: true, priority: 99, when: 'evening',
-    cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
+    cond: (c) => (goalsMet(c.street, c.s) ? {} : null),
     script: () => [
       narrate('開齋節過後的那個星期天。'),
       focus({ landmark: 'plaza' }),
