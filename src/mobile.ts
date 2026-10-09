@@ -65,8 +65,8 @@ export function setupMobile(): void {
       tip.style.display = 'none';
       try { localStorage.setItem('oldstreet-ios-tip', '1'); } catch { /* 無痕模式 */ }
     };
-    tip.querySelector('button')?.addEventListener('click', close);
-    setTimeout(close, 12000);
+    tip.addEventListener('click', close);
+    setTimeout(close, 8000);
   }
   // 雙指縮放、長按選字都關掉
   document.addEventListener('gesturestart', (e) => e.preventDefault());
