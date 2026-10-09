@@ -37,7 +37,7 @@ import { TRAITS } from '../core/traits';
 import { ACTIVITIES, INFLUENCERS, type ActivityDef } from '../core/activities';
 import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant, FireMode } from '../core/types';
 import { store, bus, Ev, save, toast, S, completeChapter } from '../store';
-import { W, H, C, FONT, hex, money, clock } from '../theme';
+import { W, H, C, FONT, hex, money, clock, DX } from '../theme';
 import { drawPortrait } from './drawCharacters';
 import { MODULES, FACILITY, facilityOf, staffNeeded, staffRatio, wageOf, type ModuleDef } from '../core/facilities';
 import { ensureMascotTexture } from './drawMascots';
@@ -294,7 +294,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.kinText = this.text(960, 33, '', 13, '#ffffff', '700');
     }
     ['暫停', '1x', '2x', '3x'].forEach((l, i) => {
-      this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x3c3652, 15));
+      this.speedButtons.push(this.button(DX + 1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x3c3652, 15));
     });
     this.chips = this.add.container(16, 72);
   }
@@ -583,7 +583,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     this.repBar = this.add.rectangle(-100, -100, 1, 1);
     this.repText = this.text(-100, -100, '', 1);
     ['暫停', '1x', '2x', '3x'].forEach((l, i) => {
-      this.speedButtons.push(this.button(1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x4a3a2a, 15));
+      this.speedButtons.push(this.button(DX + 1016 + i * 64, 13, 58, 38, l, () => this.setSpeed(i), 0x4a3a2a, 15));
     });
     this.chips = this.add.container(16, 72);
     const chip = this.text(0, 0, '點店家進去幫忙（每次 1 個半小時，每間店最多 3 次）・點戲院、老榕樹看看・第一次幫忙找回最多回憶', 13, '#2a2433', '700')
@@ -1244,7 +1244,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     });
     // 升級與拆除
     const up = f.level < FACILITY.maxLevel
-      ? this.button(1036, 14, 154, 64, `升級服務中心\n${money(FACILITY.upgradeCost[f.level])}`, () => {
+      ? this.button(DX + 1036, 14, 154, 64, `升級服務中心\n${money(FACILITY.upgradeCost[f.level])}`, () => {
         const r = upgradeFacility(s);
         if (!r.ok) return toast(r.reason);
         bus.emit(Ev.LotRedraw, i);
@@ -1255,9 +1255,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     if (up) {
       up.setEnabled(s.money >= FACILITY.upgradeCost[f.level]);
       p.add(up.root);
-    } else p.add(this.text(1113, 40, '已是最高等級', 14, '#a49dbb').setOrigin(0.5));
+    } else p.add(this.text(DX + 1113, 40, '已是最高等級', 14, '#a49dbb').setOrigin(0.5));
     let confirmUntil = 0;
-    const del = this.button(1036, 96, 154, 44, '拆除（恢復空店面）', () => {
+    const del = this.button(DX + 1036, 96, 154, 44, '拆除（恢復空店面）', () => {
       if (this.time.now > confirmUntil) {
         confirmUntil = this.time.now + 2500;
         del.setText('再點一次確認');
@@ -1404,14 +1404,14 @@ export class UIScene extends Phaser.Scene implements StoryUI {
 
     // 按鈕
     const reno = shop.level < MAX_LEVEL ? renovateCost(def, shop.level) : 0;
-    const bR = this.button(940, 14, 152, 46, shop.level < MAX_LEVEL ? `補助裝修\n${money(reno)}` : '已裝修到最好', () => {
+    const bR = this.button(DX + 940, 14, 152, 46, shop.level < MAX_LEVEL ? `補助裝修\n${money(reno)}` : '已裝修到最好', () => {
       const r = renovate(s, i);
       if (!r.ok) return toast(r.reason);
       bus.emit(Ev.LotRedraw, i);
       save();
       this.rebuildPanel();
     }, 0x3f8f4f, 14);
-    const bG = this.button(940, 66, 152, 46, `送禮關心\n${money(GIFT_COST)}`, () => {
+    const bG = this.button(DX + 940, 66, 152, 46, `送禮關心\n${money(GIFT_COST)}`, () => {
       const r = giveGift(s, i);
       if (!r.ok) return toast(r.reason);
       toast(`${prof.name}：「${prof.lines.happy[0]}」`);
@@ -1420,7 +1420,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.rebuildPanel();
     }, 0x7a4a9a, 14);
     let confirmUntil = 0;
-    const bE = this.button(940, 118, 152, 44, '解約', () => {
+    const bE = this.button(DX + 940, 118, 152, 44, '解約', () => {
       if (this.time.now > confirmUntil) {
         confirmUntil = this.time.now + 2500;
         bE.setText('再點一次確認');
@@ -1439,9 +1439,9 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       const bP = this.button(430, 126, 190, 38, `旅館方案（${n}/${planSlots(shop)}）`, () => this.showPlans(i), 0x3f6f8f, 14);
       p.add(bP.root);
     }
-    p.add(this.text(1100, 20, '店面變大\n吸引力、客單、\n容量都提升', 12, '#a49dbb'));
-    p.add(this.text(1100, 72, '滿意度 +15', 12, '#a49dbb'));
-    p.add(this.text(1100, 124, '聲望 -2\n其他租客會不安', 12, '#a49dbb'));
+    p.add(this.text(DX + 1100, 20, '店面變大\n吸引力、客單、\n容量都提升', 12, '#a49dbb'));
+    p.add(this.text(DX + 1100, 72, '滿意度 +15', 12, '#a49dbb'));
+    p.add(this.text(DX + 1100, 124, '聲望 -2\n其他租客會不安', 12, '#a49dbb'));
 
     let lastMood = 99;
     this.liveRefresh = () => {

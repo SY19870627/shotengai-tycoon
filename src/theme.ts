@@ -1,6 +1,33 @@
 export const FONT = '"Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 
-export const W = 1280;
+/**
+ * 畫面寬度：高度固定 720，寬度跟著螢幕比例（16:9 是 1280）。
+ * 手機比 16:9 更長，寬度就變大，畫面填滿、看到更多街道，不會有左右黑邊。
+ * 手機用整個螢幕的比例（全螢幕、加到主畫面時的樣子），iPhone 的 Safari 用看得到的範圍，電腦用視窗比例；最寬到 1800。
+ */
+function gameWidth(): number {
+  try {
+    if (typeof window === 'undefined') return BASE_W;
+    const touch = window.matchMedia?.('(pointer: coarse)').matches;
+    // iPhone 的 Safari 不能全螢幕，網址列和工具列一直都在：用看得到的範圍（橫拿）
+    const ios = /iPhone|iPod/.test(navigator.userAgent);
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches || window.matchMedia?.('(display-mode: fullscreen)').matches
+      || (navigator as unknown as { standalone?: boolean }).standalone === true;
+    const long = (a: number, b: number) => Math.max(a, b) / Math.min(a, b);
+    const a = !touch ? window.innerWidth / window.innerHeight
+      : ios && !standalone ? long(window.innerWidth, window.innerHeight)
+      : long(screen.width, screen.height);
+    if (!isFinite(a) || a <= 0) return BASE_W;
+    return Math.round(Math.min(1800, Math.max(BASE_W, 720 * a)));
+  } catch {
+    return BASE_W;
+  }
+}
+/** 原本設計的寬度（固定在右邊的介面，用 W - BASE_W 往右推） */
+export const BASE_W = 1280;
+export const W = gameWidth();
+/** 比原本設計多出來的寬度 */
+export const DX = W - BASE_W;
 export const H = 720;
 
 /** 街景配置（世界座標） */

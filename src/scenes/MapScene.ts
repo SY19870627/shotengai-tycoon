@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { STREETS, CAMPAIGN } from '../content';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
 import { store, enterStreet, hasSave } from '../store';
-import { W, H, C, FONT, hex } from '../theme';
+import { W, H, C, FONT, hex, DX } from '../theme';
 
 /** 台灣本島輪廓（0~1 正規化座標，北在上） */
 const TAIWAN: [number, number][] = [
@@ -12,7 +12,8 @@ const TAIWAN: [number, number][] = [
   [0.31, 0.47], [0.35, 0.38], [0.41, 0.29], [0.48, 0.2], [0.55, 0.13], [0.61, 0.07],
 ];
 
-const BOX = { x: 330, y: 60, w: 520, h: 640 };
+// 畫面比較寬（手機）時，台灣往右移，夾在左邊的標題和右邊的說明卡中間
+const BOX = { x: 330 + DX / 2, y: 60, w: 520, h: 640 };
 const toScreen = (p: { x: number; y: number }) => ({ x: BOX.x + (p.x - 0.25) * BOX.w * 1.25, y: BOX.y + p.y * BOX.h });
 
 /** 標題 + 老街地圖：選擇要經營哪一條老街 */
@@ -122,7 +123,7 @@ export class MapScene extends Phaser.Scene {
     const m = store.meta;
     const unlocked = m.unlocked.includes(st.id) && st.playable;
     const done = m.completed.includes(st.id);
-    const x = 870, y = 72, w = 380, h = 628;
+    const x = W - 410, y = 72, w = 380, h = 628;
     const add = <T extends Phaser.GameObjects.GameObject>(o: T) => { this.card.add(o); return o; };
     add(this.add.rectangle(x + 6, y + 8, w, h, 0x000000, 0.25).setOrigin(0));
     add(this.add.rectangle(x, y, w, h, C.paper).setOrigin(0).setStrokeStyle(4, C.ink));
