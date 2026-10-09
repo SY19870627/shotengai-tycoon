@@ -8,7 +8,7 @@ import { store, bus, Ev } from './store';
 import * as core from './core/game';
 import * as story from './core/story';
 import * as memory from './core/memory';
-import { setupMobile } from './mobile';
+import { setupMobile, watchOrientation } from './mobile';
 
 async function start() {
   setupMobile();
@@ -37,6 +37,7 @@ async function start() {
     fps: { smoothStep: false },
     scene: [BootScene, MapScene, StreetScene, UIScene],
   });
+  watchOrientation(game);
   if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__game = game;
 }
 

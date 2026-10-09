@@ -5,7 +5,7 @@ export const FONT = '"Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "
  * 手機比 16:9 更長，寬度就變大，畫面填滿、看到更多街道，不會有左右黑邊。
  * 手機用整個螢幕的比例（全螢幕、加到主畫面時的樣子），iPhone 的 Safari 用看得到的範圍，電腦用視窗比例；最寬到 1800。
  */
-function gameWidth(): number {
+export function gameWidth(): number {
   try {
     if (typeof window === 'undefined') return BASE_W;
     const touch = window.matchMedia?.('(pointer: coarse)').matches;
@@ -25,9 +25,16 @@ function gameWidth(): number {
 }
 /** 原本設計的寬度（固定在右邊的介面，用 W - BASE_W 往右推） */
 export const BASE_W = 1280;
-export const W = gameWidth();
+// 用 let：手機轉向後寬度會變（setGameWidth），其他模組 import 進去的 W、DX 會跟著更新
+export let W = gameWidth();
 /** 比原本設計多出來的寬度 */
-export const DX = W - BASE_W;
+export let DX = W - BASE_W;
+
+/** 手機轉向後換成新的畫面寬度（之後重建的場景都會用新的寬度） */
+export function setGameWidth(w: number): void {
+  W = w;
+  DX = w - BASE_W;
+}
 export const H = 720;
 
 /** 街景配置（世界座標） */

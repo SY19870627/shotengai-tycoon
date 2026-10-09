@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { W, H, gameWidth, setGameWidth } from './theme';
+import { store } from './store';
 
 /** 手機（觸控、螢幕小）：字放大、第一次點畫面就進全螢幕 */
 export const IS_TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
@@ -71,4 +73,41 @@ export function setupMobile(): void {
   // 雙指縮放、長按選字都關掉
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+/**
+ * 手機橫豎切換：
+ * 1. 轉完之後多刷新幾次畫面大小（iPhone 有時候轉完才回報新的尺寸）。
+ * 2. 寬度要換（例如直拿打開、再轉成橫的）：換成新的寬度，重建目前的畫面（遊戲進度不會掉）。
+ */
+export function watchOrientation(game: Phaser.Game): void {
+  let timers: number[] = [];
+  const later = (fn: () => void, ms: number) => { timers.push(window.setTimeout(fn, ms)); };
+  const refresh = () => game.scale.refresh();
+  const rebuild = () => {
+    // 直拿時有「請轉成橫向」蓋著，等轉回橫的再說
+    if (window.innerHeight > window.innerWidth) return;
+    const want = gameWidth();
+    if (Math.abs(want - W) < 24) return;
+    // 劇情演到一半不要重建，演完再試
+    if (store.storyRunning) return later(rebuild, 1000);
+    setGameWidth(want);
+    game.scale.setGameSize(want, H);
+    const sm = game.scene;
+    if (sm.isActive('map')) sm.getScene('map').scene.restart();
+    if (sm.isActive('street')) {
+      sm.getScene('street').scene.restart();
+      if (sm.isActive('ui')) sm.getScene('ui').scene.restart();
+    }
+    refresh();
+  };
+  const onTurn = () => {
+    for (const t of timers) clearTimeout(t);
+    timers = [];
+    for (const ms of [50, 250, 600, 1200]) later(refresh, ms);
+    later(rebuild, 400);
+  };
+  window.addEventListener('orientationchange', onTurn);
+  window.addEventListener('resize', onTurn);
+  window.visualViewport?.addEventListener('resize', onTurn);
 }
