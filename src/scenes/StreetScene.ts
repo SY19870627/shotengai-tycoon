@@ -19,6 +19,7 @@ import type { ActorRef, Emote, FxKind, Look, StreetDef, Origin, Guest, Review, Y
 import { NPCS } from '../content/npcs';
 import { store, bus, Ev, save, S, playStory } from '../store';
 import { W, H, LOT_W, GROUND_Y, SIDEWALK_H, C, FONT, skyColors, nightness, hex } from '../theme';
+import { bake, bakeAll } from './bake';
 import { drawShopFacade, drawEmptyLot, drawLockedLot, drawVacantHouse, drawFacilityBuilding, drawBus, FACADE, buildingHeight, drawBathhouse, drawProtest } from './drawShop';
 import { drawLandmark, drawFilmScreen, VIEWPOINT, HAOHAN, SPRING, FIRE, KILN } from './drawLandmarks';
 import { drawBackdrop, drawSugarFactory } from './drawBackdrop';
@@ -328,8 +329,11 @@ export class StreetScene extends Phaser.Scene {
     // 1960：遠方的糖廠煙囪
     const backdrop = [...drawBackdrop(this, this.street.backdrop, this.L.worldW), ...(this.era === 1960 ? drawSugarFactory(this, this.L.worldW) : [])];
     for (const o of backdrop) {
+      // 遠景畫好就不會變：烘成圖片，不用每幀重算山稜線
+      const night = o.getData('night');
+      const baked = bakeAll(this, [o]);
       // 背景裡寺廟的燈：晚上才亮
-      if (o.getData('night')) this.nightLayer.push({ g: o as Phaser.GameObjects.Graphics });
+      if (night) for (const b of baked) this.nightLayer.push({ g: b as Phaser.GameObjects.Image });
     }
     this.fireView = null;
     this.flame = null;
@@ -453,6 +457,7 @@ export class StreetScene extends Phaser.Scene {
     g.fillStyle(0x7f9c5a);
     g.fillRect(0, GROUND_Y - 12, this.L.startX - 40, 12);
     g.fillRect(this.L.endX + 40, GROUND_Y - 12, W2, 12);
+    bake(this, g);
   }
 
   private drawStreetSigns() {
@@ -487,6 +492,7 @@ export class StreetScene extends Phaser.Scene {
         this.nightLayer.push({ g: glow });
       }
     }
+    bake(this, line);
   }
 
   private createLandmark(id: string, x: number, width: number) {
@@ -495,8 +501,10 @@ export class StreetScene extends Phaser.Scene {
     const mode = id === 'fire' ? S().fireMode : id === 'fude' && this.street.memory ? 'village' : id === 'mine' && this.street.ground === 'rail' ? 'coal' : id === 'station' && this.street.migrant ? 'zhongli' : eraVariant;
     const art = drawLandmark(this, id, width, mode);
     const container = this.add.container(x, GROUND_Y, art.objects).setDepth(10);
+    bakeAll(this, container.list);
     const night = this.add.container(x, GROUND_Y, [art.night]).setDepth(60).setAlpha(0);
     art.night.setBlendMode(Phaser.BlendModes.ADD);
+    bakeAll(this, night.list);
     this.nightLayer.push({ g: night });
     if (id === 'fire' && mode) this.fireView = { container, night, mode: mode as FireMode };
     this.landmarkStand.set(id, x + art.standX);
@@ -533,9 +541,11 @@ export class StreetScene extends Phaser.Scene {
     fv.container.destroy();
     const art = drawLandmark(this, 'fire', box.w, s.fireMode);
     fv.container = this.add.container(box.x, GROUND_Y, art.objects).setDepth(10);
+    bakeAll(this, fv.container.list);
     art.night.setBlendMode(Phaser.BlendModes.ADD);
     fv.night.removeAll(true);
     fv.night.add(art.night);
+    bakeAll(this, fv.night.list);
     fv.mode = s.fireMode;
   }
 
@@ -691,6 +701,8 @@ export class StreetScene extends Phaser.Scene {
         view.extras.push(cloud);
       }
     }
+    // 店面畫好就不會變（換店時整個重畫）：烘成圖片
+    bakeAll(this, view.container.list);
     if (view.windows) this.paintMinshuku(i);
     if (store.selected === i) this.updateHighlight();
   }

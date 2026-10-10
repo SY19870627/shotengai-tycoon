@@ -11,6 +11,7 @@ import {
 import { rollOrigin, notePasserby, lastSpawnMin } from '../core/game';
 import { ensureCharTexture, CHAR_H } from './drawCharacters';
 import { NPCS } from '../content/npcs';
+import { bake } from './bake';
 
 /** 十分：鐵軌在店門口前面的小路上 */
 export const RAIL_Y = GROUND_Y + SIDEWALK_H + 66;
@@ -106,6 +107,7 @@ export class RailShow {
     g.fillStyle(0xc8ccd0);
     g.fillRect(x0, RAIL_Y - 20, x1, 1);
     g.fillRect(x0, RAIL_Y - 1, x1, 1.5);
+    bake(this.scene, g);
   }
 
   /** 鐵軌邊的電線桿與電線（天燈偶爾會卡在上面） */
@@ -132,6 +134,7 @@ export class RailShow {
       g.fillRect(x - 18, y - 4, 36, 4);
     }
     this.poles = poles;
+    bake(this.scene, g);
   }
 
   private poles: number[] = [];
