@@ -399,6 +399,47 @@ export const NPCS: Record<string, NpcDef> = {
     id: 'zlPolice', name: '警察',
     look: L({ skin: 0xe8b48f, hair: 0x111111, hairStyle: 'short', shirt: 0x2b3f6a, pants: 0x2b2b3a, accessory: 'cap', age: 'mid' }),
   },
+  // ---- 中壢：家鄉有人在等・異鄉的感情・留下來的人（全部虛構） ----
+  zlWati: {
+    id: 'zlWati', name: 'Wati',
+    look: L({ skin: 0xc8946a, hair: 0x2a1d17, hairStyle: 'short', shirt: 0xe0a040, pants: 0x3d3a36, accessory: 'hijab', age: 'young' }),
+  },
+  zlBudi: {
+    id: 'zlBudi', name: 'Budi',
+    look: L({ skin: 0xb07a52, hair: 0x111111, hairStyle: 'short', shirt: 0x4a6a8a, pants: 0x2b2b3a, accessory: 'cap', age: 'mid' }),
+  },
+  zlRizal: {
+    id: 'zlRizal', name: 'Rizal',
+    look: L({ skin: 0xc98e66, hair: 0x111111, hairStyle: 'spiky', shirt: 0xf0f0f0, pants: 0x2b2b3a, accessory: 'none', age: 'young' }),
+  },
+  zlLiza: {
+    id: 'zlLiza', name: 'Liza',
+    look: L({ skin: 0xc98e66, hair: 0x2a1d17, hairStyle: 'long', shirt: 0xe04070, pants: 0x2b2b3a, accessory: 'none', age: 'young' }),
+  },
+  zlNur: {
+    id: 'zlNur', name: 'Nur',
+    look: L({ skin: 0xc8946a, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x40a0a0, pants: 0x3d3a36, accessory: 'hijab', age: 'young' }),
+  },
+  zlLinh: {
+    id: 'zlLinh', name: 'Linh',
+    look: L({ skin: 0xf2c9a5, hair: 0x2a1d17, hairStyle: 'ponytail', shirt: 0xf0c040, pants: 0x54627a, accessory: 'none', age: 'young' }),
+  },
+  zlHanh: {
+    id: 'zlHanh', name: '阿杏',
+    look: L({ skin: 0xf2c9a5, hair: 0x1a1a1a, hairStyle: 'bun', shirt: 0x90c060, pants: 0x3d3a36, accessory: 'none', age: 'young' }),
+  },
+  zlTuan: {
+    id: 'zlTuan', name: '阿俊',
+    look: L({ skin: 0xe8c09a, hair: 0x111111, hairStyle: 'short', shirt: 0x3a7a5a, pants: 0x2b2b3a, accessory: 'none', age: 'young' }),
+  },
+  zlJie: {
+    id: 'zlJie', name: '阿傑',
+    look: L({ skin: 0xe8b48f, hair: 0x2a1d17, hairStyle: 'short', shirt: 0x5b5f73, pants: 0x2f3550, accessory: 'none', age: 'young' }),
+  },
+  zlMai: {
+    id: 'zlMai', name: '阿梅',
+    look: L({ skin: 0xf2c9a5, hair: 0x1a1a1a, hairStyle: 'long', shirt: 0xf08ac0, pants: 0x3d3a36, accessory: 'none', age: 'young' }),
+  },
   busGuide: {
     id: 'busGuide', name: '遊覽車導遊',
     look: L({ skin: 0xf9dcc4, hair: 0x4a3324, hairStyle: 'bob', shirt: 0xd64545, pants: 0x2b2b3a, accessory: 'hat', age: 'mid' }),

@@ -1,6 +1,7 @@
 import type { StreetDef, TenantProfile, StoryEvent } from '../core/types';
 import { say, emote, narrate, focus, appear, walk, leave, fx, effect, choice, opt, look, wait } from './dsl';
-import { homeFeelOk, isSunday, selfOrder } from '../core/zhongli';
+import type { StoryCtx } from '../core/types';
+import { homeFeelOk, isSunday, isSaturday, selfOrder } from '../core/zhongli';
 
 const ST = 'zhongli';
 
@@ -168,11 +169,55 @@ const tenants: TenantProfile[] = [
       refuse: '這個租金，我的藥要賣得很貴……',
     },
   }),
+  T({
+    id: 'zl-wei', name: '阿威', shopName: '星光舞廳 Bintang', shopType: 'disco',
+    traits: ['friendly', 'creative'], skill: 3, maxRentTier: 2,
+    intro: '我爸媽是印尼華僑，我以前在夜市擺攤。大家週六晚上只能擠在宿舍喝悶酒，不如給他們一個跳舞的地方。',
+    look: look({ skin: 0xe0b08a, hair: 0x2a1d17, hairStyle: 'spiky', shirt: 0x2a2a3a, pants: 0x2b2b2b, accessory: 'glasses', age: 'young' }),
+    arrive: { flag: 'discoIdea' },
+    lines: {
+      hello: '燈光、音響都準備好了！週六晚上見！',
+      happy: ['今晚舞池擠到沒地方站！', '有人跳到哭，說好久沒這麼開心。'],
+      unhappy: ['警察又來了，大家嚇得跑光光……', '樓上住戶又來敲門說太吵。'],
+      idle: ['今晚要放什麼歌？', '入場一百，送一杯飲料。'],
+      rival: ['你們那邊的歌太老了啦。', '我這裡才是週末的中心。'],
+      friend: ['幫你留了一張貴賓桌。', '下次一起選歌！'],
+      refuse: '這個租金，我要辦好多場派對才付得起。',
+    },
+  }),
+  T({
+    id: 'zl-maicafe', name: '阿梅', shopName: '阿梅越南咖啡', shopType: 'cafe',
+    traits: ['hardworking', 'friendly'], skill: 4, maxRentTier: 1,
+    intro: '我以前在中壢的工廠做了三年。現在，我用新住民的身分回來了。越南咖啡要慢慢滴，就像我們的故事。',
+    look: look({ skin: 0xf2c9a5, hair: 0x1a1a1a, hairStyle: 'long', shirt: 0xf08ac0, pants: 0x3d3a36, accessory: 'apron', age: 'young' }),
+    relations: { 'zl-uncle': 30, 'zl-lan': 25 },
+    arrive: { flag: 'maiBack' },
+    lines: {
+      hello: 'Chào anh！會長，咖啡請你喝！',
+      happy: ['阿伯今天喝了兩杯！', '工廠的妹妹們下班都來這裡坐。'],
+      unhappy: ['好想媽媽……', '煉乳又漲價了。'],
+      idle: ['冰的還是熱的？', '慢慢滴，不要急。'],
+      rival: ['我們的咖啡比較香。', '……哼。'],
+      friend: ['爸，咖啡給你。', '阿蘭姐，晚上一起吃飯。'],
+      refuse: '這個租金……阿傑說我們再存一下。',
+    },
+  }),
 ];
 
 // =====================================================================
 // 劇情
 // =====================================================================
+
+/** 某段劇情演過幾天了（還沒演過 = -1） */
+const since = (c: StoryCtx, id: string) => (c.s.storyLog[id] !== undefined ? c.s.day - c.s.storyLog[id] : -1);
+/** 街上的舞廳（沒有就找卡拉 OK） */
+const venueOf = (c: StoryCtx, kinds = ['disco', 'ktv']) => {
+  for (const k of kinds) {
+    const t = c.present.find((id) => c.shopOf(id)?.defId === k);
+    if (t) return t;
+  }
+  return undefined;
+};
 
 const sunday = (c: { s: Parameters<typeof isSunday>[0] }) => isSunday(c.s);
 
@@ -365,14 +410,14 @@ const stories: StoryEvent[] = [
   },
   {
     id: 'zl-ramadan', street: ST, once: true, priority: 78, when: 'morning',
-    cond: (c) => (c.s.day >= 8 && c.has('zl-dewi') ? { a: 'zl-dewi' } : null),
+    // 沒有 Dewi 姐的店，就由 Siti 來說（開齋節不能因為少一間店就辦不成）
+    cond: (c) => (c.s.day >= 8 && c.has('zl-dewi') ? { a: 'zl-dewi' } : c.s.day >= 12 ? { a: 'zlSiti' } : null),
     script: (b) => [
       narrate('齋戒月到了。'),
-      focus(b.a),
-      appear(b.a),
+      ...(b.a === 'zl-dewi' ? [focus(b.a), appear(b.a)] : [focus({ landmark: 'plaza' }), appear(b.a, { landmark: 'plaza' })]),
       appear('me', b.a, -90),
       say(b.a, '這一個月，穆斯林從日出到日落都不能吃東西、不能喝水。'),
-      say(b.a, '妹妹們照樣要工作、要照顧阿公阿嬤、要在工廠搬貨。到了傍晚，大家都好想一起吃一頓飯。'),
+      say(b.a, '大家照樣要工作、要照顧阿公阿嬤、要在工廠搬貨。到了傍晚，大家都好想一起吃一頓飯。'),
       choice('要辦「開齋晚餐」嗎？',
         opt('辦！每天傍晚在廣場一起開齋', { flag: ['bukaPuasa'], homeFeel: { id: 8 } }, [
           say(b.a, 'Alhamdulillah！大家會很開心的！'),
@@ -495,10 +540,439 @@ const stories: StoryEvent[] = [
       leave('zlJoel'), leave('zl-dewi'), leave('zlChief'),
     ],
   },
+  // ------------------------------------------------------------- 週末的夜晚：舞廳
+  {
+    id: 'zl-disco-idea', street: ST, once: true, priority: 67, when: 'morning',
+    cond: (c) => (c.s.day >= 6 && !isSunday(c.s) && !isSaturday(c.s) ? {} : null),
+    script: () => [
+      focus({ landmark: 'station' }),
+      appear('zl-wei', { landmark: 'station' }),
+      appear('me', { landmark: 'station' }, -90),
+      say('zl-wei', '會長！你知道週六晚上大家都在做什麼嗎？'),
+      say('zl-wei', '擠在十二個人一間的宿舍喝悶酒、滑手機。一個禮拜只有這一晚可以放鬆耶。'),
+      say('zl-wei', '我想開一間舞廳。印尼的 Dangdut、越南的 Remix、菲律賓的老 Disco、泰國的鄉村歌，每個週末換一個主題！'),
+      emote('me', 'idea'),
+      appear('zl-uncle', { landmark: 'station' }, 110),
+      say('zl-uncle', '舞廳？半夜砰砰砰的，樓上的人還要不要睡？'),
+      say('zl-wei', '阿伯，我會做隔音啦！而且大家有地方去，就不會整晚坐在你門口了。'),
+      emote('zl-uncle', 'sweat'),
+      narrate('舞廳晚上 7 點才開門。週六晚上，工廠的人隔天也放假，不用趕最後一班接駁車，會跳到很晚。'),
+      narrate('最賺錢、家鄉感也會上升，但週末會比較吵，偶爾還會遇到警察臨檢。主題夜可以在「站前廣場」切換。'),
+      leave('zl-uncle'), leave('zl-wei'), leave('me'),
+      effect({ flag: ['discoIdea'], applicant: ['zl-wei'] }),
+    ],
+  },
+  {
+    id: 'zl-raid', street: ST, cooldown: 5, priority: 74, when: 'morning',
+    cond: (c) => {
+      const v = venueOf(c, ['disco']);
+      return c.flag('discoRaid') && v ? { a: v } : null;
+    },
+    script: (b) => [
+      narrate('昨天晚上十點，警察來舞廳臨檢。'),
+      focus(b.a),
+      appear(b.a),
+      appear('zlPolice', b.a, 110),
+      appear('me', b.a, -90),
+      narrate('音樂一停、燈一開，舞池裡的人全都愣住了。有人慌張地翻找居留證，有人想從後門溜走。'),
+      say('zlPolice', '例行臨檢啦，證件看一下就好。附近住戶反應太吵，我們每個週末都要來。'),
+      say(b.a, '會長……大家嚇壞了，一半的人沒跳完就走了。'),
+      emote(b.a, 'sweat'),
+      choice('要怎麼處理？',
+        opt('請舞廳自己做好消防、隔音，入場查證件', { flag: ['discoSafe'], unflag: ['discoRaid'], rep: 1, unrest: -8, sat: [[b.a, 5]] }, [
+          say('zlPolice', '這樣很好。我們也不想每次都把大家嚇跑。'),
+          say(b.a, '好，我明天就去裝隔音棉！'),
+          narrate('之後被臨檢的機會少了一半。'),
+        ], 3000),
+        opt('臨檢也是一種保護，就這樣吧', { unflag: ['discoRaid'], unrest: -10, homeFeel: { id: -3, vn: -3, ph: -3, th: -3 }, sat: [[b.a, -8]] }, [
+          say(b.a, '……好吧。只是大家來這裡，是想放鬆的。'),
+        ]),
+      ),
+      leave('zlPolice'), leave(b.a), leave('me'),
+    ],
+  },
+
+  // ------------------------------------------------------------- 十八歲的新娘：Wati
+  {
+    id: 'zl-wati-call', street: ST, once: true, priority: 57, when: 'evening',
+    cond: (c) => {
+      const p = c.present.find((id) => c.shopOf(id)?.defId === 'phoneshop');
+      return sunday(c) && c.s.day >= 10 && p ? { a: p } : null;
+    },
+    script: (b) => [
+      focus(b.a),
+      appear('zlWati', b.a),
+      appear('me', b.a, -90),
+      narrate('手機行門口，一位戴頭巾的女生拿著手機，笑著笑著就哭了。'),
+      say('zlWati', '……他叫我婆婆「媽媽」。他叫我「阿姨」。'),
+      say('zlWati', '會長，我叫 Wati，二十一歲。我十七歲就結婚了，兒子現在三歲，在印尼給婆婆帶。'),
+      say('zlWati', '我來台灣照顧一位阿公。想存錢回去蓋一間有磁磚的房子，下雨不會漏水的那種。'),
+      say('zlWati', '可是我走的時候他還不會講話。現在他會講好多話了，都不是跟我講的。'),
+      emote('zlWati', 'sad'),
+      choice('要怎麼陪她？',
+        opt('請手機行週日開「視訊包廂」，安靜、網路快', { buff: { id: 'videoBooth', name: '視訊包廂', days: 30, mods: { shopAppeal: { phoneshop: 1.25 } } }, homeFeel: { id: 5, vn: 3, ph: 3, th: 3 }, flag: ['watiCall'] }, [
+          say('zlWati', '這樣我就可以在裡面唱歌給他聽，不會被別人看到我哭。'),
+          emote('zlWati', 'heart'),
+        ], 3000),
+        opt('請店家幫她錄一段「媽媽的晚安影片」，讓兒子每天睡前看', { rep: 1, homeFeel: { id: 3 }, flag: ['watiCall'] }, [
+          say('zlWati', 'Selamat tidur, sayang……媽媽很快就回去了。'),
+          narrate('影片錄了三次。第三次，她終於沒有哭。'),
+        ]),
+        opt('什麼都不說，陪她坐一下', { homeFeel: { id: 2 }, flag: ['watiCall'] }, [
+          narrate('收假前的最後二十分鐘，你們坐在騎樓下，看著人潮往車站走。'),
+          say('zlWati', '……謝謝。好多了。'),
+        ]),
+      ),
+      leave('zlWati'), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-wati-save', street: ST, once: true, priority: 56, when: 'evening',
+    cond: (c) => {
+      const r = c.present.find((id) => c.shopOf(id)?.defId === 'remit');
+      return sunday(c) && since(c, 'zl-wati-call') >= 7 && r ? { a: r } : null;
+    },
+    script: (b) => [
+      focus(b.a),
+      appear('zlWati', b.a),
+      appear('me', b.a, -90),
+      say('zlWati', '會長！我跟你說，匯款行的大哥教我一件事。'),
+      say('zlWati', '以前我的薪水全部寄回去，婆婆說房子要錢、小叔要錢、田要錢……我自己什麼都沒有。'),
+      say('zlWati', '大哥說，可以分成兩份：一份寄回家，一份存在我自己的名字下面。'),
+      say('zlWati', '我十七歲就當媽媽了。這是我第一次，存一筆只屬於我自己的錢。'),
+      emote('zlWati', 'star'),
+      say('zlWati', '等我回去，我要開一間小小的雜貨店。這樣就可以每天陪兒子了。'),
+      effect({ rep: 2, homeFeel: { id: 4 }, flag: ['watiSaving'] }),
+      leave('zlWati'), leave('me'),
+    ],
+  },
+
+  // ------------------------------------------------------------- 蓋到一半的房子：Budi
+  {
+    id: 'zl-budi-house', street: ST, once: true, priority: 61, when: 'morning',
+    cond: (c) => (sunday(c) && c.s.day >= 10 ? {} : null),
+    script: () => [
+      focus({ landmark: 'plaza' }),
+      appear('zlBudi', { landmark: 'plaza' }),
+      appear('me', { landmark: 'plaza' }, -90),
+      say('zlBudi', '會長，你看！這是我在印尼的房子！'),
+      narrate('手機裡是一間蓋到一半的紅磚房子，屋頂還沒有瓦片。'),
+      say('zlBudi', '我在台灣四年了，每個月把大半薪水寄回去給太太。她說再半年就蓋好了。'),
+      say('zlBudi', '蓋好以後，我女兒就有自己的房間了。到時候我就回去，再也不出來了。'),
+      emote('zlBudi', 'heart'),
+      effect({ homeFeel: { id: 2 }, flag: ['budiHouse'] }),
+      leave('zlBudi'), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-budi-news', street: ST, once: true, priority: 69, when: 'morning',
+    cond: (c) => (!sunday(c) && !isSaturday(c.s) && since(c, 'zl-budi-house') >= 12 ? {} : null),
+    script: () => [
+      narrate('一大早，有人在廣場上坐了一整晚。'),
+      focus({ landmark: 'plaza' }),
+      appear('zlBudi', { landmark: 'plaza' }),
+      appear('me', { landmark: 'plaza' }, -90),
+      say('zlBudi', '……會長。房子不會蓋好了。'),
+      say('zlBudi', '表哥傳照片給我。房子還是一樣，沒有屋頂。錢都花掉了。'),
+      say('zlBudi', '我太太……跟別人在一起了。還有了孩子。我每個月寄的錢，她說「早就用完了」。'),
+      emote('zlBudi', 'sad'),
+      narrate('這樣的事，在移工之間並不少見。一走就是好幾年，家鄉的人等著、等著，有些就等不下去了。'),
+      choice('要怎麼陪 Budi？',
+        opt('請協會的社工陪他，談談接下來怎麼辦', { rep: 2, homeFeel: { id: 3 }, flag: ['budiNgo'] }, [
+          appear('zlSocial', { landmark: 'plaza' }, 100),
+          say('zlSocial', 'Budi，我們先不急著決定任何事。錢的事、孩子的事、家裡的事，我們一件一件來。'),
+          say('zlBudi', '……好。'),
+          leave('zlSocial'),
+        ]),
+        opt('找 Dewi 姐和阿南陪他吃一頓飯、唱一首歌', { homeFeel: { id: 5, th: 2 }, flag: ['budiFriends'] }, [
+          appear('zl-dewi', { landmark: 'plaza' }, 100),
+          say('zl-dewi', 'Budi，先吃飯。吃飽了才有力氣難過。'),
+          narrate('那天晚上，阿南煮了一大鍋泰式酸辣湯，Joel 彈吉他，Budi 唱了一首印尼老歌，唱到一半大家都跟著唱。'),
+          leave('zl-dewi'),
+        ]),
+        opt('帶他去舞廳跳一整晚，把心事都跳掉', { homeFeel: { id: 3 }, unrest: 4, flag: ['budiDisco'] }, [
+          narrate('Budi 在舞池裡跳到天亮。散場的時候，他說：「好像……比較輕鬆一點了。」'),
+        ]),
+      ),
+      leave('zlBudi'), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-budi-after', street: ST, once: true, priority: 55, when: 'evening',
+    cond: (c) => (sunday(c) && since(c, 'zl-budi-news') >= 6 ? {} : null),
+    script: (_b, c) => [
+      focus({ landmark: 'plaza' }),
+      appear('zlBudi', { landmark: 'plaza' }),
+      appear('me', { landmark: 'plaza' }, -90),
+      say('zlBudi', '會長，我想好了。'),
+      ...(c.flag('budiFriends') ? [
+        say('zlBudi', '阿南說，我切菜切得很好。合約做完之前，我每個週日去他的廚房幫忙，學煮菜。'),
+        say('zlBudi', '以後的錢，我要存給我自己，還有我女兒。她還是我的女兒。'),
+      ] : c.flag('budiNgo') ? [
+        say('zlBudi', '社工幫我問了很多事。女兒的學費，我還是會寄，直接寄給學校。'),
+        say('zlBudi', '合約做完，我會回去好好面對。不是逃走，是回去把事情說清楚。'),
+      ] : [
+        say('zlBudi', '我還是很難過。可是每個週六跳完舞，跟大家一起走回宿舍，我覺得自己還不是一個人。'),
+        say('zlBudi', '女兒的學費我會繼續寄。剩下的，我要存給我自己。'),
+      ]),
+      emote('zlBudi', 'heart'),
+      effect({ rep: 2, homeFeel: { id: 3 }, flag: ['budiOk'] }),
+      leave('zlBudi'), leave('me'),
+    ],
+  },
+
+  // ------------------------------------------------------------- 週末的大情聖：Rizal
+  {
+    id: 'zl-rizal-gossip', street: ST, once: true, priority: 54, when: 'noon',
+    cond: (c) => (c.s.day >= 8 && c.has('zl-marites') && !sunday(c) ? { a: 'zl-marites' } : null),
+    script: (b) => [
+      focus(b.a),
+      appear(b.a),
+      appear('me', b.a, -90),
+      say(b.a, '會長會長，你聽我說，這個很精彩。'),
+      say(b.a, '工廠那個 Rizal，長得很帥、很會跳舞的那個。上週六在舞池跟 Liza 跳慢舞。'),
+      say(b.a, '週日望完彌撒，跟 Nur 在廣場野餐。晚上又跟 Linh 去唱 KTV。'),
+      say(b.a, '三個人都以為自己是「唯一」。而且我聽說，他在菲律賓還有一個訂婚的女朋友喔！'),
+      emote('me', 'shock'),
+      say(b.a, '唉……離家那麼遠，有些人就覺得，這裡發生的事，家裡不會知道。'),
+      effect({ flag: ['rizalGossip'] }),
+      leave(b.a), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-rizal-caught', street: ST, once: true, priority: 63, when: 'evening',
+    cond: (c) => {
+      const v = venueOf(c);
+      return isSaturday(c.s) && c.flag('rizalGossip') && v ? { a: v } : null;
+    },
+    script: (b, c) => [
+      narrate(c.shopOf(b.a)?.defId === 'disco' ? '週六晚上十點，舞廳正熱鬧。' : '週六晚上十點，卡拉 OK 正熱鬧。'),
+      focus(b.a),
+      appear('zlRizal', b.a),
+      appear('zlLiza', b.a, -80),
+      appear('me', b.a, -170),
+      say('zlLiza', 'Rizal，下一首也跟我跳喔。'),
+      appear('zlNur', b.a, 90),
+      say('zlNur', '……Rizal？你不是說今晚要加班？'),
+      appear('zlLinh', b.a, 170),
+      say('zlLinh', '他跟我說他今晚在宿舍睡覺。'),
+      emote('zlRizal', 'sweat'),
+      narrate('這時候，Rizal 的手機響了。螢幕上是一張菲律賓女生的照片：「Ana ❤️ 視訊通話」。'),
+      narrate('全場安靜了。'),
+      choice('會長，你要……',
+        opt('幫他圓場：「她們都是我請來的舞蹈老師！」', { rep: -1, homeFeel: { ph: 1 } }, [
+          say('zlLiza', '……會長，你也太會編了吧。'),
+          say('zlNur', '舞蹈老師？那我教他一招。'),
+          narrate('Nur 一腳踩在 Rizal 的鞋子上。三個女生頭也不回地走了。'),
+        ]),
+        opt('讓他自己面對', { rep: 1, homeFeel: { ph: 2, id: 1, vn: 1 } }, [
+          say('zlLinh', '你說啊，我們到底是什麼？'),
+          say('zlRizal', '……對不起。我只是……很寂寞。'),
+          narrate('三個女生一起把他罵了十分鐘。然後 Rizal 走到門口，接起了那通視訊。'),
+          say('zlRizal', 'Ana……我有事要跟你說。'),
+        ]),
+        opt('請 Joel 上台唱一首歌，先讓大家冷靜', { homeFeel: { ph: 4, id: 2, vn: 2, th: 2 } }, [
+          appear('zlJoel', b.a, -250),
+          say('zlJoel', '這首歌，送給所有想家的人。'),
+          emote('zlJoel', 'music'),
+          narrate('全場跟著唱。唱完以後，三個女生坐在一起喝飲料，Rizal 一個人在角落打電話給 Ana。'),
+          leave('zlJoel'),
+        ]),
+      ),
+      appear('zl-marites', b.a, 250),
+      say('zl-marites', '離家太遠，每個人都怕寂寞。可是寂寞，不是騙人的理由喔。'),
+      effect({ flag: ['rizalCaught'] }),
+      leave('zl-marites'), leave('zlLinh'), leave('zlNur'), leave('zlLiza'), leave('zlRizal'), leave('me'),
+    ],
+  },
+
+  // ------------------------------------------------------------- 異鄉的愛情：阿杏
+  {
+    id: 'zl-hanh-love', street: ST, once: true, priority: 56, when: 'evening',
+    cond: (c) => (sunday(c) && c.s.day >= 11 ? {} : null),
+    script: (_b, c) => [
+      focus({ landmark: 'plaza' }),
+      appear('zlHanh', { landmark: 'plaza' }),
+      appear('zlTuan', { landmark: 'plaza' }, 50),
+      appear('me', { landmark: 'plaza' }, -120),
+      narrate('廣場的角落，一對越南男女牽著手，分吃一碗河粉。'),
+      ...(c.has('zl-marites') ? [
+        appear('zl-marites', { landmark: 'plaza' }, -200),
+        say('zl-marites', '（小聲）那個阿杏，越南家裡有老公耶。旁邊那個阿俊是她工廠的同事……'),
+      ] : [
+        narrate('旁邊有人在小聲議論：「她越南家裡有老公耶……」'),
+      ]),
+      say('zlHanh', '……我知道大家在說什麼。'),
+      say('zlHanh', '我十九歲嫁人，是家裡安排的。他從來沒問過我想要什麼。來台灣三年，阿俊是第一個問我「累不累」的人。'),
+      emote('zlHanh', 'sad'),
+      choice('要怎麼面對這些八卦？',
+        opt('請大家別再傳了，那是她自己的事', { homeFeel: { vn: 4 }, rep: 1, ...(c.has('zl-marites') ? { sat: [['zl-marites', -6]] as [string, number][] } : {}), flag: ['hanhLove'] }, [
+          say('zlHanh', '……謝謝你，會長。'),
+          ...(c.has('zl-marites') ? [say('zl-marites', '好啦好啦，我不說了。')] : []),
+        ]),
+        opt('不介入，這種事外人很難說', { flag: ['hanhLove'] }, [
+          narrate('阿杏和阿俊收拾好碗，一起往接駁車站走去。'),
+        ]),
+      ),
+      ...(c.has('zl-marites') ? [leave('zl-marites')] : []),
+      leave('zlTuan'), leave('zlHanh'), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-hanh-baby', street: ST, once: true, priority: 65, when: 'morning',
+    cond: (c) => (since(c, 'zl-hanh-love') >= 9 ? {} : null),
+    script: () => [
+      focus({ landmark: 'church' }),
+      appear('zlHanh', { landmark: 'church' }),
+      appear('zlSocial', { landmark: 'church' }, 100),
+      appear('me', { landmark: 'church' }, -90),
+      say('zlHanh', '會長……我懷孕了。'),
+      say('zlHanh', '我好怕。怕被工廠趕走、怕被遣返、怕越南家裡的人知道……有人跟我說，乾脆逃跑算了。'),
+      emote('zlHanh', 'sweat'),
+      say('zlSocial', '阿杏，先不要怕。在台灣，懷孕不能當作解約的理由，妳可以安心去產檢。'),
+      say('zlSocial', '逃跑的話，妳和寶寶都會沒有健保、沒有身分，那才是最辛苦的路。'),
+      choice('要怎麼幫阿杏？',
+        opt('陪她和阿俊一起去協會，慢慢想清楚', { rep: 2, homeFeel: { vn: 4 }, flag: ['hanhHelped'] }, [
+          appear('zlTuan', { landmark: 'church' }, 180),
+          say('zlTuan', '不管妳決定怎樣，我都陪妳。'),
+          say('zlHanh', '……我想回越南把寶寶生下來，然後跟家裡把話說清楚。這次，我想自己決定。'),
+          leave('zlTuan'),
+        ]),
+        opt('幫她出回越南的機票，讓她安心回家生產', { rep: 2, homeFeel: { vn: 6 }, flag: ['hanhHelped'] }, [
+          say('zlHanh', '會長……謝謝你。我會回去，好好跟家裡說。這次，我想自己決定。'),
+          emote('zlHanh', 'heart'),
+        ], 8000),
+      ),
+      leave('zlSocial'), leave('zlHanh'), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-hanh-postcard', street: ST, once: true, priority: 53, when: 'morning',
+    cond: (c) => (since(c, 'zl-hanh-baby') >= 10 && c.has('zl-lan') ? { a: 'zl-lan' } : null),
+    script: (b) => [
+      focus(b.a),
+      appear(b.a),
+      appear('me', b.a, -90),
+      say(b.a, '會長！阿杏從越南寄明信片來了！'),
+      narrate('明信片上是一張寶寶的照片，背面用歪歪的中文寫著：'),
+      narrate('「寶寶叫 Trung，是『中』的意思。中壢的中。謝謝大家。阿杏」'),
+      emote(b.a, 'heart'),
+      say(b.a, '她說，她跟家裡把話說開了。日子不容易，可是是她自己選的。'),
+      effect({ rep: 1, homeFeel: { vn: 3 } }),
+      leave(b.a), leave('me'),
+    ],
+  },
+
+  // ------------------------------------------------------------- 留下來的人：阿傑與阿梅
+  {
+    id: 'zl-jie-mai-meet', street: ST, once: true, priority: 59, when: 'noon',
+    cond: (c) => (isSaturday(c.s) && c.s.day >= 7 && c.has('zl-uncle') ? { a: 'zl-uncle' } : null),
+    script: (b) => [
+      focus(b.a),
+      appear(b.a),
+      appear('zlJie', b.a, 90),
+      appear('me', b.a, -90),
+      say(b.a, '阿傑！週末回來顧店，不要一直滑手機！'),
+      say('zlJie', '好啦爸……'),
+      appear('zlMai', b.a, 180),
+      say('zlMai', '不好意思，請問……有沒有賣延長線？宿舍插座不夠，十二個人搶兩個插頭。'),
+      say('zlJie', '有、有！這個六孔的……我、我算妳便宜一點。'),
+      emote('zlJie', 'heart'),
+      say('zlMai', 'Cảm ơn！謝謝！我叫阿梅，在後面那間工廠。'),
+      narrate('那天之後，阿傑每個週末都很主動地回來顧店。'),
+      emote(b.a, 'idea'),
+      effect({ flag: ['jieMai'] }),
+      leave('zlMai'), leave('zlJie'), leave(b.a), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-jie-mai-date', street: ST, once: true, priority: 58, when: 'evening',
+    cond: (c) => (isSaturday(c.s) && since(c, 'zl-jie-mai-meet') >= 7 ? { a: venueOf(c) ?? '' } : null),
+    script: (b, c) => {
+      const disco = b.a && c.shopOf(b.a)?.defId === 'disco';
+      const at = b.a ? b.a : { landmark: 'plaza' };
+      return [
+        narrate(disco ? '週六晚上，舞廳的 Disco 之夜。' : '週六晚上，廣場上有人放音樂跳舞。'),
+        focus(at),
+        appear('zlMai', at),
+        appear('zlJie', at, 70),
+        appear('me', at, -110),
+        say('zlMai', '阿傑，你跳舞好像機器人喔，哈哈哈！'),
+        say('zlJie', '我、我是工廠的領班，平常只會叫人搬貨……'),
+        say('zlMai', '來，我教你。一、二，轉一圈——'),
+        emote('zlJie', 'heart'),
+        emote('zlMai', 'music'),
+        narrate('那天晚上，阿傑踩到阿梅的腳十一次。阿梅笑了十一次。'),
+        effect({ homeFeel: { vn: 3 }, flag: ['jieDance'] }),
+        leave('zlJie'), leave('zlMai'), leave('me'),
+      ];
+    },
+  },
+  {
+    id: 'zl-uncle-objects', street: ST, once: true, priority: 66, when: 'morning',
+    cond: (c) => (since(c, 'zl-jie-mai-date') >= 3 && c.has('zl-uncle') ? { a: 'zl-uncle' } : null),
+    script: (b, c) => [
+      focus(b.a),
+      appear(b.a),
+      appear('zlJie', b.a, 90),
+      appear('me', b.a, -90),
+      say('zlJie', '爸，我想跟阿梅結婚。她的合約下個月到期，要回越南了。'),
+      say(b.a, '結婚？跟一個外勞？你知道人家會怎麼說嗎？'),
+      emote(b.a, 'anger'),
+      ...(c.has('zl-lan') ? [
+        appear('zl-lan', b.a, 180),
+        say('zl-lan', '阿伯。'),
+        say('zl-lan', '我二十年前，也是這樣嫁來的。那時候也有人說我是來騙錢的。'),
+        say('zl-lan', '二十年了，你每天喝我的湯，有覺得我是騙子嗎？'),
+        say(b.a, '……'),
+        leave('zl-lan'),
+      ] : [
+        say('zlJie', '爸，她每個週末來借螺絲起子、幫你搬貨、還幫你把鐵門的鏽擦掉。你都看到了。'),
+        say(b.a, '……'),
+      ]),
+      say(b.a, '……她煮的東西，好吃嗎？'),
+      say('zlJie', '很好吃。'),
+      say(b.a, '……那，叫她回越南之前，來家裡吃頓飯。'),
+      emote('zlJie', 'heart'),
+      choice('阿梅回越南之前，要不要幫他們辦一場越南式的訂婚？',
+        opt('辦！整條街一起來，阿蘭姐負責越南的禮俗', { rep: 3, homeFeel: { vn: 8 }, unrest: -5, flag: ['maiEngaged'], sat: [[b.a, 10]] }, [
+          narrate('騎樓下擺滿了紅色的禮盒：檳榔、茶葉、喜餅，還有阿伯從店裡拿出來的全新鍋子。'),
+          say(b.a, '鍋子是不鏽鋼的，可以用三十年。'),
+        ], 6000),
+        opt('讓他們自己決定就好', { rep: 1, flag: ['maiEngaged'] }, [
+          narrate('那個週末，阿梅來五金行吃了一頓飯。阿伯一句話也沒說，只是一直幫她夾菜。'),
+        ]),
+      ),
+      leave('zlJie'), leave(b.a), leave('me'),
+    ],
+  },
+  {
+    id: 'zl-mai-back', street: ST, once: true, priority: 64, when: 'morning',
+    cond: (c) => (since(c, 'zl-uncle-objects') >= 9 ? {} : null),
+    script: (_b, c) => [
+      narrate('幾個月後。'),
+      focus({ landmark: 'station' }),
+      appear('zlMai', { landmark: 'station' }),
+      appear('zlJie', { landmark: 'station' }, 70),
+      appear('me', { landmark: 'station' }, -90),
+      say('zlMai', '會長，我回來了！這次不是移工，是新住民了。'),
+      say('zlMai', '我想在爸的五金行旁邊開一間越南咖啡。工廠的妹妹們下班可以來坐，就像以前的我一樣。'),
+      ...(c.has('zl-uncle') ? [
+        appear('zl-uncle', { landmark: 'station' }, 160),
+        say('zl-uncle', '招牌我幫你們做好了。'),
+        narrate('五金行的鐵門上，多了一行歪歪扭扭的越南字：「Chào mừng（歡迎）」。'),
+        leave('zl-uncle'),
+      ] : []),
+      emote('zlMai', 'heart'),
+      narrate('阿梅出現在招租佈告欄上了。'),
+      effect({ flag: ['maiBack'], applicant: ['zl-maicafe'], rep: 2, homeFeel: { vn: 4 } }),
+      leave('zlJie'), leave('zlMai'), leave('me'),
+    ],
+  },
   {
     id: 'zl-ending', street: ST, once: true, priority: 99, when: 'evening',
     cond: (c) => (c.street.goals.every((g) => g.check(c.s)) ? {} : null),
-    script: () => [
+    script: (_b, c) => [
       narrate('開齋節過後的那個星期天。'),
       focus({ landmark: 'plaza' }),
       appear('me', { landmark: 'plaza' }, -60),
@@ -519,6 +993,20 @@ const stories: StoryEvent[] = [
       say('zlJoel', '大家，我寫了一首歌。'),
       emote('zlJoel', 'music'),
       narrate('河粉、沙爹、打拋豬、菲律賓炸香蕉，還有阿伯從家裡帶來的滷肉。廣場上，四種語言、加上台語和國語，一起笑成一團。'),
+      // 這一路上遇到的人（有演過的才出現）
+      ...(c.flag('maiBack') ? [
+        appear('zlMai', { landmark: 'plaza' }, 280),
+        say('zlMai', '越南咖啡來囉！爸，你的不加糖。'),
+        say('zl-uncle', '……加一點點好了。'),
+      ] : []),
+      ...(c.flag('watiSaving') ? [
+        appear('zlWati', { landmark: 'plaza' }, -300),
+        narrate('Wati 的手機裡，一個小男孩對著鏡頭大喊：「Mama！」她笑得比誰都大聲。'),
+      ] : []),
+      ...(c.flag('budiOk') ? [
+        appear('zlBudi', { landmark: 'plaza' }, -360),
+        say('zlBudi', '這鍋湯是我煮的！阿南說可以出師了！'),
+      ] : []),
       fx('confetti', 'me'),
       narrate('傍晚，大家一起往車站走。有人趕接駁車，有人陪阿嬤慢慢走。'),
       narrate('月台上，阿蘭貼了一張紙。上面寫著——'),
@@ -526,6 +1014,7 @@ const stories: StoryEvent[] = [
       emote('me', 'star'),
       narrate('中壢東南亞街完成！'),
       effect({ chapterComplete: true }),
+      ...(['zlMai', 'zlWati', 'zlBudi'] as const).filter((id) => c.flag({ zlMai: 'maiBack', zlWati: 'watiSaving', zlBudi: 'budiOk' }[id])).map((id) => leave(id)),
       leave('zlGrandma'), leave('zlSiti'), leave('zl-uncle'), leave('zlNan'), leave('zlJoel'), leave('zl-dewi'), leave('zl-lan'), leave('me'),
     ],
   },
@@ -578,7 +1067,7 @@ export const ZHONGLI: StreetDef = {
   weather: { rain: 0.2, fog: 0 },
   visitors: { jp: 0, kr: 0 },
   migrant: { id: 70, vn: 50, ph: 38, th: 30 },
-  shopTypes: ['warung', 'pho', 'sarisari', 'thaifood', 'remit', 'phoneshop', 'asiamart', 'ktv', 'grocery', 'pharmacy', 'cafe'],
+  shopTypes: ['warung', 'pho', 'sarisari', 'thaifood', 'remit', 'phoneshop', 'asiamart', 'ktv', 'disco', 'grocery', 'pharmacy', 'cafe'],
   tenants,
   stories,
   activities: {

@@ -1160,6 +1160,31 @@ function drawGoods(g: Phaser.GameObjects.Graphics, id: string, r: Phaser.Geom.Re
       g.fillRect(bx + 20, by + 30, 4, 20);
       g.fillCircle(bx + 22, by + 28, 4);
       break;
+    case 'disco': {
+      // 舞廳：暗暗的舞池、鏡面球、雷射光、喇叭
+      g.fillStyle(0x140c22);
+      g.fillRect(bx, by, bw, bh);
+      const cx = bx + bw / 2;
+      for (let k = 0; k < 5; k++) {
+        g.fillStyle([0xe040a0, 0x30c0e0, 0xf2c14e, 0x60e070, 0xa070f0][k], 0.35);
+        g.fillTriangle(cx, by + 14, bx + 6 + k * (bw - 12) / 4 - 10, by + bh, bx + 6 + k * (bw - 12) / 4 + 10, by + bh);
+      }
+      g.lineStyle(1, 0xc0c0c8);
+      g.lineBetween(cx, by, cx, by + 8);
+      g.fillStyle(0xd8dce4);
+      g.fillCircle(cx, by + 16, 9);
+      g.fillStyle(0xffffff);
+      for (const [dx, dy] of [[-4, -4], [3, -2], [-2, 3], [4, 4]]) g.fillRect(cx + dx - 1, by + 16 + dy - 1, 2, 2);
+      g.fillStyle(0x2a2a30);
+      g.fillRect(bx + 6, by + bh - 30, 16, 28);
+      g.fillRect(bx + bw - 22, by + bh - 30, 16, 28);
+      g.fillStyle(0x5a5a64);
+      g.fillCircle(bx + 14, by + bh - 22, 5);
+      g.fillCircle(bx + bw - 14, by + bh - 22, 5);
+      g.fillCircle(bx + 14, by + bh - 9, 4);
+      g.fillCircle(bx + bw - 14, by + bh - 9, 4);
+      break;
+    }
     case 'lantern':
       // 一盞一盞掛起來的天燈（紅、黃、粉、藍、白）
       row(5, (x, i) => {
@@ -4012,6 +4037,7 @@ const FOREIGN_SUB: Record<string, string> = {
   phoneshop: 'Pulsa・SIM・Nạp tiền',
   asiamart: 'Toko Asia・Siêu thị',
   ktv: 'Karaoke・Hát karaoke',
+  disco: 'Diskotik・Vũ trường・Disco',
   pharmacy: 'Apotek・Nhà thuốc',
 };
 

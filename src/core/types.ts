@@ -597,6 +597,8 @@ export interface DayStats {
   home?: Partial<Record<Nation, number>>;
   rushed?: number;
   missed?: number;
+  /** 中壢：今晚進舞廳的人 */
+  disco?: number;
 }
 
 export interface DaySummary {
@@ -656,6 +658,7 @@ export interface DaySummary {
   stallIncome?: number;
   missed?: number;
   rushed?: number;
+  disco?: number;
   avgStars: number | null;
   turnedAway: number;
   reputationBefore: number;
@@ -776,4 +779,6 @@ export interface GameState {
   /** 街坊不滿 0～100 */
   unrest: number;
   policy: Policy;
+  /** 舞廳的主題夜（mix = 大家一起跳） */
+  discoTheme: Nation | 'mix';
 }

@@ -347,6 +347,12 @@ export const SHOPS: ShopDef[] = [
     hours: [12, 24], wallColor: 0x3a2a4a, awningColor: 0xe040a0,
     description: '唱家鄉的歌，大家最開心的地方。很吵，開到很晚。',
   }),
+  S({
+    id: 'disco', name: '東南亞舞廳', short: '舞廳', category: 'leisure',
+    spend: 380, appeal: 0.075, capacity: 14, stayMinutes: 70, upkeep: 650, baseRent: 1300,
+    hours: [19, 24], wallColor: 0x2a1f3a, awningColor: 0x30c0e0,
+    description: '晚上七點才開門。週六晚上不用趕接駁車，大家跳到半夜；週日也有人跳到忘了收假。最賺錢，也最吵，週末偶爾會遇到警察臨檢。',
+  }),
 ];
 
 export const SHOP_BY_ID: Record<string, ShopDef> = Object.fromEntries(SHOPS.map((s) => [s.id, s]));
@@ -405,7 +411,8 @@ export const SYNERGY: Record<string, Record<string, number>> = {
   remit: { phoneshop: 1.15, warung: 1.05, pho: 1.05 },
   phoneshop: { remit: 1.15 },
   asiamart: { remit: 1.1 },
-  ktv: { thaifood: 1.05, sarisari: 1.05 },
+  ktv: { thaifood: 1.05, sarisari: 1.05, disco: 1.05 },
+  disco: { ktv: 1.1, thaifood: 1.05, asiamart: 1.05 },
 };
 
 /** 同一種店距離兩格以內會互搶客人 */

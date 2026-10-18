@@ -1077,7 +1077,7 @@ function pingxiValley(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator,
 
   // 中景：山坡上的鐵皮屋、樹林、遠遠的吊橋
   const g2 = layer(scene, f2, 1);
-  const n2 = nightLayer(scene, f2, 59);
+  const n2 = nightLayer(scene, f2, 9);
   const w2 = layerWidth(worldW, f2);
   const top2 = ridge(g2, rng, -100, w2, GROUND_Y - 110, 70, haze(0x3f8a50, 0.25), 3, 16);
   for (let x = 0; x < w2; x += rng.between(22, 46)) tree(g2, x, top2(x) + 10, rng.between(18, 30), haze(rng.pick([0x2f7a42, 0x3a8a48, 0x2a6e3a]), 0.2));
@@ -1161,7 +1161,7 @@ function cityRail(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, wor
   const f1 = 0.08, f2 = 0.22, f3 = 0.42;
   // 遠景：淡淡的山與大樓剪影
   const g1 = layer(scene, f1, 0.5);
-  const n1 = nightLayer(scene, f1, 59);
+  const n1 = nightLayer(scene, f1, 9);
   const w1 = layerWidth(worldW, f1);
   ridge(g1, rng, -100, w1, GROUND_Y - 150, 40, haze(0x7a9a8a, 0.6), 3, 24);
   for (let x = -40; x < w1; x += rng.between(40, 90)) {
@@ -1176,7 +1176,7 @@ function cityRail(scene: Phaser.Scene, rng: Phaser.Math.RandomDataGenerator, wor
   }
   // 中景：高架鐵路與公寓
   const g2 = layer(scene, f2, 1);
-  const n2 = nightLayer(scene, f2, 59);
+  const n2 = nightLayer(scene, f2, 9);
   const w2 = layerWidth(worldW, f2);
   let x = -60;
   while (x < w2) {

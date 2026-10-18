@@ -25,7 +25,7 @@ import {
   futureDone, seasonSpendMult,
 } from './future';
 import {
-  zhongliDefaults, isMigrantStreet, migrantTraffic, rollMigrantOrigin, recordMigrantPasserby, recordMigrantVisit, MIGRANT_PREF, endDayZhongli,
+  zhongliDefaults, isMigrantStreet, migrantTraffic, rollMigrantOrigin, recordMigrantPasserby, recordMigrantVisit, MIGRANT_PREF, endDayZhongli, discoPref,
 } from './zhongli';
 import { shifenDefaults, isRailStreet, skyMods, decaySky, releaseLanterns, endDayShifen, type LanternColor } from './shifen';
 
@@ -894,7 +894,7 @@ export function enterChance(s: GameState, index: number, favorite?: Category, or
   // 東原：居民去日常的店，遊客去伴手禮和咖啡
   if (isMemoryStreet(s)) p *= audiencePref(def.id, origin);
   // 中壢：各國移工找家鄉味、匯款、手機；通勤族去咖啡店、藥局
-  if (isMigrantStreet(s)) p *= MIGRANT_PREF[origin]?.[def.id] ?? 1;
+  if (isMigrantStreet(s)) p *= (MIGRANT_PREF[origin]?.[def.id] ?? 1) * (def.id === 'disco' ? discoPref(s, origin) : 1);
   // 外國旅客：有偏好，但沒有多語服務時語言不通
   if (isForeign(origin)) {
     p *= ORIGIN_PREF[origin][def.id] ?? 1;
@@ -1410,7 +1410,7 @@ export function endDay(s: GameState, rand: () => number = Math.random): DaySumma
     kinshipAfter: street.memory ? s.kinship : undefined,
     ...(zl ? {
       nat: s.today.nat, feelBefore: zl.feelBefore, feelAfter: { ...s.homeFeel }, unrestBefore: zl.unrestBefore, unrestAfter: s.unrest,
-      policyCost: zl.policyCost, stallIncome: zl.stallIncome, missed: s.today.missed, rushed: s.today.rushed,
+      policyCost: zl.policyCost, stallIncome: zl.stallIncome, missed: s.today.missed, rushed: s.today.rushed, disco: zl.disco || undefined,
     } : {}),
     lanterns: s.today.lanterns,
     combo: s.today.combo,

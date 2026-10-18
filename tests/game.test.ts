@@ -25,7 +25,7 @@ import { SHOP_BY_ID, capacityAt, COMMISSION } from '../src/core/shops';
 import { pickStory, pickEnding, flattenEffects } from '../src/core/story';
 import { simulateDay } from '../src/core/sim';
 import { trainInterval, trainsBetween, trainCombo, decaySky } from '../src/core/shifen';
-import { rollCurfew, LAST_BUS, setPolicy } from '../src/core/zhongli';
+import { rollCurfew, LAST_BUS, setPolicy, nationPerHour, setDiscoTheme, recordMigrantVisit, raidChance } from '../src/core/zhongli';
 import { STREETS } from '../src/content';
 import { NPCS } from '../src/content/npcs';
 import type { GameState, Step } from '../src/core/types';
@@ -1301,5 +1301,74 @@ describe('中壢', () => {
     }
     expect(s.chapterComplete).toBe(true);
     expect(day).toBeGreaterThan(14);
+  });
+
+  it('舞廳：週六晚上人潮爆滿、工廠的人不用趕接駁車；週日晚上只有少數人', () => {
+    const s = zl();
+    s.day = 2; s.minute = 21.5 * 60;
+    const without = nationPerHour(s, 'id');
+    place(s, 0, 'zl-wei');
+    const sat = nationPerHour(s, 'id');
+    expect(sat).toBeGreaterThan(without * 3);
+    s.day = 3;
+    expect(nationPerHour(s, 'id')).toBeLessThan(sat);
+    s.day = 2;
+    const r = seeded(2);
+    const curfews = Array.from({ length: 100 }, () => rollCurfew('vn', r, s));
+    expect(curfews.some((c) => c === 24 * 60)).toBe(true);
+    expect(curfews.some((c) => c === LAST_BUS)).toBe(false);
+  });
+
+  it('舞廳主題夜：主題國家的人更多，家鄉感加倍', () => {
+    const s = zl();
+    place(s, 0, 'zl-wei');
+    s.day = 2; s.minute = 21.5 * 60;
+    const before = nationPerHour(s, 'th');
+    expect(setDiscoTheme(s, 'th').ok).toBe(true);
+    expect(nationPerHour(s, 'th')).toBeGreaterThan(before);
+    recordMigrantVisit(s, 'th', 'disco');
+    recordMigrantVisit(s, 'id', 'disco');
+    expect(s.today.home?.th).toBeCloseTo(1.35);
+    expect(s.today.home?.id).toBeCloseTo(0.9);
+    expect(s.today.disco).toBe(2);
+  });
+
+  it('舞廳臨檢：放任最容易，嚴管最少，做好安全措施機率減半', () => {
+    const s = zl();
+    s.unrest = 50;
+    const free = raidChance(s);
+    setPolicy(s, 'strict');
+    expect(raidChance(s)).toBeLessThan(free);
+    setPolicy(s, 'free');
+    s.flags.push('discoSafe');
+    expect(raidChance(s)).toBeCloseTo(free / 2);
+    // 週末舞廳人很多，機率抽中就會在隔天早上演臨檢
+    const t = zl();
+    place(t, 0, 'zl-wei');
+    t.day = 2;
+    t.today.disco = 60;
+    t.today.nat = { id: 100 };
+    endDay(t, () => 0);
+    expect(t.flags).toContain('discoRaid');
+  });
+
+  it('新劇情裡出現的角色都有定義', () => {
+    const s = zl();
+    const st = STREETS.zhongli;
+    const ids = new Set([...Object.keys(NPCS), ...st.tenants.map((x) => x.id)]);
+    const ctx = {
+      s, street: st, present: st.tenants.map((x) => x.id), rand: Math.random,
+      has: () => true, flag: () => true, rel: () => 0, dist: () => 1, sat: () => 50,
+      shopOf: (id: string) => ({ defId: st.tenants.find((x) => x.id === id)?.shopType }) as never,
+      name: (id: string) => id, shopName: (id: string) => id,
+    };
+    const actorsOf = (steps: Step[]): string[] => steps.flatMap((x) => [
+      ...('actor' in x && typeof x.actor === 'string' ? [x.actor] : []),
+      ...(x.t === 'choice' ? x.options.flatMap((o) => actorsOf(o.then ?? [])) : []),
+    ]);
+    for (const e of st.stories) {
+      const steps = e.script({ a: 'zl-wei' }, ctx);
+      for (const a of actorsOf(steps)) expect(ids.has(a), `${e.id}: ${a}`).toBe(true);
+    }
   });
 });

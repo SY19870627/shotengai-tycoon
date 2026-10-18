@@ -24,8 +24,8 @@ export function isMigrantStreet(s: GameState): boolean {
   return !!streetOf(s).migrant;
 }
 
-export function zhongliDefaults(): Pick<GameState, 'homeFeel' | 'unrest' | 'policy'> {
-  return { homeFeel: { id: 30, vn: 30, ph: 30, th: 30 }, unrest: 10, policy: 'free' };
+export function zhongliDefaults(): Pick<GameState, 'homeFeel' | 'unrest' | 'policy' | 'discoTheme'> {
+  return { homeFeel: { id: 30, vn: 30, ph: 30, th: 30 }, unrest: 10, policy: 'free', discoTheme: 'mix' };
 }
 
 export function isSunday(s: GameState): boolean {
@@ -50,6 +50,55 @@ export function holidayCurve(hour: number): number {
   return bump(10.5, 1.6, 0.7) + bump(14, 2.2, 1) + bump(18, 1.2, 0.35);
 }
 
+// ---------------------------------------------------------------- 舞廳
+
+/** 街上有沒有開舞廳 */
+export function hasDisco(s: GameState): boolean {
+  return s.lots.some((l) => l.shop?.defId === 'disco');
+}
+
+/** 舞廳的主題夜 */
+export const DISCO_THEMES: Record<Nation | 'mix', { name: string; desc: string }> = {
+  mix: { name: '大家一起跳', desc: 'DJ 看今晚誰最想家，就多放誰的歌' },
+  id: { name: 'Dangdut 之夜', desc: '印尼的國民舞曲，鼓聲一下大家就停不下來' },
+  vn: { name: '越南 Remix 之夜', desc: '越南流行歌混音，燈光閃到天亮' },
+  ph: { name: 'Disco 80s 之夜', desc: '菲律賓人最愛的老派迪斯可，全場合唱' },
+  th: { name: 'Luk Thung 之夜', desc: '泰國鄉村歌，邊跳邊想家' },
+};
+
+export function setDiscoTheme(s: GameState, t: Nation | 'mix'): Result {
+  if (s.discoTheme === t) return { ok: false, reason: '已經是這個主題了' };
+  s.discoTheme = t;
+  return { ok: true };
+}
+
+/**
+ * 今晚舞廳主打哪一國的歌、加成多少。
+ * 指定主題：那一國 ×1.5；「大家一起跳」：DJ 自動多放家鄉感最低那一國的歌（×1.25）
+ */
+export function discoFocus(s: GameState): { n: Nation; mult: number } {
+  if (s.discoTheme !== 'mix') return { n: s.discoTheme, mult: 1.5 };
+  const n = NATIONS.reduce((a, b) => (s.homeFeel[b] < s.homeFeel[a] ? b : a));
+  return { n, mult: 1.25 };
+}
+
+/** 晚上的舞廳人潮（7 點開始，9 點半最多） */
+export function discoCurve(hour: number): number {
+  if (hour < 18.5) return 0;
+  return Math.exp(-((hour - 21.5) ** 2) / (2 * 1.2 * 1.2));
+}
+
+/** 週六晚上不用趕接駁車，大家去跳舞；週日晚上只有住附近、隔天輪休的人 */
+function discoNight(s: GameState, n: Nation): number {
+  if (!hasDisco(s)) return 0;
+  const day = isSaturday(s) ? 0.55 : isSunday(s) || lebaranToday(s) ? 0.15 : 0.02;
+  let v = day * discoCurve(hourOf(s));
+  const f = discoFocus(s);
+  if (f.n === n) v *= f.mult;
+  if (s.policy === 'strict') v *= 0.5;
+  return v;
+}
+
 /** 街坊不滿 80 以上：週日警察來臨檢，大家看到警察就散開 */
 export function policeSweep(s: GameState): boolean {
   return s.unrest >= 80;
@@ -60,12 +109,13 @@ export function nationPerHour(s: GameState, n: Nation): number {
   const m = streetOf(s).migrant;
   if (!m) return 0;
   const day = lebaranToday(s) ? 1 : isSunday(s) ? 1 : isSaturday(s) ? 0.3 : 0.06;
-  let v = m[n] * (0.4 + 1.2 * (s.homeFeel[n] / 100)) * day;
+  let v = m[n] * (0.4 + 1.2 * (s.homeFeel[n] / 100));
+  v *= day * holidayCurve(hourOf(s)) + discoNight(s, n);
   if (lebaranToday(s)) v *= n === 'id' ? 2 : 1.2;
   if (s.policy === 'strict') v *= 0.85;
   if (policeSweep(s) && (isSunday(s) || isSaturday(s))) v *= 0.75;
   if (s.weather === 'rain') v *= 0.85;
-  return v * holidayCurve(hourOf(s));
+  return v;
 }
 
 /** 通勤族與在地居民（平日比較多） */
@@ -99,9 +149,11 @@ export function rollMigrantOrigin(s: GameState, localBase: number, timeCurveNow:
 /** 家庭看護常常只放半天；工廠移工要趕晚上 9 點最後一班接駁車 */
 export const LAST_BUS = 21 * 60;
 
-export function rollCurfew(origin: Origin, rand: () => number): number {
+export function rollCurfew(origin: Origin, rand: () => number, s?: GameState): number {
   if (!isNation(origin)) return 24 * 60;
   if (rand() < 0.35) return (13 + Math.floor(rand() * 9) * 0.5) * 60;
+  // 週六晚上：工廠的人隔天也放假，跳完舞跟同鄉擠一晚，不用趕最後一班車
+  if (s && isSaturday(s) && hasDisco(s)) return 24 * 60;
   return LAST_BUS;
 }
 
@@ -113,26 +165,38 @@ export function noTimeFor(minute: number, curfew: number, stay: number): boolean
 // ---------------------------------------------------------------- 店家偏好
 
 export const MIGRANT_PREF: Partial<Record<Origin, Record<string, number>>> = {
-  id: { warung: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.6, ktv: 1.5, pho: 1.1, thaifood: 1.1, cafe: 0.5, grocery: 0.8 },
-  vn: { pho: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.6, ktv: 1.6, thaifood: 1.2, warung: 1, cafe: 0.6 },
-  ph: { sarisari: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.5, ktv: 1.8, cafe: 0.8, pho: 1 },
-  th: { thaifood: 3, remit: 2.2, phoneshop: 1.6, asiamart: 1.6, ktv: 1.5, pho: 1.1, warung: 1 },
-  commuter: { cafe: 1.5, grocery: 1.3, pharmacy: 1.3, pho: 0.8, warung: 0.5, sarisari: 0.4, thaifood: 0.7, remit: 0.05, ktv: 0.3, asiamart: 0.4, phoneshop: 0.6 },
-  local: { grocery: 1.3, pharmacy: 1.3, cafe: 1.1, remit: 0.05, ktv: 0.5 },
+  id: { warung: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.6, ktv: 1.5, pho: 1.1, thaifood: 1.1, cafe: 0.5, grocery: 0.8, disco: 1.5 },
+  vn: { pho: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.6, ktv: 1.6, thaifood: 1.2, warung: 1, cafe: 0.6, disco: 1.9 },
+  ph: { sarisari: 3, remit: 2.2, phoneshop: 1.8, asiamart: 1.5, ktv: 1.8, cafe: 0.8, pho: 1, disco: 2 },
+  th: { thaifood: 3, remit: 2.2, phoneshop: 1.6, asiamart: 1.6, ktv: 1.5, pho: 1.1, warung: 1, disco: 1.8 },
+  commuter: { cafe: 1.5, grocery: 1.3, pharmacy: 1.3, pho: 0.8, warung: 0.5, sarisari: 0.4, thaifood: 0.7, remit: 0.05, ktv: 0.3, asiamart: 0.4, phoneshop: 0.6, disco: 0.15 },
+  local: { grocery: 1.3, pharmacy: 1.3, cafe: 1.1, remit: 0.05, ktv: 0.5, disco: 0.1 },
 };
 
 /** 一次消費帶來多少家鄉感（家鄉菜最多、匯款視訊其次、其他一點點） */
+/** 舞廳的主題夜：主題國家的人特別想去 */
+export function discoPref(s: GameState, origin: Origin): number {
+  const f = discoFocus(s);
+  return f.n === origin ? f.mult : 1;
+}
+
 export function homeValue(n: Nation, shopId: string): number {
   if (NATION_INFO[n].home.includes(shopId)) return 1;
+  // 找樂子也是想家的一種出口：跳到家鄉的歌，跟吃到家鄉菜差不多
+  if (shopId === 'disco') return 0.9;
   if (SERVICE_SHOPS.includes(shopId)) return shopId === 'remit' ? 0.8 : 0.6;
   if (shopId === 'pharmacy') return 0.3;
   return 0.1;
 }
 
 export function recordMigrantVisit(s: GameState, origin: Origin, shopId: string): void {
+  if (shopId === 'disco') s.today.disco = (s.today.disco ?? 0) + 1;
   if (!isNation(origin)) return;
   const h = (s.today.home ??= {});
-  h[origin] = (h[origin] ?? 0) + homeValue(origin, shopId);
+  // 主題夜：放的是自己家鄉的歌，家鄉感再多一些
+  const f = shopId === 'disco' ? discoFocus(s) : null;
+  const theme = f && f.n === origin ? f.mult : 1;
+  h[origin] = (h[origin] ?? 0) + homeValue(origin, shopId) * theme;
 }
 
 export function recordMigrantPasserby(s: GameState, origin: Origin): void {
@@ -185,6 +249,14 @@ export interface ZhongliDay {
   unrestBefore: number;
   policyCost: number;
   stallIncome: number;
+  disco: number;
+}
+
+/** 週末晚上舞廳被警察臨檢的機率（放任最容易、嚴管幾乎不會；街坊越不滿越容易） */
+export function raidChance(s: GameState): number {
+  const base = s.policy === 'free' ? 0.3 : s.policy === 'guide' ? 0.1 : 0.03;
+  // 舞廳自己做好消防、噪音、查證件：比較不會被盯上
+  return base * (0.5 + s.unrest / 100) * (s.flags.includes('discoSafe') ? 0.5 : 1);
 }
 
 /**
@@ -223,15 +295,22 @@ export function endDayZhongli(s: GameState, rand: () => number): ZhongliDay {
       s.money += stallIncome;
       s.today.commission += stallIncome;
     }
-    // 錯過最後一班接駁車的人
-    s.today.missed = Math.round(crowd * (s.policy === 'free' ? 0.006 : 0.003) * rand());
+    // 舞廳：週末晚上很吵，街坊會抱怨
+    const disco = s.today.disco ?? 0;
+    if (disco > 0) {
+      s.unrest = clamp(s.unrest + (disco / 80) * pol.chaos * (1 - selfOrder(s)));
+      // 臨檢（隔天早上演出）
+      if (disco >= 30 && rand() < raidChance(s) && !s.flags.includes('discoRaid')) s.flags.push('discoRaid');
+    }
+    // 錯過最後一班接駁車的人（週日在舞廳跳到忘了時間的人更多）
+    s.today.missed = Math.round(crowd * (s.policy === 'free' ? 0.006 : 0.003) * rand() + (isSunday(s) ? disco * 0.04 : 0));
     if (s.today.missed > 0 && !s.flags.includes('missedBus')) s.flags.push('missedBus');
     // 過關條件之一：人很多的週日，街坊也不太抱怨
     if ((isSunday(s) || lebaranToday(s)) && crowd >= GOOD_SUNDAY_CROWD && s.unrest < 30 && !s.flags.includes('goodSunday')) s.flags.push('goodSunday');
   } else {
     s.unrest = clamp(s.unrest - (s.policy === 'strict' ? 12 : s.policy === 'guide' ? 10 : 8));
   }
-  return { feelBefore, unrestBefore, policyCost, stallIncome };
+  return { feelBefore, unrestBefore, policyCost, stallIncome, disco: s.today.disco ?? 0 };
 }
 
 export const GOOD_SUNDAY_CROWD = 1200;
@@ -254,5 +333,5 @@ export function zhongliMods(_s: GameState): Mods {
 
 /** 店家是不是東南亞店（招牌用多國語言） */
 export function ethnicShop(id: string): boolean {
-  return ['warung', 'pho', 'sarisari', 'thaifood', 'remit', 'phoneshop', 'asiamart', 'ktv'].includes(id) && !!SHOP_BY_ID[id];
+  return ['warung', 'pho', 'sarisari', 'thaifood', 'remit', 'phoneshop', 'asiamart', 'ktv', 'disco'].includes(id) && !!SHOP_BY_ID[id];
 }

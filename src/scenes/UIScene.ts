@@ -2,8 +2,8 @@ import Phaser from 'phaser';
 import { endingEvent } from '../core/story';
 import { isRailStreet, nextTrain, lanternFestToday } from '../core/shifen';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
-import { isMigrantStreet, NATIONS, NATION_INFO, POLICIES, setPolicy, selfOrder, isSunday, isSaturday, lebaranToday } from '../core/zhongli';
-import type { Policy } from '../core/types';
+import { isMigrantStreet, NATIONS, NATION_INFO, POLICIES, setPolicy, selfOrder, isSunday, isSaturday, lebaranToday, DISCO_THEMES, setDiscoTheme, hasDisco, discoFocus } from '../core/zhongli';
+import type { Nation, Policy } from '../core/types';
 import {
   unlockLot, nextLotCost, neighborEffects, signTenant, rejectApplicant, postAd, AD_COST, profileOf, renovate,
   giveGift, GIFT_COST, evict, setRentTier, startNextDay, startActivity, canStartActivity, activityCost, getRel,
@@ -1081,7 +1081,8 @@ export class UIScene extends Phaser.Scene implements StoryUI {
   /** 中壢：週日人潮的管法 */
   private showPolicy() {
     const s = S();
-    const MW = 1000, MH = 540;
+    const disco = hasDisco(s);
+    const MW = 1000, MH = disco ? 640 : 540;
     const { m, x, y } = this.openModal(MW, MH);
     this.closeButton(m, x + MW - 54, y + 18);
     m.add(this.text(x + 30, y + 24, '站前廣場・週日要怎麼管？', 26, hex(C.ink), '900'));
@@ -1107,6 +1108,26 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       b.setEnabled(!cur);
       m.add(b.root);
     });
+    // 舞廳的主題夜
+    if (disco) {
+      const ty = y + 524;
+      const f = discoFocus(s);
+      m.add(this.text(x + 30, ty, `舞廳主題夜：${DISCO_THEMES[s.discoTheme].name}（${DISCO_THEMES[s.discoTheme].desc}）`, 15, '#4a4356', '700'));
+      m.add(this.text(x + 30, ty + 24, `今晚主打${NATION_INFO[f.n].name}的歌：${NATION_INFO[f.n].name}的人更想來，家鄉感 ×${f.mult}。指定主題效果比較強。`, 13, '#6a6378'));
+      (['mix', ...NATIONS] as (Nation | 'mix')[]).forEach((th, k) => {
+        const cur = s.discoTheme === th;
+        const b = this.button(x + 30 + k * 190, ty + 52, 178, 46, DISCO_THEMES[th].name, () => {
+          const r = setDiscoTheme(s, th);
+          if (!r.ok) return toast(r.reason);
+          save();
+          toast(`今晚是${DISCO_THEMES[th].name}！`);
+          this.closeModal();
+          this.showPolicy();
+        }, cur ? 0x9a94ac : th === 'mix' ? 0x6b4a9a : 0x2a6f8f, 14);
+        b.setEnabled(!cur);
+        m.add(b.root);
+      });
+    }
   }
 
   private showFire() {
@@ -1909,6 +1930,7 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       notes.push(`家鄉感：${d}`);
       const crowd = NATIONS.reduce((a, n) => a + (sum.nat?.[n] ?? 0), 0);
       if (crowd) notes.push(`今天來的移工 ${crowd} 人${sum.rushed ? `・${sum.rushed} 次因為快收假沒時間進店` : ''}${sum.missed ? `・${sum.missed} 人錯過最後一班接駁車` : ''}`);
+      if (sum.disco) notes.push(`今晚舞廳 ${sum.disco} 人（${DISCO_THEMES[S().discoTheme].name}）`);
       notes.push(`街坊不滿 ${Math.round(sum.unrestBefore ?? 0)} → ${Math.round(sum.unrestAfter ?? 0)}${sum.policyCost ? `・疏導花了 ${money(sum.policyCost)}` : ''}${sum.stallIncome ? `・路邊攤抽成 ${money(sum.stallIncome)}` : ''}`);
     }
     if (sum.trains) notes.push(`火車 ${sum.trains} 班・今天最高連擊 ×${sum.combo ?? 0}・放了 ${sum.lanterns ?? 0} 盞天燈`);

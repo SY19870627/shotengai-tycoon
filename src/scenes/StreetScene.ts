@@ -655,7 +655,8 @@ export class StreetScene extends Phaser.Scene {
           if ((r.x + r.y + i * 13) % 3 !== 0) view.lights.fillRect(x0 + r.x, GROUND_Y + r.y, r.width, r.height);
         }
       }
-      view.shopLight.fillStyle(0xffe2a0, 0.35);
+      // 舞廳：櫥窗是閃爍的霓虹（見 updateLotOpenState）
+      view.shopLight.fillStyle(def.id === 'disco' ? 0xd040f0 : 0xffe2a0, def.id === 'disco' ? 0.55 : 0.35);
       view.shopLight.fillRect(x0 + art.shopWindow.x, GROUND_Y + art.shopWindow.y, art.shopWindow.width, art.shopWindow.height);
       for (const l of art.lanterns) {
         const img = this.add.image(x0 + l.x, GROUND_Y + l.y, 'lantern').setDepth(12).setScale(0.75);
@@ -1246,6 +1247,7 @@ export class StreetScene extends Phaser.Scene {
         const label = view.shutter.list[1] as Phaser.GameObjects.Text | undefined;
         label?.setText(closed ? '抗議靜坐・暫停營業' : hour < def.hours[0] ? `${def.hours[0]}:00 開店` : '今日打烊');
       }
+      if (open && def.id === 'disco') view.shopLight.setAlpha(0.55 + 0.45 * Math.sin(this.time.now / 140 + i));
     });
   }
 
@@ -1517,7 +1519,7 @@ export class StreetScene extends Phaser.Scene {
         sprite.setTexture(`${ped.tex}_0`).setScale(61 / CHAR_H);
       }
       if (isNation(origin)) {
-        ped.curfew = rollCurfew(origin, Math.random);
+        ped.curfew = rollCurfew(origin, Math.random, s);
         this.attach(ped, `flag-${origin}`, 0, -70);
       }
     }
