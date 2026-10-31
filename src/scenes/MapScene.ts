@@ -113,8 +113,30 @@ export class MapScene extends Phaser.Scene {
       document.addEventListener('fullscreenchange', sync);
       this.events.once('shutdown', () => document.removeEventListener('fullscreenchange', sync));
     }
+    this.drawCredits();
     this.card = this.add.container(0, 0);
     this.drawCard();
+  }
+
+  /** 左下角：開發者資訊（連結用新分頁開） */
+  private drawCredits() {
+    const links: [string, string, string | null][] = [
+      ['開發者', 'SY', null],
+      ['GitHub', 'github.com/SY19870627', 'https://github.com/SY19870627'],
+      ['X（推特）', '@nelsonyehfon', 'https://x.com/nelsonyehfon'],
+    ];
+    let y = H - 28;
+    for (const [label, value, url] of [...links].reverse()) {
+      const t = this.add.text(44, y, `${label}：${value}`, {
+        fontFamily: FONT, fontSize: '14px', color: url ? '#f2d98a' : '#cfe0ec',
+      }).setOrigin(0, 1);
+      if (url) {
+        t.setInteractive({ useHandCursor: true });
+        t.on('pointerover', () => t.setColor('#ffffff')).on('pointerout', () => t.setColor('#f2d98a'));
+        t.on('pointerup', () => window.open(url, '_blank', 'noopener,noreferrer'));
+      }
+      y -= t.height + 6;
+    }
   }
 
   private drawCard() {
