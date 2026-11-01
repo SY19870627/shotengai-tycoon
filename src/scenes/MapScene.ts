@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { STREETS, CAMPAIGN } from '../content';
-import { canFullscreen, isFullscreen, toggleFullscreen } from '../mobile';
+import { canFullscreen, isFullscreen, toggleFullscreen, safeInsets } from '../mobile';
 import { store, enterStreet, hasSave } from '../store';
 import { W, H, C, FONT, hex, DX } from '../theme';
 
@@ -118,24 +118,50 @@ export class MapScene extends Phaser.Scene {
     this.drawCard();
   }
 
-  /** 左下角：開發者資訊（連結用新分頁開） */
+  /**
+   * 左下角：開發者資訊，一列「開發者 SY ［GitHub ↗］［X ↗］」，連結用新分頁開。
+   * 手機上整個畫面會縮小，所以尺寸用螢幕上的 CSS px 回推：字至少 13px、按鈕至少 46×46、按鈕間隔 10px，並避開安全區。
+   */
   private drawCredits() {
-    const links: [string, string, string | null][] = [
-      ['開發者', 'SY', null],
-      ['GitHub', 'github.com/SY19870627', 'https://github.com/SY19870627'],
-      ['X（推特）', '@nelsonyehfon', 'https://x.com/nelsonyehfon'],
+    const rect = this.game.canvas.getBoundingClientRect();
+    // 一個遊戲 px 在螢幕上是幾個 CSS px（直拿時畫面被「請轉橫向」蓋住，給個下限免得算出超大按鈕）
+    const css = Math.max(0.4, rect.height / H || 1);
+    const px = (cssPx: number, min: number) => Math.max(min, Math.ceil(cssPx / css));
+    const fs = px(13, 16), bh = px(46, 50), gap = px(10, 12), pad = px(10, 14);
+    // 離螢幕邊緣：安全區 + 14px（換回遊戲座標）；電腦上跟標題左緣對齊
+    const safe = safeInsets();
+    const left = Math.max(44, Math.ceil((safe.left + 14 - rect.left) / css));
+    const bottom = H - Math.max(24, Math.ceil((safe.bottom + 14 - (window.innerHeight - rect.bottom)) / css));
+    const cy = bottom - bh / 2;
+
+    // 深色描邊，壓在海浪紋上也看得清楚；比標題和「開始經營」低調
+    const style = { fontFamily: FONT, fontSize: `${fs}px`, stroke: '#1d1b26', strokeThickness: 3 };
+    const who = this.add.text(left, cy, '開發者 SY', { ...style, color: '#cfe0ec' }).setOrigin(0, 0.5).setDepth(1);
+    const links: [string, string][] = [
+      ['GitHub ↗', 'https://github.com/SY19870627'],
+      ['X ↗', 'https://x.com/nelsonyehfon'],
     ];
-    let y = H - 28;
-    for (const [label, value, url] of [...links].reverse()) {
-      const t = this.add.text(44, y, `${label}：${value}`, {
-        fontFamily: FONT, fontSize: '14px', color: url ? '#f2d98a' : '#cfe0ec',
-      }).setOrigin(0, 1);
-      if (url) {
-        t.setInteractive({ useHandCursor: true });
-        t.on('pointerover', () => t.setColor('#ffffff')).on('pointerout', () => t.setColor('#f2d98a'));
-        t.on('pointerup', () => window.open(url, '_blank', 'noopener,noreferrer'));
-      }
-      y -= t.height + 6;
+    let x = left + who.width + gap;
+    const buttons = links.map(([label, url]) => {
+      const t = this.add.text(0, cy, label, { ...style, fontStyle: '700', color: '#f2d98a' }).setOrigin(0.5).setDepth(1);
+      const bw = Math.max(bh, Math.ceil(t.width) + pad * 2);
+      t.setX(x + bw / 2);
+      const b = { x, bw, t, url };
+      x += bw + gap;
+      return b;
+    });
+    for (const { x: bx, bw, t, url } of buttons) {
+      // 跟右上角「全螢幕」同一種深色方框，邊框用暗色，滑過去才亮金色
+      const bg = this.add.rectangle(bx, cy - bh / 2, bw, bh, C.ink, 0.8).setOrigin(0).setStrokeStyle(2, C.panelEdge);
+      // 整顆按鈕都能點：把文字的點擊範圍撐到按鈕大小（座標以文字左上角為原點）
+      t.setInteractive({
+        hitArea: new Phaser.Geom.Rectangle((t.width - bw) / 2, (t.height - bh) / 2, bw, bh),
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+        useHandCursor: true,
+      });
+      t.on('pointerover', () => { t.setColor('#ffffff'); bg.setStrokeStyle(2, C.gold); });
+      t.on('pointerout', () => { t.setColor('#f2d98a'); bg.setStrokeStyle(2, C.panelEdge); });
+      t.on('pointerup', () => window.open(url, '_blank', 'noopener,noreferrer'));
     }
   }
 

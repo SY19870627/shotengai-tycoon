@@ -52,6 +52,18 @@ function enlargeSmallText(): void {
   };
 }
 
+/** 瀏覽器回報的安全區（瀏海、手勢列），單位是 CSS px */
+export function safeInsets(): { top: number; right: number; bottom: number; left: number } {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;'
+    + 'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const r = { top: parseFloat(cs.paddingTop) || 0, right: parseFloat(cs.paddingRight) || 0, bottom: parseFloat(cs.paddingBottom) || 0, left: parseFloat(cs.paddingLeft) || 0 };
+  probe.remove();
+  return r;
+}
+
 export function setupMobile(): void {
   if (IS_PHONE) enlargeSmallText();
   if (!IS_TOUCH) return;
