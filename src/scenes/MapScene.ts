@@ -20,6 +20,8 @@ const toScreen = (p: { x: number; y: number }) => ({ x: BOX.x + (p.x - 0.25) * B
 export class MapScene extends Phaser.Scene {
   private card!: Phaser.GameObjects.Container;
   private selected = 'shenkeng';
+  /** 圖釘的點擊範圍（開發者資訊排版時要避開） */
+  private pinHits: Phaser.GameObjects.Zone[] = [];
 
   constructor() {
     super('map');
@@ -27,6 +29,7 @@ export class MapScene extends Phaser.Scene {
 
   create() {
     const m = store.meta;
+    this.pinHits = [];
     this.selected = m.current && m.unlocked.includes(m.current) ? m.current : m.unlocked[m.unlocked.length - 1] ?? 'shenkeng';
 
     // 背景：海
@@ -100,6 +103,7 @@ export class MapScene extends Phaser.Scene {
       if (!unlocked) pin.setAlpha(0.75);
       const hit = this.add.zone(p.x - 20, p.y - 40, 200, 46).setOrigin(leftSide ? 0.85 : 0, 0).setInteractive({ useHandCursor: true });
       hit.on('pointerup', () => { this.selected = id; this.drawCard(); });
+      this.pinHits.push(hit);
       this.tweens.add({ targets: g, y: -4, yoyo: true, repeat: -1, duration: 700 + idx * 90, ease: 'Sine.easeInOut' });
     });
 
@@ -119,7 +123,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   /**
-   * 左下角：開發者資訊，一列「開發者 SY ［GitHub ↗］［X ↗］」，連結用新分頁開。
+   * 左下角：開發者資訊「開發者 SY ［GitHub ↗］［X ↗］［Threads ↗］［方格子 ↗］」，排不下就換行，連結用新分頁開。
    * 手機上整個畫面會縮小，所以尺寸用螢幕上的 CSS px 回推：字至少 13px、按鈕至少 46×46、按鈕間隔 10px，並避開安全區。
    */
   private drawCredits() {
@@ -132,27 +136,64 @@ export class MapScene extends Phaser.Scene {
     const safe = safeInsets();
     const left = Math.max(44, Math.ceil((safe.left + 14 - rect.left) / css));
     const bottom = H - Math.max(24, Math.ceil((safe.bottom + 14 - (window.innerHeight - rect.bottom)) / css));
-    const cy = bottom - bh / 2;
 
     // 深色描邊，壓在海浪紋上也看得清楚；比標題和「開始經營」低調
     const style = { fontFamily: FONT, fontSize: `${fs}px`, stroke: '#1d1b26', strokeThickness: 3 };
-    const who = this.add.text(left, cy, '開發者 SY', { ...style, color: '#cfe0ec' }).setOrigin(0, 0.5).setDepth(1);
+    const who = this.add.text(left, 0, '開發者 SY', { ...style, color: '#cfe0ec' }).setOrigin(0, 0.5).setDepth(1);
     const links: [string, string][] = [
       ['GitHub ↗', 'https://github.com/SY19870627'],
       ['X ↗', 'https://x.com/nelsonyehfon'],
+      ['Threads ↗', 'https://www.threads.com/@ye.c.feng'],
+      ['方格子 ↗', 'https://vocus.cc/user/@SY19870627'],
     ];
-    let x = left + who.width + gap;
     const buttons = links.map(([label, url]) => {
-      const t = this.add.text(0, cy, label, { ...style, fontStyle: '700', color: '#f2d98a' }).setOrigin(0.5).setDepth(1);
-      const bw = Math.max(bh, Math.ceil(t.width) + pad * 2);
-      t.setX(x + bw / 2);
-      const b = { x, bw, t, url };
-      x += bw + gap;
-      return b;
+      const t = this.add.text(0, 0, label, { ...style, fontStyle: '700', color: '#f2d98a' }).setOrigin(0.5).setDepth(1);
+      return { x: 0, bw: Math.max(bh, Math.ceil(t.width) + pad * 2), t, url };
     });
+
+    // 一列排不下就往上多排幾列（手機上字和按鈕都放大）：每列右緣不能碰到台灣、圖釘的點擊範圍和右邊的說明卡
+    const island = TAIWAN.map(([x, y]) => toScreen({ x, y }));
+    const reach = (top: number, bot: number) => {
+      let r = W - 410 - gap;
+      for (const p of island) if (p.y >= top - 40 && p.y <= bot + 40) r = Math.min(r, p.x - 12);
+      for (const z of this.pinHits) {
+        const b = z.getBounds();
+        if (b.bottom > top && b.top < bot) r = Math.min(r, b.left - gap);
+      }
+      return r;
+    };
+    const widths = [Math.ceil(who.width), ...buttons.map((b) => b.bw)];
+    const rowTop = (n: number, k: number) => bottom - (n - k) * (bh + gap) + gap;
+    let n = 1, rows: number[][] = [];
+    for (; n <= widths.length; n++) {
+      rows = [];
+      let i = 0;
+      for (let k = 0; k < n && i < widths.length; k++) {
+        const right = reach(rowTop(n, k), rowTop(n, k) + bh);
+        const row = [i];
+        let x = left + widths[i++];
+        while (i < widths.length && x + gap + widths[i] <= right) { x += gap + widths[i]; row.push(i++); }
+        rows.push(row);
+      }
+      if (i >= widths.length) break;
+    }
+    rows.forEach((row, k) => {
+      const cy = rowTop(n, k) + bh / 2;
+      let x = left;
+      for (const i of row) {
+        if (i === 0) who.setPosition(x, cy);
+        else {
+          const b = buttons[i - 1];
+          b.x = x;
+          b.t.setPosition(x + b.bw / 2, cy);
+        }
+        x += widths[i] + gap;
+      }
+    });
+
     for (const { x: bx, bw, t, url } of buttons) {
       // 跟右上角「全螢幕」同一種深色方框，邊框用暗色，滑過去才亮金色
-      const bg = this.add.rectangle(bx, cy - bh / 2, bw, bh, C.ink, 0.8).setOrigin(0).setStrokeStyle(2, C.panelEdge);
+      const bg = this.add.rectangle(bx, t.y - bh / 2, bw, bh, C.ink, 0.8).setOrigin(0).setStrokeStyle(2, C.panelEdge);
       // 整顆按鈕都能點：把文字的點擊範圍撐到按鈕大小（座標以文字左上角為原點）
       t.setInteractive({
         hitArea: new Phaser.Geom.Rectangle((t.width - bw) / 2, (t.height - bh) / 2, bw, bh),
