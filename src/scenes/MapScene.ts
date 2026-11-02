@@ -123,7 +123,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   /**
-   * 左下角：開發者資訊「開發者 SY ［GitHub ↗］［X ↗］［Threads ↗］［方格子 ↗］」，排不下就換行，連結用新分頁開。
+   * 左下角：開發者資訊「開發者 SY ［GitHub ↗］［Threads ↗］［方格子 ↗］」，排不下就換行，連結用新分頁開。
    * 手機上整個畫面會縮小，所以尺寸用螢幕上的 CSS px 回推：字至少 13px、按鈕至少 46×46、按鈕間隔 10px，並避開安全區。
    */
   private drawCredits() {
@@ -142,7 +142,6 @@ export class MapScene extends Phaser.Scene {
     const who = this.add.text(left, 0, '開發者 SY', { ...style, color: '#cfe0ec' }).setOrigin(0, 0.5).setDepth(1);
     const links: [string, string][] = [
       ['GitHub ↗', 'https://github.com/SY19870627'],
-      ['X ↗', 'https://x.com/nelsonyehfon'],
       ['Threads ↗', 'https://www.threads.com/@ye.c.feng'],
       ['方格子 ↗', 'https://vocus.cc/user/@SY19870627'],
     ];
