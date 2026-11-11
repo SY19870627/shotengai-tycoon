@@ -1559,12 +1559,15 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.select(i);
     }, 0x8a3b3b, 14);
     p.add([bR.root, bG.root, bE.root]);
-    // 店面外觀（改店名、配色）；回憶時光裡不能改
-    if (!s.trip) p.add(this.button(430, 126, 84, 38, '店面外觀', () => this.showLook(i), 0x8a5a3a, 14).root);
+    // 店面外觀：放在左欄肖像下方、與租金列對齊，避免壓到「今日營業」最後一行
+    //（手機把 15px 字放大後，四行營業數字會落到原來按鈕的 y=126）
+    if (!s.trip) p.add(this.button(8, 114, 96, 44, '店面外觀', () => this.showLook(i), 0x8a5a3a, 14).root);
     if (canHavePlans(s, i)) {
       const n = shop.plans?.length ?? 0;
-      const bP = this.button(520, 126, 112, 38, `旅館方案 ${n}/${planSlots(shop)}`, () => this.showPlans(i), 0x3f6f8f, 13);
+      // 旅館方案改放到「今日營業」標題右側，同樣不要壓到數字
+      const bP = this.button(sx + 72, 4, 118, 28, `旅館方案 ${n}/${planSlots(shop)}`, () => this.showPlans(i), 0x3f6f8f, 13);
       p.add(bP.root);
+      stats.setY(36);
     }
     p.add(this.text(DX + 1100, 20, '店面變大\n吸引力、客單、\n容量都提升', 12, '#a49dbb'));
     p.add(this.text(DX + 1100, 72, '滿意度 +15', 12, '#a49dbb'));
