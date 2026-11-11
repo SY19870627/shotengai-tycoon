@@ -638,7 +638,7 @@ export class StreetScene extends Phaser.Scene {
     } else {
       const def = SHOP_BY_ID[lot.shop.defId];
       const p = profileOf(s, lot.shop.tenantId);
-      const art = drawShopFacade(this, def, lot.shop.level, p?.shopName ?? def.name, this.street.facade);
+      const art = drawShopFacade(this, def, lot.shop.level, p?.shopName ?? def.name, this.street.facade, lot.shop);
       view.container.add(art.objects);
       view.windows = undefined;
       view.roomTag = undefined;

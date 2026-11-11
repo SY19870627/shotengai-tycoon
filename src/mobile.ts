@@ -82,9 +82,9 @@ export function setupMobile(): void {
     tip.addEventListener('click', close);
     setTimeout(close, 8000);
   }
-  // 雙指縮放、長按選字都關掉
+  // 雙指縮放、長按選字都關掉（打字中例外：要能長按貼上）
   document.addEventListener('gesturestart', (e) => e.preventDefault());
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('contextmenu', (e) => { if (!store.typing) e.preventDefault(); });
 }
 
 /**
@@ -101,8 +101,8 @@ export function watchOrientation(game: Phaser.Game): void {
     if (window.innerHeight > window.innerWidth) return;
     const want = gameWidth();
     if (Math.abs(want - W) < 24) return;
-    // 劇情演到一半不要重建，演完再試
-    if (store.storyRunning) return later(rebuild, 1000);
+    // 劇情演到一半、正在打字（螢幕鍵盤會改變畫面大小）不要重建，之後再試
+    if (store.storyRunning || store.typing) return later(rebuild, 1000);
     setGameWidth(want);
     game.scale.setGameSize(want, H);
     const sm = game.scene;

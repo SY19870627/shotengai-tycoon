@@ -10,7 +10,7 @@ import {
   relLabel, presentTenants, lotOfTenant, streetOf, weekdayName, WEATHER_NAME, combinedMods, rentIncome,
   forecastText, buildFacility, upgradeFacility, installModule, setStaff, demolishFacility,
   transportCapacity, strandedPerHour, trafficPerHour, upgradeBus, upgradeRoute, BUS, ROUTE, ritualProtected,
-  noisyNeighbors, shopOpen, isWeekend,
+  noisyNeighbors, shopOpen, isWeekend, renameShop, setShopColor, defaultShopName,
   MAX_APPLICANTS, goalsDone, hourOf, basicGoalsDone, basicGoalsNeeded, goalsDoneCount,
 } from '../core/game';
 import {
@@ -39,8 +39,11 @@ import type { ChoiceOption, DaySummary, TenantProfile, Step, ActivityVariant, Fi
 import { store, bus, Ev, save, toast, S, completeChapter, lockedNext, skipChapter, playStory } from '../store';
 import { pleadSteps } from '../content/plead';
 import { STREETS } from '../content';
-import { W, H, C, FONT, hex, money, clock, DX } from '../theme';
+import { W, H, C, FONT, hex, money, clock, DX, LOT_W } from '../theme';
 import { drawPortrait } from './drawCharacters';
+import { drawShopFacade } from './drawShop';
+import { FACADE_PALETTE, canRenameTenant, NAME_LOCKED_TEXT, SHOP_NAME_MAX, SHOP_NAME_SUGGEST } from '../core/custom';
+import { askText } from '../textInput';
 import { MODULES, FACILITY, facilityOf, staffNeeded, staffRatio, wageOf, type ModuleDef } from '../core/facilities';
 import { ensureMascotTexture } from './drawMascots';
 import { StoryDirector, type StoryUI } from './StoryDirector';
@@ -1215,6 +1218,105 @@ export class UIScene extends Phaser.Scene implements StoryUI {
     });
   }
 
+  /** 店面外觀：改店名、選牆色與遮陽棚色（色盤） */
+  private showLook(lot: number) {
+    const s = S();
+    const tenantId = s.lots[lot].shop!.tenantId;
+    const MW = 960, MH = 500;
+    const prevSpeed = store.speed;
+    store.speed = 0;
+    const { m, x, y } = this.openModal(MW, MH);
+    this.onModalClose = () => { store.speed = prevSpeed; };
+    this.closeButton(m, x + MW - 54, y + 18);
+    const body = this.add.container(0, 0);
+    m.add(body);
+    // 這間店還是同一位租客（打字時可能換人了）
+    const current = () => {
+      const sh = S().lots[lot]?.shop;
+      return sh && sh.tenantId === tenantId && this.modal === m ? sh : null;
+    };
+
+    const render = () => {
+      body.removeAll(true);
+      const shop = current();
+      if (!shop) return;
+      const prof = profileOf(s, tenantId)!;
+      const def = SHOP_BY_ID[shop.defId];
+      body.add(this.text(x + 30, y + 24, `${prof.shopName}・店面外觀`, 26, hex(C.ink), '900'));
+      // 預覽（跟街上畫法一樣）
+      const pv = this.add.container(x + 40, y + MH - 40).setScale(0.78);
+      pv.add(this.add.rectangle(-20, 0, LOT_W + 40, 16, 0x8a8478).setOrigin(0));
+      pv.add(drawShopFacade(this, def, shop.level, prof.shopName, streetOf(s).facade, shop).objects);
+      body.add(pv);
+
+      const x0 = x + 300;
+      body.add(this.text(x0, y + 78, '店名', 15, '#8a8296', '700'));
+      body.add(this.text(x0, y + 100, prof.shopName, 24, hex(C.ink), '900'));
+      if (!canRenameTenant(tenantId)) {
+        body.add(this.text(x0, y + 142, NAME_LOCKED_TEXT, 15, '#b33a3a', '700'));
+      } else {
+        const orig = defaultShopName(s, tenantId) ?? def.name;
+        body.add(this.button(x0, y + 138, 120, 40, '改店名', () => this.askShopName(lot, tenantId, prof.shopName, orig, render), C.red, 16).root);
+        body.add(this.text(x0 + 134, y + 150, shop.customName ? `原本叫「${orig}」` : `建議 ${SHOP_NAME_SUGGEST} 個字以內，最多 ${SHOP_NAME_MAX} 個字`, 13, '#8a8296'));
+      }
+
+      const row = (label: string, part: 'wall' | 'awning', ry: number) => {
+        const cur = part === 'wall' ? shop.wallColor : shop.awningColor;
+        const base = part === 'wall' ? def.wallColor : def.awningColor;
+        body.add(this.text(x0, ry, label, 15, '#8a8296', '700'));
+        const opts: { name: string; color: number | null; show: number }[] = [
+          { name: '預設', color: null, show: base },
+          ...FACADE_PALETTE.map((p) => ({ name: p.name, color: p.color, show: p.color })),
+        ];
+        opts.forEach((o, k) => {
+          const sx = x0 + k * 56, sy = ry + 26;
+          const on = (cur ?? null) === o.color;
+          const sw = this.add.rectangle(sx, sy, 46, 46, o.show).setOrigin(0).setStrokeStyle(on ? 4 : 1, on ? C.gold : 0x2a2433, 1);
+          sw.setInteractive({ useHandCursor: true })
+            .on('pointerdown', stop)
+            .on('pointerup', (_p: unknown, _x: unknown, _y: unknown, e: EvData) => {
+              e.stopPropagation();
+              if (!current()) return;
+              const r = setShopColor(S(), lot, part, o.color);
+              if (!r.ok) return toast(r.reason);
+              save();
+              bus.emit(Ev.LotRedraw, lot);
+              render();
+            });
+          body.add(sw);
+          body.add(this.text(sx + 23, sy + 50, o.name, 11, on ? hex(C.ink) : '#6a6378', on ? '900' : '400').setOrigin(0.5, 0));
+        });
+      };
+      row('牆色', 'wall', y + 200);
+      row('遮陽棚・布簾色', 'awning', y + 316);
+      body.add(this.text(x0, y + MH - 34, '點一下顏色就會換上。店名、配色會存進存檔；換租客時回到預設。', 13, '#8a8296'));
+    };
+    render();
+  }
+
+  /** 打開 HTML 輸入框改店名 */
+  private askShopName(lot: number, tenantId: string, now: string, orig: string, after: () => void) {
+    void askText({
+      title: '幫這間店取個新名字',
+      value: now,
+      max: SHOP_NAME_MAX,
+      suggest: SHOP_NAME_SUGGEST,
+      note: `建議 ${SHOP_NAME_SUGGEST} 個字以內，招牌比較好看`,
+      reset: now !== orig ? { label: '恢復原名', value: orig } : undefined,
+    }).then((name) => {
+      if (name === null) return;
+      const s = S();
+      if (s.lots[lot]?.shop?.tenantId !== tenantId) return toast('這間店已經換人了');
+      const r = renameShop(s, lot, name);
+      if (!r.ok) return toast(r.reason);
+      save();
+      bus.emit(Ev.LotRedraw, lot);
+      this.rebuildPanel();
+      toast(`招牌換成「${profileOf(s, tenantId)!.shopName}」了！`);
+      after();
+    });
+  }
+
   /** 遊客服務中心 */
   private panelFacility(i: number) {
     const s = S();
@@ -1457,9 +1559,11 @@ export class UIScene extends Phaser.Scene implements StoryUI {
       this.select(i);
     }, 0x8a3b3b, 14);
     p.add([bR.root, bG.root, bE.root]);
+    // 店面外觀（改店名、配色）；回憶時光裡不能改
+    if (!s.trip) p.add(this.button(430, 126, 84, 38, '店面外觀', () => this.showLook(i), 0x8a5a3a, 14).root);
     if (canHavePlans(s, i)) {
       const n = shop.plans?.length ?? 0;
-      const bP = this.button(430, 126, 190, 38, `旅館方案（${n}/${planSlots(shop)}）`, () => this.showPlans(i), 0x3f6f8f, 14);
+      const bP = this.button(520, 126, 112, 38, `旅館方案 ${n}/${planSlots(shop)}`, () => this.showPlans(i), 0x3f6f8f, 13);
       p.add(bP.root);
     }
     p.add(this.text(DX + 1100, 20, '店面變大\n吸引力、客單、\n容量都提升', 12, '#a49dbb'));

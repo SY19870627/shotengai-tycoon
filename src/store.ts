@@ -67,6 +67,8 @@ export const store = {
   yokaiOnStreet: 0,
   /** 劇情演出中（時間暫停、不能點店面） */
   storyRunning: false,
+  /** HTML 輸入框打開中（螢幕鍵盤會改變畫面大小，這時不要重建場景） */
+  typing: false,
   /** 東原：換年代後要淡入、剛穿越要演開場 */
   eraFade: false,
   tripIntro: false,

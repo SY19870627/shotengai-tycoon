@@ -29,10 +29,21 @@ export interface FacadeArt {
   glows?: { x: number; y: number; r: number; color: number }[];
 }
 
+/** 玩家自訂的店面：牆色、遮陽棚色；customName 有值時直式燈箱也寫自訂店名 */
+export interface FacadeCustom {
+  customName?: string;
+  wallColor?: number;
+  awningColor?: number;
+}
+
 /** 畫一家店的立面 */
 export function drawShopFacade(
-  scene: Phaser.Scene, def: ShopDef, level: number, shopName: string, style: FacadeStyle,
+  scene: Phaser.Scene, def: ShopDef, level: number, shopName: string, style: FacadeStyle, custom?: FacadeCustom,
 ): FacadeArt {
+  // 有自訂顏色就換掉店種預設色（後面所有用到 def 顏色的地方都跟著變）
+  if (custom && (custom.wallColor !== undefined || custom.awningColor !== undefined)) {
+    def = { ...def, wallColor: custom.wallColor ?? def.wallColor, awningColor: custom.awningColor ?? def.awningColor };
+  }
   const g = scene.add.graphics();
   const objs: Phaser.GameObjects.GameObject[] = [g];
   const { left, right } = FACADE;
@@ -85,7 +96,7 @@ export function drawShopFacade(
   } else if (style === 'showa60') {
     drawShowa60Upper(g, level, top, upperWindows, rs);
   } else if (style === 'stationfront') {
-    drawStationfrontUpper(scene, g, objs, level, top, upperWindows, rs, def);
+    drawStationfrontUpper(scene, g, objs, level, top, upperWindows, rs, def, custom?.customName);
   } else if (style === 'railside') {
     drawRailsideUpper(g, level, top, upperWindows, rs);
     lanterns.push({ x: left + 22, y: FACADE.floorTop - 4 }, { x: right - 22, y: FACADE.floorTop - 4 });
@@ -4044,7 +4055,7 @@ const FOREIGN_SUB: Record<string, string> = {
 /** 中壢：車站前的老公寓。白色、粉紅色的小磁磚、鐵窗、冷氣機，旁邊一支直式招牌 */
 function drawStationfrontUpper(
   scene: Phaser.Scene, g: Phaser.GameObjects.Graphics, objs: Phaser.GameObjects.GameObject[], level: number, top: number,
-  upperWindows: Phaser.Geom.Rectangle[], seed: number, def: ShopDef,
+  upperWindows: Phaser.Geom.Rectangle[], seed: number, def: ShopDef, customName?: string,
 ): void {
   const { left, right } = FACADE;
   const tiles = [0xf0ece4, 0xf2dcd8, 0xe4e8e0, 0xece0c8, 0xdcdcdc];
@@ -4088,8 +4099,9 @@ function drawStationfrontUpper(
   g.fillRect(vx - 2, t + 30, 30, Math.min(150, -t - 190));
   g.fillStyle(def.awningColor);
   g.fillRect(vx, t + 32, 26, Math.min(146, -t - 194));
-  const short = def.name.replace(/\s/g, '').slice(0, 4);
-  objs.push(scene.add.text(vx + 13, t + 32 + Math.min(146, -t - 194) / 2, short.split('').join('\n'), {
+  // 平常寫店種名；玩家改過店名就寫自訂店名的前 4 個字
+  const short = Array.from((customName ?? def.name).replace(/\s/g, '')).slice(0, 4);
+  objs.push(scene.add.text(vx + 13, t + 32 + Math.min(146, -t - 194) / 2, short.join('\n'), {
     fontFamily: FONT, fontSize: '14px', fontStyle: '900', color: '#ffffff', align: 'center', lineSpacing: -4,
   }).setOrigin(0.5));
   // 店名下面的外國字

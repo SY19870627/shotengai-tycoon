@@ -28,6 +28,7 @@ import {
   zhongliDefaults, isMigrantStreet, migrantTraffic, rollMigrantOrigin, recordMigrantPasserby, recordMigrantVisit, MIGRANT_PREF, endDayZhongli, discoPref,
 } from './zhongli';
 import { shifenDefaults, isRailStreet, skyMods, decaySky, releaseLanterns, endDayShifen, type LanternColor } from './shifen';
+import { canRenameTenant, cleanShopName, shopNameProblem, isPaletteColor, NAME_LOCKED_TEXT } from './custom';
 
 export const DAY_START_MIN = 7 * 60;
 export const DAY_END_MIN = 23 * 60;
@@ -529,8 +530,12 @@ export function facilityWages(s: GameState): number {
 // 租客資料
 // =====================================================================
 
+/** 租客資料；玩家幫這間店改過名的話，shopName 換成自訂店名 */
 export function profileOf(s: GameState, id: string): TenantProfile | undefined {
-  return streetOf(s).tenants.find((t) => t.id === id) ?? s.generated.find((t) => t.id === id);
+  const p = streetOf(s).tenants.find((t) => t.id === id) ?? s.generated.find((t) => t.id === id);
+  if (!p) return undefined;
+  const custom = s.lots.find((l) => l.shop?.tenantId === id)?.shop?.customName;
+  return custom ? { ...p, shopName: custom } : p;
 }
 
 export function lotOfTenant(s: GameState, id: string): number {
@@ -680,6 +685,35 @@ export function giveGift(s: GameState, lotIndex: number): Result {
   if (s.money < GIFT_COST) return { ok: false, reason: '資金不足' };
   s.money -= GIFT_COST;
   adjustSat(s, shop, 15);
+  return { ok: true };
+}
+
+/** 租客原本的店名（不管有沒有改名） */
+export function defaultShopName(s: GameState, id: string): string | undefined {
+  return (streetOf(s).tenants.find((t) => t.id === id) ?? s.generated.find((t) => t.id === id))?.shopName;
+}
+
+/** 幫店面改名；name 跟原本店名一樣就是恢復原名 */
+export function renameShop(s: GameState, lotIndex: number, name: string): Result {
+  const shop = s.lots[lotIndex]?.shop;
+  if (!shop) return { ok: false, reason: '這裡沒有租客' };
+  if (!canRenameTenant(shop.tenantId)) return { ok: false, reason: NAME_LOCKED_TEXT };
+  const clean = cleanShopName(name);
+  const bad = shopNameProblem(clean);
+  if (bad) return { ok: false, reason: bad };
+  if (clean === defaultShopName(s, shop.tenantId)) delete shop.customName;
+  else shop.customName = clean;
+  return { ok: true };
+}
+
+/** 換店面的牆色或遮陽棚色；color = null 換回店種預設色 */
+export function setShopColor(s: GameState, lotIndex: number, part: 'wall' | 'awning', color: number | null): Result {
+  const shop = s.lots[lotIndex]?.shop;
+  if (!shop) return { ok: false, reason: '這裡沒有租客' };
+  if (color !== null && !isPaletteColor(color)) return { ok: false, reason: '色盤裡沒有這個顏色' };
+  const key = part === 'wall' ? 'wallColor' : 'awningColor';
+  if (color === null) delete shop[key];
+  else shop[key] = color;
   return { ok: true };
 }
 
@@ -1598,6 +1632,15 @@ export function deserialize(raw: string): GameState | null {
     data.reviews ??= [];
     if (STREETS[data.streetId].kamikakushi && !data.unlockedActivities.includes('ritual')) data.unlockedActivities.push('ritual');
     for (const [k, v] of Object.entries({ ...onsenDefaults(), ...memoryDefaults(), ...futureDefaults(), ...shifenDefaults(), ...zhongliDefaults() })) (data as unknown as Record<string, unknown>)[k] ??= v;
+    // 自訂店名、配色是選填欄位（舊存檔沒有就用預設）；不合規的值丟掉
+    for (const lot of data.lots) {
+      const sh = lot.shop;
+      if (!sh) continue;
+      if (sh.customName !== undefined && (typeof sh.customName !== 'string' || !canRenameTenant(sh.tenantId)
+        || shopNameProblem(cleanShopName(sh.customName)))) delete sh.customName;
+      if (sh.wallColor !== undefined && !isPaletteColor(sh.wallColor)) delete sh.wallColor;
+      if (sh.awningColor !== undefined && !isPaletteColor(sh.awningColor)) delete sh.awningColor;
+    }
     // 東原：在回憶時光裡關掉遊戲，回到 2016 年的當晚（這一晚不能再放）
     if (data.trip) {
       data.minute = data.trip.returnMinute;

@@ -509,6 +509,10 @@ export interface ShopInstance {
   lastProfit: number;
   /** 關子嶺溫泉旅館推出的方案 */
   plans?: string[];
+  /** 玩家自訂的店名、牆色、遮陽棚色（沒有就用租客店名與店種預設色） */
+  customName?: string;
+  wallColor?: number;
+  awningColor?: number;
 }
 
 export interface FacilityInstance {
